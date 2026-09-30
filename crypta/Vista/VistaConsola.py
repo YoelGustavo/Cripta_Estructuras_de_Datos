@@ -1,0 +1,1 @@
+#mustra mensajes, estado y lee comandos
