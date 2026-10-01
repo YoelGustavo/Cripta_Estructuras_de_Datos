@@ -6,7 +6,7 @@ class NodoSimple:
         self.valor = valor
         self.siguiente = None
 
-class Lista:
+class ListaSimple:
     def __init__(self):
         self._frente = None
         self._final = None
@@ -18,7 +18,7 @@ class Lista:
     def esta_vacia(self):
         return self._n == 0
 
-    def agregar_al_final(self, valor):
+    def agregar_al_final(self, valor): #O(1)
         nuevo_nodo = NodoSimple(valor)
         
         if self.esta_vacia():
@@ -30,7 +30,7 @@ class Lista:
             
         self._n += 1
 
-    def agregar_al_frente(self, valor):
+    def agregar_al_frente(self, valor): #O(1)
         nuevo_nodo = NodoSimple(valor)
         
         if self.esta_vacia():
@@ -42,12 +42,12 @@ class Lista:
             
         self._n += 1
 
-    def ver_frente(self):
+    def ver_frente(self): #O(1)
         if self.esta_vacia():
             raise IndexError("La lista está vacía")
         return self._frente.valor #retorna el valor del primer nodo
 
-    def quitar_del_frente(self): #quita el primer nodo de la lista y retorna su valor
+    def quitar_del_frente(self): #O(1) - quita el primer nodo de la lista y retorna su valor
         if self.esta_vacia():
             raise IndexError("No se puede quitar de una lista vacía")
             
@@ -63,7 +63,7 @@ class Lista:
             
         return valor
 
-    def contiene(self, valor): #verifica si un valor está en la lista
+    def contiene(self, valor): #O(n) - verifica si un valor está en la lista
         actual = self._frente
         
         while actual is not None:
@@ -73,7 +73,7 @@ class Lista:
             
         return False
 
-    def quitar(self, valor):
+    def quitar(self, valor): #O(n)
         if self.esta_vacia():
             return False
 
