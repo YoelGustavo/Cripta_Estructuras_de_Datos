@@ -1,2 +1,245 @@
-#Precarga por lotes, resolución del catálogo, respuestas en orden
-#vease 4.2 y 4.3
+from concurrent.futures import ThreadPoolExecutor
+
+from crypta.estructuras.Cola import Cola
+
+
+class GestorContenido:
+
+    def __init__(self, fuente, mapa, cripta_id):
+        self._fuente = fuente
+        self._mapa = mapa
+        self._cripta_id = cripta_id
+
+        # Permite realizar solicitudes HTTP anticipadas
+        # sin bloquear inmediatamente el juego.
+        self._ejecutor = ThreadPoolExecutor(max_workers=2)
+
+        # Solicitudes iniciadas pero todavía no incorporadas.
+        # La cola conserva el orden en que fueron iniciadas.
+        self._pendientes = Cola()
+
+        # Número de secuencia para mantener un orden
+        # determinista entre solicitudes.
+        self._siguiente_secuencia = 0
+
+    # =========================================================
+    # CARGA NORMAL DE CONTENIDO
+    # =========================================================
+
+    def cargar_salas(self, salas):
+        ids_pendientes = []
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
+
+            # Una sala ya cargada no se vuelve a solicitar.
+            if not sala.contenido_cargado():
+                ids_pendientes.append(sala.id)
+
+            # El servicio permite máximo 10 salas por consulta.
+            if len(ids_pendientes) == 10:
+                self._solicitar_lote(ids_pendientes)
+                ids_pendientes = []
+
+        # Puede quedar un último lote de menos de 10.
+        if len(ids_pendientes) > 0:
+            self._solicitar_lote(ids_pendientes)
+
+    def _solicitar_lote(self, ids):
+        respuesta = self._fuente.obtener_contenido(
+            self._cripta_id,
+            ids
+        )
+
+        self._mapa.asignar_contenidos(
+            respuesta["contenido"]
+        )
+
+    # =========================================================
+    # PRECARGA SINCRÓNICA
+    # =========================================================
+
+    def precargar_desde(self, id_sala):
+        sala_actual = self._mapa.obtener_sala(id_sala)
+
+        if sala_actual is None:
+            raise ValueError(
+                f"No existe la sala {id_sala}"
+            )
+
+        # Como conocemos el esqueleto completo, buscamos salas
+        # cercanas y aprovechamos el lote de hasta 10.
+        salas = self._mapa.obtener_cercanas(
+            id_sala,
+            10
+        )
+
+        self.cargar_salas(salas)
+
+    # =========================================================
+    # PRECARGA ASÍNCRONA
+    # =========================================================
+
+    def precargar_async(self, id_sala):
+        sala_actual = self._mapa.obtener_sala(id_sala)
+
+        if sala_actual is None:
+            raise ValueError(
+                f"No existe la sala {id_sala}"
+            )
+
+        salas = self._mapa.obtener_cercanas(
+            id_sala,
+            10
+        )
+
+        ids = []
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
+
+            if not sala.contenido_cargado():
+                # Tampoco solicitamos una sala que ya venga
+                # dentro de otra solicitud pendiente.
+                if self._buscar_pendiente_de_sala(sala.id) is None:
+                    ids.append(sala.id)
+
+        # No hay nada nuevo que solicitar.
+        if len(ids) == 0:
+            return None
+
+        secuencia = self._siguiente_secuencia
+        self._siguiente_secuencia += 1
+
+        # La solicitud se ejecuta en otro hilo.
+        futuro = self._ejecutor.submit(
+            self._fuente.obtener_contenido,
+            self._cripta_id,
+            ids
+        )
+
+        # Conservamos la solicitud junto con su secuencia.
+        self._pendientes.encolar(
+            (secuencia, ids, futuro)
+        )
+
+        return secuencia
+
+    # =========================================================
+    # BÚSQUEDA DE SOLICITUDES PENDIENTES
+    # =========================================================
+
+    def _buscar_pendiente_de_sala(self, id_sala):
+        for pendiente in self._pendientes:
+            secuencia, ids, futuro = pendiente
+
+            if id_sala in ids:
+                return futuro
+
+        return None
+
+    # =========================================================
+    # INCORPORACIÓN DETERMINISTA
+    # =========================================================
+
+    def procesar_pendientes(self):
+        """
+        Incorpora las respuestas terminadas respetando el orden
+        en que fueron iniciadas las solicitudes.
+        """
+
+        while not self._pendientes.esta_vacia():
+
+            secuencia, ids, futuro = self._pendientes.ver_frente()
+
+            # Si la primera todavía no terminó, no incorporamos
+            # respuestas posteriores aunque ya estén listas.
+            if not futuro.done():
+                return
+
+            # Si ocurrió un error HTTP en el hilo, result()
+            # lo propaga aquí con el contexto manejado por FuenteHTTP.
+            respuesta = futuro.result()
+
+            self._mapa.asignar_contenidos(
+                respuesta["contenido"]
+            )
+
+            self._pendientes.desencolar()
+
+    # =========================================================
+    # ESPERAR UNA SALA QUE YA VIENE EN CAMINO
+    # =========================================================
+
+    def _esperar_hasta_sala(self, id_sala):
+        """
+        Espera e incorpora solicitudes pendientes en su orden
+        hasta que el contenido de id_sala esté disponible.
+
+        La espera es tiempo real y NO modifica el reloj virtual.
+        """
+
+        while not self._pendientes.esta_vacia():
+
+            secuencia, ids, futuro = self._pendientes.ver_frente()
+
+            # Esperamos la solicitud que corresponde incorporar
+            # primero según nuestro orden determinista.
+            respuesta = futuro.result()
+
+            self._mapa.asignar_contenidos(
+                respuesta["contenido"]
+            )
+
+            self._pendientes.desencolar()
+
+            sala = self._mapa.obtener_sala(id_sala)
+
+            if sala.contenido_cargado():
+                return
+
+    # =========================================================
+    # GARANTIZAR CONTENIDO ANTES DEL MOVIMIENTO
+    # =========================================================
+
+    def garantizar_sala(self, id_sala):
+        sala = self._mapa.obtener_sala(id_sala)
+
+        if sala is None:
+            raise ValueError(
+                f"No existe la sala {id_sala}"
+            )
+
+        # Caso 1:
+        # El contenido ya está disponible.
+        if sala.contenido_cargado():
+            return sala
+
+        # Caso 2:
+        # La sala ya está siendo descargada por una
+        # solicitud anticipada.
+        futuro = self._buscar_pendiente_de_sala(id_sala)
+
+        if futuro is not None:
+            self._esperar_hasta_sala(id_sala)
+
+        # Caso 3:
+        # La sala no está cargada ni viene en una solicitud.
+        else:
+            respuesta = self._fuente.obtener_contenido(
+                self._cripta_id,
+                [id_sala]
+            )
+
+            self._mapa.asignar_contenidos(
+                respuesta["contenido"]
+            )
+
+        # Nunca permitimos que el jugador entre a una sala
+        # cuyo contenido siga siendo desconocido.
+        if not sala.contenido_cargado():
+            raise RuntimeError(
+                f"No se pudo cargar el contenido de la sala {id_sala}"
+            )
+
+        return sala
