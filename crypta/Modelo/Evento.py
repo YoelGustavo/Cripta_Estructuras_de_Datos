@@ -12,6 +12,9 @@ class Evento:
 
     def esta_valido(self):
         return self.valido
+
+    def reactivar(self):
+        self.valido = True
     
 def evento_menor(a, b):
     if a.tiempo != b.tiempo:

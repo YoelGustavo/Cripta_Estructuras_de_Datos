@@ -73,3 +73,16 @@ class Agenda:
 
     def __len__(self):
         return len(self._monticulo)
+
+    def restaurar_evento(self, evento):
+        if evento is None:
+            return
+
+        evento.reactivar()
+        self._monticulo.insertar(evento)
+
+    def deshacer_programacion(self, evento):
+        if evento is None:
+            return
+
+        evento.cancelar()

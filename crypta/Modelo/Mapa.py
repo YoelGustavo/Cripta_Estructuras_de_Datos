@@ -45,11 +45,8 @@ class Mapa:
 
         vecinas = Vector()
 
-        # salidas todavía corresponde al JSON recibido.
-        # Solo lo recorremos para transformar las referencias
-        # en objetos de nuestro modelo.
-        for datos_salida in sala.salidas.values():
-            id_vecina = datos_salida["sala"]
+        for puerta in sala.salidas.values():
+            id_vecina = puerta.sala_destino
 
             vecina = self.obtener_sala(id_vecina)
 

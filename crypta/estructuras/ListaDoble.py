@@ -68,6 +68,26 @@ class ListaDoble:
         self._enlazar_despues(self._centinela.anterior, nuevo)
         return nuevo  # DEVOLVEMOS EL NODO
 
+    def insertar_antes(self, ref, valor):
+        nuevo = NodoDoble(valor)
+
+        self._enlazar_despues(
+            ref.anterior,
+            nuevo
+        )
+
+        return nuevo
+
+    def insertar_despues(self, ref, valor):
+        nuevo = NodoDoble(valor)
+
+        self._enlazar_despues(
+            ref,
+            nuevo
+        )
+
+        return nuevo
+
     def quitar_nodo(self, nodo):
         self._desenlazar(nodo)
         return nodo.valor
@@ -81,6 +101,29 @@ class ListaDoble:
         # Lo saca de donde esté y lo ponemos antes del centinela
         self._desenlazar(nodo)
         self._enlazar_despues(self._centinela.anterior, nodo)
+
+    def mover_antes(self, nodo, referencia):
+        if nodo is referencia:
+            return
+
+        self._desenlazar(nodo)
+
+        self._enlazar_despues(
+            referencia.anterior,
+            nodo
+        )
+
+
+    def mover_despues(self, nodo, referencia):
+        if nodo is referencia:
+            return
+
+        self._desenlazar(nodo)
+
+        self._enlazar_despues(
+            referencia,
+            nodo
+        )
 
     
     def primero(self):
