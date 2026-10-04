@@ -1,6 +1,7 @@
 from crypta.Modelo.Actor import Actor
 from crypta.Modelo.Inventario import Inventario
-from crypta.estructuras.ListaDoble import ListaDoble
+from crypta.Modelo.Rastro import Rastro
+from crypta.Modelo.Rastro import Huella
 
 
 class Jugador(Actor):
@@ -32,7 +33,7 @@ class Jugador(Actor):
         self.sala_actual = None
 
         # Guarda el recorrido real del jugador.
-        self.rastro = ListaDoble()
+        self.rastro = Rastro()
 
     def esta_vivo(self):
         return self.vida > 0
@@ -59,16 +60,17 @@ class Jugador(Actor):
             self.vida + cantidad
         )
 
-    def mover_a(self, id_sala):
+    def mover_a(self, id_sala, tiempo):
         self.sala_actual = id_sala
-        self.rastro.agregar_al_final(
-            id_sala
+
+        self.rastro.registrar(
+            id_sala,
+            tiempo
         )
 
-    def deshacer_ultimo_movimiento(self, sala_anterior):
-        ultimo = self.rastro.ultimo()
-
-        if ultimo is not None:
-            self.rastro.quitar_nodo(ultimo)
-
+    def deshacer_ultimo_movimiento(
+        self,
+        sala_anterior
+    ):
+        self.rastro.quitar_ultimo()
         self.sala_actual = sala_anterior

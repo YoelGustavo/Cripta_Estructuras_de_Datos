@@ -68,6 +68,24 @@ class Agenda:
 
         return None
 
+    def siguiente_si_corresponde(self, reloj_actual):
+        while not self._monticulo.esta_vacia():
+            evento = self._monticulo.ver_min()
+
+            # Quitamos eventos cancelados que hayan
+            # quedado físicamente en el montículo.
+            if not evento.esta_valido():
+                self._monticulo.extraer_min()
+                continue
+
+            # El próximo evento todavía no debe ejecutarse.
+            if evento.tiempo > reloj_actual:
+                return None
+
+            return self._monticulo.extraer_min()
+
+        return None
+
     def esta_vacia(self):
         return self._monticulo.esta_vacia()
 
