@@ -16,7 +16,7 @@ class Mapa:
             sala = Sala(
                 id_sala=datos["id"],
                 nombre=datos["nombre"],
-                salidas=datos["salidas"]
+                salidas=datos.get("salidas") or {}
             )
 
             pares.agregar(

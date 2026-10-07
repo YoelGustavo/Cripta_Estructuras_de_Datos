@@ -52,7 +52,24 @@ class Puerta:
         self._estado.cierre_automatico = valor
 
     def compartir_estado_con(self, otra_puerta):
-        otra_puerta._estado = self._estado
+        if otra_puerta._estado is self._estado:
+            return  # ya comparten estado
+
+        # Las dos mitades describen la MISMA puerta, cada una desde su
+        # lado. Antes de compartir se junta lo que dice cada una; si no,
+        # se pierde lo que solo decía la otra (por ejemplo, la llave).
+        mio = self._estado
+        suyo = otra_puerta._estado
+
+        mio.cerrada = mio.cerrada or suyo.cerrada
+
+        if mio.llave is None:
+            mio.llave = suyo.llave
+
+        if mio.cierre_automatico is None:
+            mio.cierre_automatico = suyo.cierre_automatico
+
+        otra_puerta._estado = mio
 
     def esta_cerrada(self):
         return self.cerrada

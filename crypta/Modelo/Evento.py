@@ -6,6 +6,7 @@ class Evento:
         self.objetivo = objetivo
         self.datos = datos
         self.valido = True
+        self.en_monticulo = False
 
     def cancelar(self):
         self.valido = False

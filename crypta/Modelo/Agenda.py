@@ -2,10 +2,19 @@ from crypta.estructuras.MonticuloMin import MonticuloMin
 from crypta.Modelo.Evento import Evento, evento_menor
 
 
+def _esta_pendiente(evento):
+    # Pendiente = todavía va a ocurrir: no se canceló y sigue en el montículo.
+    return evento.esta_valido() and evento.en_monticulo
+
+
 class Agenda:
     def __init__(self):
         self._monticulo = MonticuloMin(evento_menor)
         self._siguiente_secuencia = 0
+
+        # Cuántos eventos PENDIENTES hay. Los cancelados que todavía están
+        # dentro del montículo (borrado perezoso) NO cuentan.
+        self._pendientes = 0
 
     def programar(self, tiempo, tipo, objetivo=None, datos=None):
         evento = Evento(
@@ -17,11 +26,19 @@ class Agenda:
         )
 
         self._siguiente_secuencia += 1
-        self._monticulo.insertar(evento)
+        self._insertar(evento)
+        self._pendientes += 1
         return evento
 
     def cancelar(self, evento):
+        # Solo se cancela algo que todavía va a ocurrir. Cancelar dos veces,
+        # o cancelar un evento que ya se ejecutó, no hace nada.
+        if evento is None or not _esta_pendiente(evento):
+            return False
+
         evento.cancelar()
+        self._pendientes -= 1
+        return True
 
     def reprogramar_por_velocidad(self, actor, reloj_actual, velocidad_nueva):
         if velocidad_nueva <= 0:
@@ -29,7 +46,9 @@ class Agenda:
         
         evento_anterior = actor.evento_siguiente
 
-        if evento_anterior is None or not evento_anterior.esta_valido():
+        # Si su acción no está pendiente (no tiene, se canceló, o es la que
+        # se está ejecutando ahora mismo), solo cambia la velocidad.
+        if evento_anterior is None or not _esta_pendiente(evento_anterior):
             actor.velocidad = velocidad_nueva
             return None
 
@@ -61,9 +80,10 @@ class Agenda:
 
     def siguiente(self):
         while not self._monticulo.esta_vacia():
-            evento = self._monticulo.extraer_min()
+            evento = self._sacar()
 
             if evento is not None and evento.esta_valido():
+                self._pendientes -= 1
                 return evento
 
         return None
@@ -75,31 +95,49 @@ class Agenda:
             # Quitamos eventos cancelados que hayan
             # quedado físicamente en el montículo.
             if not evento.esta_valido():
-                self._monticulo.extraer_min()
+                self._sacar()
                 continue
 
             # El próximo evento todavía no debe ejecutarse.
             if evento.tiempo > reloj_actual:
                 return None
 
-            return self._monticulo.extraer_min()
+            self._pendientes -= 1
+            return self._sacar()
 
         return None
 
     def esta_vacia(self):
-        return self._monticulo.esta_vacia()
+        # Vacía para el JUEGO: no queda nada pendiente, aunque el montículo
+        # todavía tenga cancelados esperando a ser descartados.
+        return self._pendientes == 0
 
     def __len__(self):
-        return len(self._monticulo)
+        return self._pendientes
 
     def restaurar_evento(self, evento):
-        if evento is None:
+        if evento is None or _esta_pendiente(evento):
             return
 
+        # Vuelve a estar pendiente.
         evento.reactivar()
+        self._pendientes += 1
+
+        # Si ya había salido del montículo (se ejecutó, o se canceló y
+        # ya se descartó), hay que volver a meterlo. Si sigue adentro,
+        # basta con reactivarlo: meterlo otra vez lo duplicaría.
+        if not evento.en_monticulo:
+            self._insertar(evento)
 
     def deshacer_programacion(self, evento):
-        if evento is None:
-            return
+        # Deshacer "programé este evento" = que nunca ocurra.
+        self.cancelar(evento)
 
-        evento.cancelar()
+    def _insertar(self, evento):
+        self._monticulo.insertar(evento)
+        evento.en_monticulo = True
+
+    def _sacar(self):
+        evento = self._monticulo.extraer_min()
+        evento.en_monticulo = False
+        return evento

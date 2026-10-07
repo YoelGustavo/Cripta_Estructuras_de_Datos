@@ -45,7 +45,6 @@ class Historial:
 
         self._limite = limite
         self._acciones = ListaDoble()
-        self._cambios_pendientes = ListaDoble()
 
     def __len__(self):
         return len(self._acciones)
@@ -54,19 +53,16 @@ class Historial:
         return self._acciones.esta_vacia()
 
     def registrar(self, accion):
+        """Abre la acción del jugador que empieza AHORA.
+
+        Llamarlo al EMPEZAR la acción, antes de hacer cualquier cambio.
+        Desde aquí y hasta la próxima acción del jugador, todo cambio
+        (lo que hace el jugador, las ratas, el veneno, el reloj...) se
+        anota en esta acción con registrar_cambio (§2.11). Por eso se
+        guarda aunque todavía esté vacía.
+        """
         if accion is None:
-            return
-
-        # Los cambios producidos por el EstadoJuego,
-        # como el avance del reloj, pasan a formar
-        # parte de esta acción.
-        for cambio in self._cambios_pendientes:
-            accion.registrar_cambio(cambio)
-
-        self._cambios_pendientes = ListaDoble()
-
-        if accion.esta_vacio():
-            return
+            raise ValueError("Falta la acción a registrar")
 
         self._acciones.agregar_al_final(
             accion
@@ -79,6 +75,18 @@ class Historial:
                 self._acciones.quitar_nodo(
                     mas_antigua
                 )
+
+    def registrar_cambio(self, cambio):
+        """Anota un cambio en la acción abierta (la última registrada).
+
+        Antes de la primera acción del jugador no hay nada que deshacer:
+        el cambio no se anota."""
+        nodo = self._acciones.ultimo()
+
+        if nodo is None or cambio is None:
+            return
+
+        nodo.valor.registrar_cambio(cambio)
 
     def puede_deshacer(self):
         return not self._acciones.esta_vacia()
@@ -98,11 +106,3 @@ class Historial:
         )
 
         return True
-
-    def registrar_cambio_pendiente(self, cambio):
-        if cambio is None:
-            return
-
-        self._cambios_pendientes.agregar_al_final(
-            cambio
-        )

@@ -57,11 +57,14 @@ class GestorContenido:
             respuesta["contenido"]
         )
 
-    # =========================================================
-    # PRECARGA SINCRÓNICA
-    # =========================================================
 
     def precargar_desde(self, id_sala):
+        self.cargar_salas(
+            self._salas_para_precargar(id_sala)
+        )
+
+    def _salas_para_precargar(self, id_sala):
+        
         sala_actual = self._mapa.obtener_sala(id_sala)
 
         if sala_actual is None:
@@ -89,10 +92,10 @@ class GestorContenido:
             if actual is None:
                 continue
 
-            # Una sala ya cargada no ocupa espacio
-            # en el lote, pero seguimos explorando
-            # a través de ella.
-            if not actual.contenido_cargado():
+            if (
+                not actual.contenido_cargado()
+                and self._buscar_pendiente_de_sala(actual.id) is None
+            ):
                 salas_nuevas.agregar(actual)
 
             for puerta in actual.salidas.values():
@@ -107,26 +110,23 @@ class GestorContenido:
                         vecino_id
                     )
 
-        self.cargar_salas(salas_nuevas)
+        return salas_nuevas
 
     # =========================================================
     # PRECARGA ASÍNCRONA
     # =========================================================
 
     def precargar_async(self, id_sala):
-        sala_actual = self._mapa.obtener_sala(id_sala)
-
-        if sala_actual is None:
-            raise ValueError(
-                f"No existe la sala {id_sala}"
-            )
-
-        salas = self._mapa.obtener_cercanas(
-            id_sala,
-            10
-        )
+        salas = self._salas_para_precargar(id_sala)
 
         ids = []
+
+        for i in range(len(salas)):
+            ids.append(salas.obtener(i).id)
+
+        # No hay nada nuevo que solicitar.
+        if len(ids) == 0:
+            return None
 
         for i in range(len(salas)):
             sala = salas.obtener(i)

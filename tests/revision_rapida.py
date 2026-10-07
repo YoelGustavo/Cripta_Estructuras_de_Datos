@@ -227,8 +227,8 @@ def caso_pergamino_y_reloj():
     accion = RegistroAccion("atacar")
     accion.registrar_cambio(Cambio.de_atributo("vida", jugador, "vida", jugador.vida))
     jugador.vida = 26
-    estado.avanzar_reloj(100)        # la acción consumió tiempo
     estado.historial.registrar(accion)
+    estado.avanzar_reloj(100)        # la acción consumió tiempo
     estado.usar_pergamino_retroceso()
     return estado.reloj == 0, f"la vida volvió a {jugador.vida}, pero el reloj quedó en {estado.reloj}"
 

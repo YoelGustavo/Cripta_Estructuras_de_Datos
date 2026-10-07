@@ -35,7 +35,7 @@ class EstadoJuego:
 
         self.reloj += cantidad
 
-        self.historial.registrar_cambio_pendiente(
+        self.historial.registrar_cambio(
             Cambio.de_atributo(
                 "reloj",
                 self,

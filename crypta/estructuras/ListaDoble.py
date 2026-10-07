@@ -88,17 +88,27 @@ class ListaDoble:
 
         return nuevo
 
+    def reinsertar_despues(self, nodo, anterior):
+        """Vuelve a enlazar un nodo que se quitó con quitar_nodo, justo
+        después de 'anterior' (None = al frente). O(1).
+
+        Es lo contrario de quitar_nodo: devuelve el MISMO nodo, no uno
+        nuevo, así que cualquier referencia guardada a él sigue sirviendo."""
+        if anterior is None:
+            anterior = self._centinela
+
+        self._enlazar_despues(anterior, nodo)
+        return nodo
+
     def quitar_nodo(self, nodo):
         self._desenlazar(nodo)
         return nodo.valor
 
     def mover_al_frente(self, nodo):
-        # Lo saca de donde esté y lo ponemos después del centinela
         self._desenlazar(nodo)
         self._enlazar_despues(self._centinela, nodo)
 
     def mover_al_final(self, nodo):
-        # Lo saca de donde esté y lo ponemos antes del centinela
         self._desenlazar(nodo)
         self._enlazar_despues(self._centinela.anterior, nodo)
 

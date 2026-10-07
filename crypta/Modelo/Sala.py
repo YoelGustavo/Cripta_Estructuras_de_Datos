@@ -13,7 +13,7 @@ class Sala:
         for direccion, datos in salidas.items():
             self.salidas[direccion] = Puerta(
                 sala_destino=datos["sala"],
-                cerrada=datos.get("cerrada", False),
+                cerrada=bool(datos.get("cerrada")),
                 llave=datos.get("llave"),
                 cierre_automatico=datos.get(
                     "cierre_automatico"
@@ -38,10 +38,10 @@ class Sala:
         self.objetos = Vector()
         self.trampas = Vector()
 
-        for id_objeto in contenido.get("objetos", []):
+        for id_objeto in contenido.get("objetos") or []:
             self.objetos.agregar(id_objeto)
 
-        for datos_trampa in contenido.get("trampas", []):
+        for datos_trampa in contenido.get("trampas") or []:
             trampa = Trampa(
                 instancia=datos_trampa["instancia"],
                 tipo=datos_trampa["tipo"]

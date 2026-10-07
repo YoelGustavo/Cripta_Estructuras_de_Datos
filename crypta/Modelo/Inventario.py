@@ -3,15 +3,15 @@ from crypta.estructuras.ordenamiento import copiar_a_vector, ordenar
 
 
 class ContextoSoltar:
-    def __init__(self, objeto, posicion):
-        self.objeto = objeto
-        self.posicion = posicion
-
-class ContextoEquipar:
-    def __init__(self, nodo, anterior, siguiente):
+    def __init__(self, nodo, anterior):
         self.nodo = nodo
         self.anterior = anterior
-        self.siguiente = siguiente
+        self.objeto = nodo.valor
+
+class ContextoEquipar:
+    def __init__(self, nodo, anterior):
+        self.nodo = nodo            # el nodo que se movió al frente
+        self.anterior = anterior
 
 class ContextoRecoger:
 
@@ -20,12 +20,12 @@ class ContextoRecoger:
         sala,
         posicion_suelo,
         id_objeto,
-        objeto
+        nodo_inventario
     ):
         self.sala = sala
         self.posicion_suelo = posicion_suelo
         self.id_objeto = id_objeto
-        self.objeto = objeto
+        self.nodo_inventario = nodo_inventario
 
 class ContextoSoltarEnSala:
     def __init__(
@@ -142,6 +142,37 @@ class Inventario:
 
         return self._actual.valor
 
+    def equipar_actual_con_contexto(self):
+        if self._actual is None:
+            return None
+
+        nodo = self._actual
+
+        # Se guarda quién estaba antes ANTES de moverlo al frente.
+        contexto = ContextoEquipar(
+            nodo,
+            self._objetos.anterior(nodo)
+        )
+
+        self._objetos.mover_al_frente(nodo)
+
+        return contexto
+
+    def restaurar_equipado(self, contexto):
+        if contexto is None:
+            return
+
+        # Se saca del frente y vuelve justo después de su vecino de antes.
+        # Es el mismo truco del paso anterior: el MISMO nodo, en O(1).
+        self._objetos.quitar_nodo(contexto.nodo)
+
+        self._objetos.reinsertar_despues(
+            contexto.nodo,
+            contexto.anterior
+        )
+
+        self._actual = contexto.nodo
+
     def orden_real(self):
         resultado = []
 
@@ -238,16 +269,8 @@ class Inventario:
             return None
 
         nodo = self._actual
-        objeto = nodo.valor
 
-        # Guardamos la posición lógica del objeto.
-        posicion = 0
-        actual = self._objetos.primero()
-
-        while actual is not nodo:
-            actual = self._objetos.siguiente(actual)
-            posicion += 1
-
+        # Guardamos quién está antes: O(1), sin recorrer la lista.
         siguiente = self._objetos.siguiente(nodo)
         anterior = self._objetos.anterior(nodo)
 
@@ -261,37 +284,23 @@ class Inventario:
         self._objetos.quitar_nodo(nodo)
 
         return ContextoSoltar(
-            objeto,
-            posicion
+            nodo,
+            anterior
         )
 
     def restaurar_soltado(self, contexto):
         if contexto is None:
             return
 
-        objeto = contexto.objeto
-        posicion = contexto.posicion
+        # Vuelve el MISMO nodo, justo después del que tenía antes.
+        # Como se deshace en orden inverso, ese vecino ya está de vuelta
+        # en la lista (y también es el mismo nodo de siempre).
+        self._objetos.reinsertar_despues(
+            contexto.nodo,
+            contexto.anterior
+        )
 
-        # Si debe ir al final.
-        if posicion >= len(self._objetos):
-            nodo = self._objetos.agregar_al_final(
-                objeto
-            )
-
-        else:
-            referencia = self._objetos.primero()
-
-            for _ in range(posicion):
-                referencia = self._objetos.siguiente(
-                    referencia
-                )
-
-            nodo = self._objetos.insertar_antes(
-                referencia,
-                objeto
-            )
-
-        self._actual = nodo
+        self._actual = contexto.nodo
 
     def recoger_desde_sala(
         self,
@@ -325,7 +334,7 @@ class Inventario:
             sala,
             posicion,
             id_objeto,
-            objeto
+            nodo
         )
 
 
@@ -333,15 +342,10 @@ class Inventario:
         if contexto is None:
             return
 
-        # Buscamos la instancia actual del objeto.
-        nodo = self._objetos.primero()
-
-        while nodo is not None:
-            if nodo.valor is contexto.objeto:
-                self.quitar_nodo(nodo)
-                break
-
-            nodo = self._objetos.siguiente(nodo)
+        # Sale exactamente el nodo que entró al recoger.
+        self.quitar_nodo(
+            contexto.nodo_inventario
+        )
 
         # El ID vuelve exactamente a su posición
         # original en el suelo.
