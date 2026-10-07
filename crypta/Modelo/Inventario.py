@@ -3,10 +3,9 @@ from crypta.estructuras.ordenamiento import copiar_a_vector, ordenar
 
 
 class ContextoSoltar:
-    def __init__(self, objeto, anterior, siguiente):
+    def __init__(self, objeto, posicion):
         self.objeto = objeto
-        self.anterior = anterior
-        self.siguiente = siguiente
+        self.posicion = posicion
 
 class ContextoEquipar:
     def __init__(self, nodo, anterior, siguiente):
@@ -15,17 +14,18 @@ class ContextoEquipar:
         self.siguiente = siguiente
 
 class ContextoRecoger:
+
     def __init__(
         self,
         sala,
         posicion_suelo,
         id_objeto,
-        nodo_inventario
+        objeto
     ):
         self.sala = sala
         self.posicion_suelo = posicion_suelo
         self.id_objeto = id_objeto
-        self.nodo_inventario = nodo_inventario
+        self.objeto = objeto
 
 class ContextoSoltarEnSala:
     def __init__(
@@ -240,14 +240,16 @@ class Inventario:
         nodo = self._actual
         objeto = nodo.valor
 
-        anterior = self._objetos.anterior(nodo)
-        siguiente = self._objetos.siguiente(nodo)
+        # Guardamos la posición lógica del objeto.
+        posicion = 0
+        actual = self._objetos.primero()
 
-        contexto = ContextoSoltar(
-            objeto,
-            anterior,
-            siguiente
-        )
+        while actual is not nodo:
+            actual = self._objetos.siguiente(actual)
+            posicion += 1
+
+        siguiente = self._objetos.siguiente(nodo)
+        anterior = self._objetos.anterior(nodo)
 
         if siguiente is not None:
             self._actual = siguiente
@@ -258,77 +260,36 @@ class Inventario:
 
         self._objetos.quitar_nodo(nodo)
 
-        return contexto
-
+        return ContextoSoltar(
+            objeto,
+            posicion
+        )
 
     def restaurar_soltado(self, contexto):
         if contexto is None:
             return
 
         objeto = contexto.objeto
-        anterior = contexto.anterior
-        siguiente = contexto.siguiente
+        posicion = contexto.posicion
 
-        if siguiente is not None:
-            nodo = self._objetos.insertar_antes(
-                siguiente,
-                objeto
-            )
-
-        elif anterior is not None:
-            nodo = self._objetos.insertar_despues(
-                anterior,
-                objeto
-            )
-
-        else:
+        # Si debe ir al final.
+        if posicion >= len(self._objetos):
             nodo = self._objetos.agregar_al_final(
                 objeto
             )
 
-        self._actual = nodo
+        else:
+            referencia = self._objetos.primero()
 
-    def equipar_actual_con_contexto(self):
-        if self._actual is None:
-            return None
+            for _ in range(posicion):
+                referencia = self._objetos.siguiente(
+                    referencia
+                )
 
-        nodo = self._actual
-
-        anterior = self._objetos.anterior(nodo)
-        siguiente = self._objetos.siguiente(nodo)
-
-        contexto = ContextoEquipar(
-            nodo,
-            anterior,
-            siguiente
-        )
-
-        self._objetos.mover_al_frente(nodo)
-
-        return contexto
-
-    def restaurar_equipado(self, contexto):
-        if contexto is None:
-            return
-
-        nodo = contexto.nodo
-        anterior = contexto.anterior
-        siguiente = contexto.siguiente
-
-        if siguiente is not None:
-            self._objetos.mover_antes(
-                nodo,
-                siguiente
+            nodo = self._objetos.insertar_antes(
+                referencia,
+                objeto
             )
-
-        elif anterior is not None:
-            self._objetos.mover_despues(
-                nodo,
-                anterior
-            )
-
-        # Si no tenía anterior ni siguiente,
-        # era el único objeto y no hay nada que mover.
 
         self._actual = nodo
 
@@ -364,7 +325,7 @@ class Inventario:
             sala,
             posicion,
             id_objeto,
-            nodo
+            objeto
         )
 
 
@@ -372,13 +333,18 @@ class Inventario:
         if contexto is None:
             return
 
-        # Sale del inventario.
-        self.quitar_nodo(
-            contexto.nodo_inventario
-        )
+        # Buscamos la instancia actual del objeto.
+        nodo = self._objetos.primero()
 
-        # Regresa exactamente a su posición anterior
-        # en el suelo.
+        while nodo is not None:
+            if nodo.valor is contexto.objeto:
+                self.quitar_nodo(nodo)
+                break
+
+            nodo = self._objetos.siguiente(nodo)
+
+        # El ID vuelve exactamente a su posición
+        # original en el suelo.
         contexto.sala.insertar_objeto(
             contexto.posicion_suelo,
             contexto.id_objeto

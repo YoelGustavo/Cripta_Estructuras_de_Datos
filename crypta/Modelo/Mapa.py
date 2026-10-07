@@ -2,6 +2,7 @@ from crypta.Modelo.Sala import Sala
 from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
 from crypta.estructuras.Vector import Vector
 from crypta.estructuras.Cola import Cola
+from crypta.estructuras.ordenamiento import ordenar
 
 
 class Mapa:
@@ -11,8 +12,6 @@ class Mapa:
     def cargar_desde_json(self, salas_json):
         pares = Vector()
 
-        # El API entrega las salas por páginas.
-        # Convertimos cada dato JSON en un objeto del modelo.
         for datos in salas_json:
             sala = Sala(
                 id_sala=datos["id"],
@@ -20,13 +19,21 @@ class Mapa:
                 salidas=datos["salidas"]
             )
 
-            # El árbol necesita pares (clave, valor)
-            pares.agregar((sala.id, sala))
+            pares.agregar(
+                (sala.id, sala)
+            )
 
-        # Las salas del esqueleto vienen ordenadas por id.
-        # Aprovechamos el constructor balanceado en vez de insertarlas
-        # una por una.
-        self._salas = ArbolBusqueda.desde_ordenados(pares)
+        ordenar(
+            pares,
+            clave=lambda par: par[0]
+        )
+
+        self._salas = ArbolBusqueda.desde_ordenados(
+            pares
+        )
+
+        self._compartir_puertas()
+        self._enlazar_salas_destino()
 
     def obtener_sala(self, id_sala):
         return self._salas.obtener(id_sala)
@@ -110,3 +117,36 @@ class Mapa:
             salas.agregar(sala)
 
         return salas
+
+    def _compartir_puertas(self):
+        salas = self.obtener_todas()
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
+
+            for direccion, puerta in sala.salidas.items():
+                destino = self.obtener_sala(
+                    puerta.sala_destino
+                )
+
+                if destino is None:
+                    continue
+
+                for puerta_destino in destino.salidas.values():
+
+                    if puerta_destino.sala_destino == sala.id:
+                        puerta.compartir_estado_con(
+                            puerta_destino
+                        )
+                        break
+
+    def _enlazar_salas_destino(self):
+        salas = self.obtener_todas()
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
+
+            for puerta in sala.salidas.values():
+                puerta.sala_destino_ref = self.obtener_sala(
+                    puerta.sala_destino
+                )

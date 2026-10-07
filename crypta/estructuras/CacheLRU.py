@@ -1,5 +1,6 @@
-class CacheLRU:
+from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
 
+class CacheLRU:
     def __init__(self, capacidad=25):
         if capacidad <= 0:
             raise ValueError(
@@ -8,16 +9,13 @@ class CacheLRU:
 
         self._capacidad = capacidad
 
-        # id -> ficha
+        # Por ahora dejamos estas partes como están.
         self._datos = {}
-
-        # id -> número del último acceso
         self._ultimo_acceso = {}
 
-        # IDs que no pueden desalojarse.
-        self._en_uso = set()
+        # id -> cantidad de instancias que usan la ficha.
+        self._en_uso = ArbolBusqueda()
 
-        # Reloj lógico para ordenar accesos.
         self._contador = 0
 
     def _registrar_acceso(self, id_tipo):
@@ -45,22 +43,20 @@ class CacheLRU:
         desalojada = None
 
         if len(self._datos) >= self._capacidad:
-            desalojada = self._desalojar()
+            desalojada = self._desalojar_si_es_posible()
 
         self._datos[id_tipo] = ficha
         self._registrar_acceso(id_tipo)
 
         return desalojada
 
-    def _desalojar(self):
+    def _desalojar_si_es_posible(self):
         candidato = None
         acceso_mas_antiguo = None
 
         for id_tipo in self._datos:
 
-            # Una ficha actualmente utilizada por el juego
-            # no puede salir de la caché.
-            if id_tipo in self._en_uso:
+            if self.esta_en_uso(id_tipo):
                 continue
 
             acceso = self._ultimo_acceso[id_tipo]
@@ -72,11 +68,10 @@ class CacheLRU:
                 candidato = id_tipo
                 acceso_mas_antiguo = acceso
 
+        # Todas las fichas están protegidas.
+        # Permitimos superar temporalmente la capacidad.
         if candidato is None:
-            raise RuntimeError(
-                "No se puede desalojar ninguna ficha: "
-                "todas están en uso"
-            )
+            return None
 
         ficha = self._datos.pop(candidato)
         self._ultimo_acceso.pop(candidato)
@@ -85,13 +80,35 @@ class CacheLRU:
 
     def marcar_en_uso(self, id_tipo):
         if id_tipo in self._datos:
-            self._en_uso.add(id_tipo)
+            cantidad = self._en_uso.obtener(
+                id_tipo,
+                0
+            )
+
+            self._en_uso.insertar(
+                id_tipo,
+                cantidad + 1
+            )
 
     def liberar(self, id_tipo):
-        self._en_uso.discard(id_tipo)
+        cantidad = self._en_uso.obtener(
+            id_tipo,
+            0
+        )
+
+        if cantidad <= 1:
+            self._en_uso.eliminar(id_tipo)
+        else:
+            self._en_uso.insertar(
+                id_tipo,
+                cantidad - 1
+            )
 
     def esta_en_uso(self, id_tipo):
-        return id_tipo in self._en_uso
+        return self._en_uso.obtener(
+            id_tipo,
+            0
+        ) > 0
 
     def cantidad(self):
         return len(self._datos)

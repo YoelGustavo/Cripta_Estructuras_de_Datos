@@ -24,6 +24,10 @@ class Sala:
         self.objetos = Vector()
         self.trampas = Vector()
 
+        # Instante del último rastro dejado por el jugador.
+        # None significa que el jugador nunca ha estado en esta sala.
+        self.ultimo_rastro = None
+
     def contenido_cargado(self):
         return self.contenido is not None
 
@@ -71,3 +75,9 @@ class Sala:
 
     def trampa_en(self, posicion):
         return self.trampas.obtener(posicion)
+
+    def registrar_rastro(self, tiempo):
+        self.ultimo_rastro = tiempo
+
+    def obtener_rastro(self):
+        return self.ultimo_rastro

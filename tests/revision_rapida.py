@@ -18,6 +18,7 @@ from crypta.Modelo.Rastreador import Rastreador
 from crypta.Modelo.Rastro import Rastro
 from crypta.Modelo.Sala import Sala
 from crypta.estructuras.CacheLRU import CacheLRU
+from crypta.Modelo.Jugador import Jugador
 
 
 def sala(numero, **salidas):
@@ -65,32 +66,109 @@ def caso_puerta_compartida():
 
 def caso_rastreador_puerta_cerrada():
     """§2.5 y §2.9: los enemigos no abren puertas; el rastreador solo mira salidas abiertas."""
-    mapa = mapa_de(sala(5, N={"sala": 9, "cerrada": True, "llave": "itm_llave"}, S=3),
-                   sala(9, S=5), sala(3, N=5))
+    mapa = mapa_de(
+        sala(
+            5,
+            N={
+                "sala": 9,
+                "cerrada": True,
+                "llave": "itm_llave"
+            },
+            S=3
+        ),
+        sala(9, S=5),
+        sala(3, N=5)
+    )
+
+    # El rastro reciente está almacenado en cada sala.
+    mapa.obtener_sala(3).registrar_rastro(200)
+    mapa.obtener_sala(9).registrar_rastro(300)
+
     rastro = Rastro()
-    rastro.registrar(3, 200)
-    rastro.registrar(9, 300)
-    destino = Rastreador("rata", 150, sala_actual=5).decidir_destino(mapa, rastro, 350)
-    return destino == 3, f"eligió la sala {destino}, que está detrás de una puerta cerrada"
+
+    destino = Rastreador(
+        "rata",
+        150,
+        sala_actual=5
+    ).decidir_destino(
+        mapa,
+        rastro,
+        350
+    )
+
+    return (
+        destino == 3,
+        f"eligió la sala {destino}; debía ignorar la puerta cerrada hacia 9"
+    )
 
 
 def caso_rastreador_empate():
     """§2.9: con el mismo tiempo de rastro se escoge la sala de menor id."""
-    mapa = mapa_de(sala(5, N=9, S=3), sala(9, S=5), sala(3, N=5))
+    mapa = mapa_de(
+        sala(5, N=9, S=3),
+        sala(9, S=5),
+        sala(3, N=5)
+    )
+
+    # Ambas salas tienen un rastro igualmente reciente.
+    mapa.obtener_sala(9).registrar_rastro(100)
+    mapa.obtener_sala(3).registrar_rastro(100)
+
     rastro = Rastro()
-    rastro.registrar(9, 100)
-    rastro.registrar(3, 100)
-    destino = Rastreador("rata", 150, sala_actual=5).decidir_destino(mapa, rastro, 150)
-    return destino == 3, f"eligió la sala {destino}"
+
+    destino = Rastreador(
+        "rata",
+        150,
+        sala_actual=5
+    ).decidir_destino(
+        mapa,
+        rastro,
+        150
+    )
+
+    return (
+        destino == 3,
+        f"eligió la sala {destino}; en empate debía elegir la sala 3"
+    )
 
 
 def caso_costo_del_rastro():
     """§4.7: decidir no puede costar según la longitud del recorrido del jugador."""
-    rastro = Rastro()
-    for numero in range(1, 501):          # el jugador camina 500 salas
-        rastro.registrar(numero, numero * 100)
-    altura = rastro._por_sala.altura()
-    return altura <= 20, f"cada consulta recorre hasta {altura} nodos (crece con el recorrido)"
+    mapa = mapa_de(
+        sala(5, N=9, S=3),
+        sala(9, S=5),
+        sala(3, N=5)
+    )
+
+    # Las únicas salas relevantes para el rastreador son sus vecinas.
+    mapa.obtener_sala(3).registrar_rastro(200)
+    mapa.obtener_sala(9).registrar_rastro(300)
+
+    class RastroNoConsultable:
+        def obtener_reciente(self, *args, **kwargs):
+            raise AssertionError(
+                "El rastreador consultó el historial global"
+            )
+
+    rastro = RastroNoConsultable()
+
+    try:
+        destino = Rastreador(
+            "rata",
+            150,
+            sala_actual=5
+        ).decidir_destino(
+            mapa,
+            rastro,
+            350
+        )
+    except AssertionError as error:
+        return False, str(error)
+
+    return (
+        destino == 9,
+        "la decisión depende de las salidas vecinas, no del recorrido completo"
+    )
 
 
 def caso_dos_soltar_y_deshacer():
@@ -189,6 +267,64 @@ def caso_segunda_precarga():
     nuevas = [s for lote in fuente.pedidas[1:] for s in lote]
     return len(nuevas) > 0, f"la segunda precarga pidió {nuevas}"
 
+def caso_deshacer_restaura_rastro():
+    """§4.6: deshacer un movimiento restaura el rastro anterior de la sala."""
+
+    mapa = mapa_de(
+        sala(3, N=4),
+        sala(4, S=3)
+    )
+
+    jugador = Jugador(
+        nombre="Jugador",
+        vida_max=30,
+        ataque=5,
+        defensa=2,
+        velocidad=100,
+        inventario_max=5
+    )
+
+    sala3 = mapa.obtener_sala(3)
+    sala4 = mapa.obtener_sala(4)
+
+    # Primera visita a sala 3.
+    jugador.mover_a(
+        sala3,
+        100
+    )
+
+    # Visita a sala 4.
+    jugador.mover_a(
+        sala4,
+        200
+    )
+
+    # Segunda visita a sala 3.
+    jugador.mover_a(
+        sala3,
+        300
+    )
+
+    # Antes de deshacer, el rastro más reciente
+    # de la sala 3 debe ser 300.
+    if sala3.obtener_rastro() != 300:
+        return (
+            False,
+            f"antes de deshacer esperaba 300 y obtuvo "
+            f"{sala3.obtener_rastro()}"
+        )
+
+    jugador.deshacer_ultimo_movimiento(
+        4
+    )
+
+    # Debe reaparecer la visita anterior a sala 3.
+    return (
+        sala3.obtener_rastro() == 100,
+        f"esperaba restaurar 100 y obtuvo "
+        f"{sala3.obtener_rastro()}"
+    )
+
 
 CASOS = [
     ("4.2 salas que llegan desordenadas", caso_salas_desordenadas),
@@ -200,6 +336,7 @@ CASOS = [
     ("4.5 soltar dos y deshacer las dos", caso_dos_soltar_y_deshacer),
     ("4.5 recoger, soltar y deshacer las dos", caso_recoger_soltar_y_deshacer),
     ("4.6 el pergamino restaura el reloj", caso_pergamino_y_reloj),
+    ("4.6 deshacer restaura el rastro", caso_deshacer_restaura_rastro),
     ("4.7 rastreador y puerta cerrada", caso_rastreador_puerta_cerrada),
     ("4.7 rastreador con empate", caso_rastreador_empate),
     ("4.7 costo del rastro", caso_costo_del_rastro),

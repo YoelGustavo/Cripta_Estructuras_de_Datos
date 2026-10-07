@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from crypta.estructuras.Cola import Cola
+from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
+from crypta.estructuras.Vector import Vector
 
 
 class GestorContenido:
@@ -67,14 +69,45 @@ class GestorContenido:
                 f"No existe la sala {id_sala}"
             )
 
-        # Como conocemos el esqueleto completo, buscamos salas
-        # cercanas y aprovechamos el lote de hasta 10.
-        salas = self._mapa.obtener_cercanas(
-            id_sala,
-            10
-        )
+        pendientes = Cola()
+        visitadas = ArbolBusqueda()
+        salas_nuevas = Vector()
 
-        self.cargar_salas(salas)
+        pendientes.encolar(id_sala)
+        visitadas.insertar(id_sala, True)
+
+        while (
+            not pendientes.esta_vacia()
+            and len(salas_nuevas) < 10
+        ):
+            actual_id = pendientes.desencolar()
+
+            actual = self._mapa.obtener_sala(
+                actual_id
+            )
+
+            if actual is None:
+                continue
+
+            # Una sala ya cargada no ocupa espacio
+            # en el lote, pero seguimos explorando
+            # a través de ella.
+            if not actual.contenido_cargado():
+                salas_nuevas.agregar(actual)
+
+            for puerta in actual.salidas.values():
+                vecino_id = puerta.sala_destino
+
+                if not visitadas.contiene(vecino_id):
+                    visitadas.insertar(
+                        vecino_id,
+                        True
+                    )
+                    pendientes.encolar(
+                        vecino_id
+                    )
+
+        self.cargar_salas(salas_nuevas)
 
     # =========================================================
     # PRECARGA ASÍNCRONA

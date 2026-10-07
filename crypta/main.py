@@ -1017,17 +1017,17 @@ def prueba_4_7():
     # --------------------------------------------------------
 
     jugador.mover_a(
-        1,
+        mapa.obtener_sala(1),
         100
     )
 
     jugador.mover_a(
-        2,
+        mapa.obtener_sala(2),
         200
     )
 
     jugador.mover_a(
-        4,
+        mapa.obtener_sala(4),
         300
     )
 

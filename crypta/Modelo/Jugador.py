@@ -1,7 +1,6 @@
 from crypta.Modelo.Actor import Actor
 from crypta.Modelo.Inventario import Inventario
 from crypta.Modelo.Rastro import Rastro
-from crypta.Modelo.Rastro import Huella
 
 
 class Jugador(Actor):
@@ -60,11 +59,16 @@ class Jugador(Actor):
             self.vida + cantidad
         )
 
-    def mover_a(self, id_sala, tiempo):
-        self.sala_actual = id_sala
+    def mover_a(self, sala, tiempo):
+        self.sala_actual = sala.id
 
         self.rastro.registrar(
-            id_sala,
+            sala.id,
+            tiempo,
+            sala
+        )
+
+        sala.registrar_rastro(
             tiempo
         )
 

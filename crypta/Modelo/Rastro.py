@@ -7,11 +7,13 @@ class Huella:
         self,
         id_sala,
         tiempo,
-        anterior_misma_sala=None
+        anterior_misma_sala=None,
+        sala=None
     ):
         self.id_sala = id_sala
         self.tiempo = tiempo
         self.anterior_misma_sala = anterior_misma_sala
+        self.sala = sala
 
     def esta_vigente(self, reloj_actual):
         return reloj_actual - self.tiempo < 400
@@ -28,7 +30,12 @@ class Rastro:
     def __len__(self):
         return len(self._huellas)
 
-    def registrar(self, id_sala, tiempo):
+    def registrar(
+        self,
+        id_sala,
+        tiempo,
+        sala=None
+    ):
         anterior = self._por_sala.obtener(
             id_sala
         )
@@ -36,7 +43,8 @@ class Rastro:
         huella = Huella(
             id_sala,
             tiempo,
-            anterior
+            anterior,
+            sala
         )
 
         nodo = self._huellas.agregar_al_final(
@@ -81,7 +89,6 @@ class Rastro:
             nodo
         )
 
-        # Restauramos el índice de esa sala.
         if huella.anterior_misma_sala is None:
             self._por_sala.eliminar(
                 huella.id_sala
@@ -91,6 +98,16 @@ class Rastro:
                 huella.id_sala,
                 huella.anterior_misma_sala
             )
+
+        # Restauramos también el rastro almacenado
+        # directamente en la sala.
+        if huella.sala is not None:
+            if huella.anterior_misma_sala is None:
+                huella.sala.ultimo_rastro = None
+            else:
+                huella.sala.ultimo_rastro = (
+                    huella.anterior_misma_sala.tiempo
+                )
 
         return huella
 

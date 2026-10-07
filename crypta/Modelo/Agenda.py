@@ -97,7 +97,6 @@ class Agenda:
             return
 
         evento.reactivar()
-        self._monticulo.insertar(evento)
 
     def deshacer_programacion(self, evento):
         if evento is None:

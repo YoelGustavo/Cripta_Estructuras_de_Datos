@@ -45,6 +45,7 @@ class Historial:
 
         self._limite = limite
         self._acciones = ListaDoble()
+        self._cambios_pendientes = ListaDoble()
 
     def __len__(self):
         return len(self._acciones)
@@ -56,6 +57,14 @@ class Historial:
         if accion is None:
             return
 
+        # Los cambios producidos por el EstadoJuego,
+        # como el avance del reloj, pasan a formar
+        # parte de esta acción.
+        for cambio in self._cambios_pendientes:
+            accion.registrar_cambio(cambio)
+
+        self._cambios_pendientes = ListaDoble()
+
         if accion.esta_vacio():
             return
 
@@ -63,8 +72,6 @@ class Historial:
             accion
         )
 
-        # Si superamos el límite, descartamos
-        # la acción más antigua.
         if len(self._acciones) > self._limite:
             mas_antigua = self._acciones.primero()
 
@@ -91,3 +98,11 @@ class Historial:
         )
 
         return True
+
+    def registrar_cambio_pendiente(self, cambio):
+        if cambio is None:
+            return
+
+        self._cambios_pendientes.agregar_al_final(
+            cambio
+        )

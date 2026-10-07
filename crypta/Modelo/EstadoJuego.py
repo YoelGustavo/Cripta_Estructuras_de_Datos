@@ -1,5 +1,6 @@
 from crypta.Modelo.Agenda import Agenda
 from crypta.Modelo.Historial import Historial
+from crypta.Modelo.Cambio import Cambio
 
 
 class EstadoJuego:
@@ -30,6 +31,17 @@ class EstadoJuego:
                 "No se puede avanzar el reloj una cantidad negativa"
             )
 
+        reloj_anterior = self.reloj
+
         self.reloj += cantidad
+
+        self.historial.registrar_cambio_pendiente(
+            Cambio.de_atributo(
+                "reloj",
+                self,
+                "reloj",
+                reloj_anterior
+            )
+        )
 
     
