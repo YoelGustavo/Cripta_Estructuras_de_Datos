@@ -16,7 +16,8 @@ class Mapa:
             sala = Sala(
                 id_sala=datos["id"],
                 nombre=datos["nombre"],
-                salidas=datos.get("salidas") or {}
+                # "salidas" es opcional en el API: puede no venir o venir null.
+                salidas=datos.get("salidas")
             )
 
             pares.agregar(
@@ -44,18 +45,18 @@ class Mapa:
     def cantidad_salas(self):
         return len(self._salas)
 
-    def obtener_vecinas(self, id_sala):
+    def obtener_vecinas(self, id_sala, solo_abiertas=False):
+        """Vector de salas vecinas, siempre en orden N, S, E, O."""
         sala = self.obtener_sala(id_sala)
 
         if sala is None:
             return Vector()
 
         vecinas = Vector()
+        puertas = sala.puertas(solo_abiertas)
 
-        for puerta in sala.salidas.values():
-            id_vecina = puerta.sala_destino
-
-            vecina = self.obtener_sala(id_vecina)
+        for i in range(len(puertas)):
+            vecina = puertas.obtener(i).sala_destino_ref
 
             if vecina is not None:
                 vecinas.agregar(vecina)
@@ -123,8 +124,11 @@ class Mapa:
 
         for i in range(len(salas)):
             sala = salas.obtener(i)
+            puertas = sala.puertas()
 
-            for direccion, puerta in sala.salidas.items():
+            for j in range(len(puertas)):
+                puerta = puertas.obtener(j)
+
                 destino = self.obtener_sala(
                     puerta.sala_destino
                 )
@@ -132,7 +136,12 @@ class Mapa:
                 if destino is None:
                     continue
 
-                for puerta_destino in destino.salidas.values():
+                # Se busca, entre las puertas del destino, la que vuelve
+                # a esta sala: es la otra mitad de la MISMA puerta.
+                puertas_destino = destino.puertas()
+
+                for k in range(len(puertas_destino)):
+                    puerta_destino = puertas_destino.obtener(k)
 
                     if puerta_destino.sala_destino == sala.id:
                         puerta.compartir_estado_con(
@@ -145,8 +154,11 @@ class Mapa:
 
         for i in range(len(salas)):
             sala = salas.obtener(i)
+            puertas = sala.puertas()
 
-            for puerta in sala.salidas.values():
+            for j in range(len(puertas)):
+                puerta = puertas.obtener(j)
+
                 puerta.sala_destino_ref = self.obtener_sala(
                     puerta.sala_destino
                 )

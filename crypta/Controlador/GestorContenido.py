@@ -64,7 +64,14 @@ class GestorContenido:
         )
 
     def _salas_para_precargar(self, id_sala):
-        
+        """Hasta 10 salas, por cercanía (BFS desde id_sala), que haga falta
+        pedir: ni cargadas ni ya pedidas en una solicitud anticipada.
+
+        La usan las DOS precargas (normal y anticipada), así las dos
+        eligen igual. Las salas que no hace falta pedir no ocupan lugar en
+        el lote, pero se sigue explorando a través de ellas: si no, después
+        del primer lote no se encontraría ninguna sala nueva."""
+
         sala_actual = self._mapa.obtener_sala(id_sala)
 
         if sala_actual is None:
@@ -98,8 +105,10 @@ class GestorContenido:
             ):
                 salas_nuevas.agregar(actual)
 
-            for puerta in actual.salidas.values():
-                vecino_id = puerta.sala_destino
+            puertas = actual.puertas()
+
+            for i in range(len(puertas)):
+                vecino_id = puertas.obtener(i).sala_destino
 
                 if not visitadas.contiene(vecino_id):
                     visitadas.insertar(
@@ -123,19 +132,6 @@ class GestorContenido:
 
         for i in range(len(salas)):
             ids.append(salas.obtener(i).id)
-
-        # No hay nada nuevo que solicitar.
-        if len(ids) == 0:
-            return None
-
-        for i in range(len(salas)):
-            sala = salas.obtener(i)
-
-            if not sala.contenido_cargado():
-                # Tampoco solicitamos una sala que ya venga
-                # dentro de otra solicitud pendiente.
-                if self._buscar_pendiente_de_sala(sala.id) is None:
-                    ids.append(sala.id)
 
         # No hay nada nuevo que solicitar.
         if len(ids) == 0:

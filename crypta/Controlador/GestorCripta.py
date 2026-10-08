@@ -7,6 +7,11 @@ class GestorCripta:
         self._fuente = fuente
         self._almacen = almacen
 
+        # El esqueleto TAL COMO LLEGÓ del servicio (la lista de dict del
+        # JSON). Es lo que se persiste: el JSON original se puede guardar
+        # directo; los objetos del modelo (Sala, Puerta) no.
+        self._esqueleto_json = None
+
     def cargar(self, cripta_id):
         # Necesitamos los datos generales para conocer
         # la versión actual de la cripta.
@@ -24,20 +29,16 @@ class GestorCripta:
         )
 
         if guardada is not None:
+            self._esqueleto_json = guardada.get("esqueleto") or ()
+
             mapa = Mapa()
 
             mapa.cargar_desde_json(
-                guardada.get(
-                    "esqueleto",
-                    []
-                )
+                self._esqueleto_json
             )
 
             mapa.asignar_contenidos(
-                guardada.get(
-                    "contenidos",
-                    []
-                )
+                guardada.get("contenidos") or ()
             )
 
             return datos_cripta, mapa, True
@@ -58,8 +59,10 @@ class GestorCripta:
             )
 
             esqueleto.extend(
-                pagina.get("salas", [])
+                pagina.get("salas") or ()
             )
+
+        self._esqueleto_json = esqueleto
 
         mapa = Mapa()
 
@@ -75,7 +78,9 @@ class GestorCripta:
         datos_cripta,
         mapa
     ):
-        esqueleto = []
+        if self._esqueleto_json is None:
+            raise ValueError("Primero hay que cargar la cripta con cargar()")
+
         contenidos = []
 
         # Para persistencia necesitamos TODAS las salas,
@@ -86,20 +91,19 @@ class GestorCripta:
         for i in range(len(salas)):
             sala = salas.obtener(i)
 
-            esqueleto.append({
-                "id": sala.id,
-                "nombre": sala.nombre,
-                "salidas": sala.salidas
-            })
-
             if sala.contenido_cargado():
                 contenidos.append(
                     sala.contenido
                 )
 
+        # Antes se armaba el esqueleto con sala.salidas, que eran objetos
+        # Puerta: json no sabe guardarlos y persistir se caía con
+        # "Object of type Puerta is not JSON serializable". Además se
+        # habría guardado el estado ACTUAL de las puertas (abiertas por el
+        # jugador) y no el de la cripta. Se guarda el esqueleto original.
         self._almacen.guardar_cripta(
             cripta_id,
             datos_cripta["version"],
-            esqueleto,
+            self._esqueleto_json,
             contenidos
         )

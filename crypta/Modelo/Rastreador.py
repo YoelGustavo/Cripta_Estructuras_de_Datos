@@ -32,11 +32,13 @@ class Rastreador(Actor):
         mejor_destino = None
         mejor_tiempo = None
 
-        for puerta in sala.salidas.values():
+        # Solo las puertas ABIERTAS (los enemigos no abren puertas, §2.5),
+        # siempre en el mismo orden N, S, E, O. Como mucho son 4: el costo
+        # no depende del tamaño de la cripta ni del recorrido (§4.7).
+        puertas = sala.puertas(solo_abiertas=True)
 
-            # Los enemigos no abren puertas.
-            if puerta.esta_cerrada():
-                continue
+        for i in range(len(puertas)):
+            puerta = puertas.obtener(i)
 
             id_destino = puerta.sala_destino
             sala_destino = puerta.sala_destino_ref

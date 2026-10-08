@@ -130,8 +130,11 @@ class AlmacenDisco:
         else:
             fichas = {}
 
-        for id_tipo, ficha in fichas_nuevas.items():
-            fichas[id_tipo] = ficha
+        # fichas_nuevas: cualquier recorrible de fichas (dict del JSON),
+        # por ejemplo una ListaSimple. Aquí sí se arma un dict: es el
+        # formato del archivo JSON, y esto es un adaptador (§7).
+        for ficha in fichas_nuevas:
+            fichas[ficha["id"]] = ficha
 
         self.guardar_catalogo(
             version,
