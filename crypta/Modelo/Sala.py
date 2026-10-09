@@ -1,12 +1,10 @@
+from crypta.Modelo.Enemigo import Enemigo
 from crypta.Modelo.Puerta import Puerta
-from crypta.estructuras.Vector import Vector
 from crypta.Modelo.Trampa import Trampa
+from crypta.estructuras.Vector import Vector
+from crypta.estructuras.ordenamiento import ordenar
 
 
-# Orden FIJO en que se guardan y se recorren las salidas: N, S, E, O.
-# No depende del orden en que vengan en el JSON. Así, recorrer las salidas
-# (vecinas, rastreador, errante "al azar" con la misma semilla) da siempre
-# el mismo resultado y --replay reproduce la partida exacta (§2.8, §2.9).
 DIRECCIONES = "NSEO"
 
 
@@ -60,6 +58,17 @@ class Sala:
         self.contenido = None
         self.objetos = Vector()
         self.trampas = Vector()
+
+        # Enemigos que están AHORA en la sala: los dormidos que trajo su
+        # contenido y los activos que llegaron caminando desde otra (§2.4).
+        self.enemigos = Vector()
+
+        # Pergaminos de retroceso en el suelo: una CANTIDAD aparte, por la
+        # misma razón que en el inventario (§2.11). Si su id se quedara en
+        # el Vector de objetos, recogerlo (sin deshacerlo) correría las
+        # posiciones que otros contextos de deshacer tienen anotadas.
+        self.pergaminos = 0
+        self._pergaminos_apartados = False
 
         # Instante del último rastro dejado por el jugador.
         # None significa que el jugador nunca ha estado en esta sala.
@@ -115,11 +124,14 @@ class Sala:
         return self.contenido is not None
 
     def asignar_contenido(self, contenido):
-        self.contenido = contenido
+        # El contenido de una sala se incorpora UNA sola vez. Si llegara
+        # de nuevo (p. ej. una respuesta anticipada que llega tarde), se
+        # ignora: volver a cargarlo reviviría objetos que el jugador ya
+        # recogió y duplicaría los enemigos.
+        if self.contenido_cargado():
+            return
 
-        # Reconstruimos los objetos del suelo.
-        self.objetos = Vector()
-        self.trampas = Vector()
+        self.contenido = contenido
 
         for id_objeto in contenido.get("objetos") or ():
             self.objetos.agregar(id_objeto)
@@ -131,6 +143,19 @@ class Sala:
             )
 
             self.trampas.agregar(trampa)
+
+        # Los enemigos se AGREGAN (no se reinicia el Vector): un enemigo
+        # activo pudo haber entrado caminando antes de que se cargara el
+        # contenido de esta sala. Todos nacen dormidos (§2.4: cargar el
+        # contenido no activa a nadie).
+        for datos_enemigo in contenido.get("enemigos") or ():
+            self.agregar_enemigo(
+                Enemigo(
+                    id_instancia=datos_enemigo["instancia"],
+                    tipo=datos_enemigo["tipo"],
+                    vida_inicial=datos_enemigo.get("vida")
+                )
+            )
 
     def cantidad_objetos(self):
         return len(self.objetos)
@@ -150,11 +175,110 @@ class Sala:
             objeto
         )
 
+    # =========================================================
+    # PERGAMINOS EN EL SUELO (§2.11)
+    # =========================================================
+
+    def apartar_pergaminos(self, es_pergamino):
+        """Saca del Vector de objetos los ids que son pergaminos y los
+        cuenta aparte. 'es_pergamino(id)' dice si un id lo es (eso lo sabe
+        la ficha del catálogo, que la sala no tiene).
+
+        Se llama UNA vez, cuando el jugador entra a la sala y ya se
+        conocen las fichas, antes de cualquier acción allí. O(k), con k
+        los objetos del suelo; las demás vuelven en el mismo orden."""
+        if self._pergaminos_apartados:
+            return
+
+        if not self.contenido_cargado():
+            raise ValueError(
+                f"La sala {self.id} todavía no tiene su contenido"
+            )
+
+        restantes = Vector()
+
+        for i in range(len(self.objetos)):
+            id_objeto = self.objetos.obtener(i)
+
+            if es_pergamino(id_objeto):
+                self.pergaminos += 1
+            else:
+                restantes.agregar(id_objeto)
+
+        self.objetos = restantes
+        self._pergaminos_apartados = True
+
+    def cantidad_pergaminos(self):
+        return self.pergaminos
+
+    def agregar_pergamino(self):
+        self.pergaminos += 1
+
+    def quitar_pergamino(self):
+        if self.pergaminos == 0:
+            raise ValueError(f"No hay pergaminos en la sala {self.id}")
+
+        self.pergaminos -= 1
+
     def cantidad_trampas(self):
         return len(self.trampas)
 
     def trampa_en(self, posicion):
         return self.trampas.obtener(posicion)
+
+    # =========================================================
+    # ENEMIGOS (§2.4)
+    # =========================================================
+
+    def cantidad_enemigos(self):
+        return len(self.enemigos)
+
+    def enemigo_en(self, posicion):
+        return self.enemigos.obtener(posicion)
+
+    def agregar_enemigo(self, enemigo):
+        """Un enemigo entra a esta sala (viene en el contenido o llega
+        caminando). Su sala_actual pasa a ser esta."""
+        enemigo.sala_actual = self.id
+        self.enemigos.agregar(enemigo)
+
+    def insertar_enemigo(self, posicion, enemigo):
+        """Lo vuelve a poner en la posición que tenía (para deshacer)."""
+        enemigo.sala_actual = self.id
+        self.enemigos.insertar(posicion, enemigo)
+
+    def quitar_enemigo(self, enemigo):
+        """Saca ESE enemigo de la sala (porque se movió o murió) y devuelve
+        la posición que tenía, para poder deshacerlo con insertar_enemigo.
+
+        Se busca con 'is' y no con '==': dos ratas del mismo tipo son
+        objetos distintos y hay que quitar la que es. O(k), con k los
+        enemigos de esta sala (pocos)."""
+        for i in range(len(self.enemigos)):
+            if self.enemigos.obtener(i) is enemigo:
+                self.enemigos.quitar(i)
+                return i
+
+        raise ValueError(
+            f"{enemigo.id_instancia} no está en la sala {self.id}"
+        )
+
+    def enemigos_dormidos(self):
+        """Vector con los enemigos que aún no se activan, en orden
+        ascendente de id de instancia. §2.4: si varios se activan en el
+        mismo instante, se programan en ese orden para que sus números de
+        secuencia sean deterministas."""
+        dormidos = Vector()
+
+        for i in range(len(self.enemigos)):
+            enemigo = self.enemigos.obtener(i)
+
+            if not enemigo.esta_activo():
+                dormidos.agregar(enemigo)
+
+        ordenar(dormidos, clave=lambda enemigo: enemigo.id_instancia)
+
+        return dormidos
 
     # =========================================================
     # RASTRO (§2.9)
