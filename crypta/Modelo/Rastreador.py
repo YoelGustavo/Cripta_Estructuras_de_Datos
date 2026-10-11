@@ -1,7 +1,58 @@
 from crypta.Modelo.Actor import Actor
 
 
+# §2.9: un rastro de 400 unidades o más de antigüedad ya no sirve.
+VIGENCIA_RASTRO = 400
+
+
+def sala_con_rastro_mas_fresco(sala, reloj_actual):
+    """La decisión del rastreador (§2.9), sin depender de quién la pide.
+
+    Mira SOLO las salas vecinas por salidas abiertas (los enemigos no
+    abren puertas, §2.5), siempre en el mismo orden N, S, E, O, y devuelve
+    la que tenga el rastro más reciente, si es fresco (menos de 400 de
+    antigüedad). Empate: la de menor id. Si ninguna sirve, None (espera).
+
+    Costo: a lo sumo 4 salidas. No depende del tamaño de la cripta ni de
+    lo largo del recorrido del jugador (§4.7). La caducidad se detecta al
+    consultar: no hay que borrar rastros viejos.
+    """
+    mejor = None
+    mejor_tiempo = None
+
+    puertas = sala.puertas(solo_abiertas=True)
+
+    for i in range(len(puertas)):
+        vecina = puertas.obtener(i).sala_destino_ref
+
+        if vecina is None:
+            continue
+
+        tiempo = vecina.obtener_rastro()
+
+        # El jugador nunca estuvo allí.
+        if tiempo is None:
+            continue
+
+        # Una huella de 400 o más ya no sirve.
+        if reloj_actual - tiempo >= VIGENCIA_RASTRO:
+            continue
+
+        if (
+            mejor is None
+            or tiempo > mejor_tiempo
+            or (tiempo == mejor_tiempo and vecina.id < mejor.id)
+        ):
+            mejor = vecina
+            mejor_tiempo = tiempo
+
+    return mejor
+
+
 class Rastreador(Actor):
+    """Versión anterior (un actor aparte). La partida ya no la usa: usa
+    sala_con_rastro_mas_fresco con sus enemigos. Se deja porque la usan
+    las revisiones rápidas; se puede quitar en la limpieza final."""
 
     def __init__(
         self,
@@ -22,6 +73,7 @@ class Rastreador(Actor):
         rastro,
         reloj_actual
     ):
+        """Id de la sala a la que se mueve, o None si espera."""
         sala = mapa.obtener_sala(
             self.sala_actual
         )
@@ -29,42 +81,9 @@ class Rastreador(Actor):
         if sala is None:
             return None
 
-        mejor_destino = None
-        mejor_tiempo = None
+        destino = sala_con_rastro_mas_fresco(sala, reloj_actual)
 
-        # Solo las puertas ABIERTAS (los enemigos no abren puertas, §2.5),
-        # siempre en el mismo orden N, S, E, O. Como mucho son 4: el costo
-        # no depende del tamaño de la cripta ni del recorrido (§4.7).
-        puertas = sala.puertas(solo_abiertas=True)
+        if destino is None:
+            return None
 
-        for i in range(len(puertas)):
-            puerta = puertas.obtener(i)
-
-            id_destino = puerta.sala_destino
-            sala_destino = puerta.sala_destino_ref
-
-            if sala_destino is None:
-                continue
-
-            tiempo = sala_destino.obtener_rastro()
-
-            # El jugador nunca estuvo allí.
-            if tiempo is None:
-                continue
-
-            # Una huella de 400 o más ya no sirve.
-            if reloj_actual - tiempo >= 400:
-                continue
-
-            if (
-                mejor_tiempo is None
-                or tiempo > mejor_tiempo
-                or (
-                    tiempo == mejor_tiempo
-                    and id_destino < mejor_destino
-                )
-            ):
-                mejor_tiempo = tiempo
-                mejor_destino = id_destino
-
-        return mejor_destino
+        return destino.id

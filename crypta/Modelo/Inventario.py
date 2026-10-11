@@ -148,6 +148,16 @@ class Inventario:
 
         self._pergaminos = cantidad
 
+    def buscar_por_id(self, id_objeto):
+        """La ficha del primer objeto con ese id, o None. Recorre la lista:
+        O(n), con n <= inventario_max (unos pocos objetos). Sirve, por
+        ejemplo, para saber si el jugador tiene la llave de una puerta."""
+        for objeto in self._objetos:
+            if objeto.get("id") == id_objeto:
+                return objeto
+
+        return None
+
     def actual(self):
         if self._actual is None:
             return None

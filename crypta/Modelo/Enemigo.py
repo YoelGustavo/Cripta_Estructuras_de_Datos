@@ -15,6 +15,11 @@ class Enemigo(Actor):
         self.ataque = 0
         self.defensa = 0
         self.comportamiento = None# "guardián", "errante" o "rastreador"
+
+        # §2.10: si la ficha declara "regeneracion", recupera esa cantidad
+        # cada 200. La API actual no la trae, pero el contrato del juego sí.
+        self.regeneracion = 0
+        self.evento_regeneracion = None    # para cancelarlo en O(1) al morir
  
         self.activo = False
         self.sala_actual = None            # id de la sala (igual que en Jugador)
@@ -46,6 +51,7 @@ class Enemigo(Actor):
         self.defensa = ficha["defensa"]
         self.velocidad = ficha["velocidad"]
         self.comportamiento = ficha.get("comportamiento")
+        self.regeneracion = ficha.get("regeneracion") or 0
  
         if self.vida_inicial is None:
             self.vida = self.vida_max
@@ -55,6 +61,18 @@ class Enemigo(Actor):
         self.activo = True
  
     def desactivar(self): #desactiva el enemigo, solo sirve para la funcion del pergamino.
+        # Vuelve EXACTAMENTE a como estaba dormido (lo mismo que pone
+        # __init__). Si solo se apagara "activo", se quedaría con la vida y
+        # la velocidad de la ficha, y el pergamino no dejaría todo igual.
+        self.nombre = self.tipo
+        self.velocidad = 0
+        self.ficha = None
+        self.vida_max = 0
+        self.vida = 0
+        self.ataque = 0
+        self.defensa = 0
+        self.comportamiento = None
+        self.regeneracion = 0
         self.activo = False
         self.evento_siguiente = None
  
