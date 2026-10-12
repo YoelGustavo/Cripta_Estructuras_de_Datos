@@ -7,6 +7,7 @@ from crypta.Modelo.Historial import RegistroAccion
 from crypta.Modelo.Inventario import CLASE_PERGAMINO, CLASES_EQUIPABLES
 from crypta.Modelo.Rastreador import sala_con_rastro_mas_fresco
 from crypta.estructuras.Vector import Vector
+from crypta.Modelo.Bitacora import Bitacora
 
 
 # Costo base de cada acción (§2.3). El tiempo real que tarda depende de
@@ -120,6 +121,8 @@ class Partida:
         self.veneno = None
         self.antorcha = None
 
+        self.bitacora = Bitacora()
+
     # Atajos de lectura (para la vista y las pruebas).
     @property
     def reloj(self):
@@ -193,6 +196,7 @@ class Partida:
         # Nada de esto se anota en el historial: todavía no hay ninguna
         # acción del jugador que deshacer (registrar_cambio lo ignora).
         # §2.4: el jugador está en la sala inicial desde el instante 0.
+        self._avisar(f"Entras en {sala.nombre}.")
         self._poner_jugador_en(sala)
         self._programar(self.jugador, 0, TURNO_JUGADOR)
 
@@ -205,6 +209,7 @@ class Partida:
     def esperar(self):
         self._verificar_que_se_puede_actuar()
         self._empezar_accion("esperar")
+        self._avisar("Esperas.")
         self._terminar_accion(COSTO_ESPERAR)
 
     def destino_de(self, direccion):
@@ -255,6 +260,7 @@ class Partida:
         # entra YA a la sala; el costo solo decide cuándo vuelve a actuar
         # (§2.13: en t=0 se mueve al norte y en t=66 la rata ya lo ve ahí).
         self._empezar_accion("mover")
+        self._avisar(f"Entras en {destino.nombre}.")
         self._poner_jugador_en(destino)
 
         # §2.10: las trampas armadas se activan inmediatamente después de
@@ -265,6 +271,7 @@ class Partida:
         if not self.terminada and self._es_victoria(destino):
             self.terminada = True
             self.resultado = "victoria"
+            self._avisar("¡Escapaste de la cripta!")
 
         self._terminar_accion(COSTO_MOVER)
 
@@ -284,6 +291,11 @@ class Partida:
         self._empezar_accion("atacar")
 
         danio = self._danio(self.jugador.ataque_total(), enemigo.defensa)
+
+        self._avisar(
+            f"Atacas a {self._nombre(enemigo)} y causas {danio} de daño."
+            )
+        
         self._herir_enemigo(enemigo, danio)
 
         self._terminar_accion(COSTO_ATACAR)
@@ -316,6 +328,9 @@ class Partida:
         self._empezar_accion("recoger")
 
         contexto = inventario.recoger_desde_sala(sala, posicion, ficha)
+        self._avisar(
+            f"Recoges {ficha.get('nombre', ficha.get('id'))}."
+        )
         self._anotar(Cambio.de_operacion(
             "inventario", inventario, "deshacer_recogida", contexto
         ))
@@ -335,6 +350,12 @@ class Partida:
         self._empezar_accion("soltar")
 
         contexto = inventario.soltar_en_sala(self.sala_actual())
+
+        objeto_soltado = contexto.contexto_inventario.objeto
+        self._avisar(
+            f"Sueltas {objeto_soltado.get('nombre', objeto_soltado.get('id'))}."
+        )
+
         self._anotar(Cambio.de_operacion(
             "inventario", inventario, "deshacer_soltar_en_sala", contexto
         ))
@@ -358,6 +379,9 @@ class Partida:
         self._empezar_accion("equipar")
 
         contexto = inventario.equipar_actual_con_contexto()
+        self._avisar(
+            f"Equipas {objeto.get('nombre', objeto.get('id'))}."
+        )
         self._anotar(Cambio.de_operacion(
             "inventario", inventario, "restaurar_equipado", contexto
         ))
@@ -408,6 +432,8 @@ class Partida:
         else:
             self._encender_antorcha(objeto["duracion"])
 
+        self._avisar(f"Usas {nombre}.")
+
         self._terminar_accion(COSTO_USAR)
         return objeto
 
@@ -425,6 +451,7 @@ class Partida:
 
         self._empezar_accion("recoger pergamino")
         self.jugador.inventario.recoger_pergamino_de(self.sala_actual())
+        self._avisar("Recoges un pergamino.")
         self._terminar_accion(COSTO_RECOGER)
 
     def soltar_pergamino(self):
@@ -437,6 +464,7 @@ class Partida:
 
         self._empezar_accion("soltar pergamino")
         self.jugador.inventario.soltar_pergamino_en(self.sala_actual())
+        self._avisar("Sueltas un pergamino.")
         self._terminar_accion(COSTO_SOLTAR)
 
     # ---------------------------------------------------------
@@ -467,6 +495,7 @@ class Partida:
         # abrirla desde aquí la abre también desde el otro lado.
         self._anotar(Cambio.de_atributo("puerta", puerta, "cerrada", True))
         puerta.abrir()
+        self._avisar(f"Abres la puerta hacia {direccion}.")
 
         if self._es_puerta_de_salida(puerta):
             self._anotar(Cambio.de_atributo(
@@ -491,7 +520,12 @@ class Partida:
         if self.terminada:
             return False
 
-        return self.estado.usar_pergamino_retroceso()
+        resultado = self.estado.usar_pergamino_retroceso()
+
+        if resultado:
+            self._avisar("Usas un pergamino y retrocedes una acción.")
+
+        return resultado
 
     def _verificar_que_se_puede_actuar(self):
         if not self.iniciada:
@@ -578,6 +612,11 @@ class Partida:
         # §2.8: primero, si comparte sala con el jugador, ataca y no se mueve.
         if enemigo.sala_actual == self.jugador.sala_actual:
             danio = self._danio(enemigo.ataque, self.jugador.defensa_total())
+
+            self._avisar(
+                f"{self._nombre(enemigo)} te ataca y causa {danio} de daño."
+            )
+
             self._herir_jugador(danio)
         else:
             # Si no, su comportamiento.
@@ -598,6 +637,7 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("puerta", puerta, "cerrada", False))
         puerta.cerrar()
+        self._avisar("Una puerta se cierra automáticamente.")
 
     # =========================================================
     # EFECTOS TEMPORALES (§2.10)
@@ -617,6 +657,7 @@ class Partida:
         if cura:
             self._anotar(Cambio.de_atributo("vida", self.jugador, "vida", self.jugador.vida))
             self.jugador.curar(cura)          # nunca pasa de vida_max (§2.2)
+            self._avisar(f"Recuperas vida (ahora {self.jugador.vida}).")
 
         modificador = ficha.get("modificador_velocidad")
         duracion = ficha.get("duracion")
@@ -635,10 +676,12 @@ class Partida:
 
         efecto = Efecto(VELOCIDAD, valor=nueva - anterior, hasta=self.reloj + duracion)
         self._cambiar_velocidad(self.jugador, nueva)
+        self._avisar(f"Tu velocidad cambia de {anterior} a {nueva}.")
         efecto.evento = self._programar_evento(efecto.hasta, FIN_VELOCIDAD, efecto)
 
     def _terminar_velocidad(self, efecto):
         self._cambiar_velocidad(self.jugador, max(1, self.jugador.velocidad - efecto.valor))
+        self._avisar(f"El efecto de velocidad termina. Velocidad actual: {self.jugador.velocidad}.")
 
     def _cambiar_velocidad(self, actor, nueva):
         """§2.3: si el actor ya tiene su próxima acción programada, lo que le
@@ -672,6 +715,7 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("veneno", self, "veneno", self.veneno))
         self.veneno = efecto
+        self._avisar(f"Has sido envenenado. Daño por pulso: {danio}.")
         efecto.evento = self._programar_evento(
             self.reloj + INTERVALO_VENENO, PULSO_VENENO, efecto
         )
@@ -680,6 +724,7 @@ class Partida:
         if efecto is not self.veneno:
             return                       # (no pasa: el antídoto cancela su evento)
 
+        self._avisar(f"El veneno te causa {efecto.valor} de daño.")
         self._herir_jugador(efecto.valor)
 
         if self.terminada:
@@ -702,6 +747,7 @@ class Partida:
         self._cancelar_efecto(self.veneno)
         self._anotar(Cambio.de_atributo("veneno", self, "veneno", self.veneno))
         self.veneno = None
+        self._avisar("El veneno ha sido eliminado.")
 
     # --- Antorcha ---
 
@@ -715,6 +761,7 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("antorcha", self, "antorcha", self.antorcha))
         self.antorcha = efecto
+        self._avisar("Enciendes una antorcha.")
         efecto.evento = self._programar_evento(efecto.hasta, APAGAR_ANTORCHA, efecto)
 
     def _apagar_antorcha(self, efecto):
@@ -723,6 +770,7 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("antorcha", self, "antorcha", efecto))
         self.antorcha = None
+        self._avisar("La antorcha se ha apagado.")
 
     # --- Regeneración de enemigos ---
 
@@ -740,6 +788,7 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("vida", enemigo, "vida", enemigo.vida))
         enemigo.curar(enemigo.regeneracion)       # nunca pasa de vida_max
+        self._avisar(f"{self._nombre(enemigo)} regenera vida.")
         self._programar_regeneracion(enemigo)
 
     # --- Trampas ---
@@ -759,6 +808,9 @@ class Partida:
 
             self._anotar(Cambio.de_atributo("trampa", trampa, "activa", True))
             trampa.desactivar()
+            self._avisar(
+                f"Se activa una trampa y recibes {ficha.get('daño', 0)} de daño."
+            )
 
             rearme = ficha.get("rearme")
 
@@ -781,6 +833,7 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("trampa", trampa, "activa", False))
         trampa.activar()
+        self._avisar("Una trampa vuelve a estar armada.")
 
     # =========================================================
     # COMPORTAMIENTOS (§2.8)
@@ -832,6 +885,12 @@ class Partida:
         destino.agregar_enemigo(enemigo)
         self._anotar(Cambio.de_operacion("sala", destino, "quitar_enemigo", enemigo))
 
+        if destino.id == self.jugador.sala_actual:
+            self._avisar(f"{self._nombre(enemigo)} entra en la sala.")
+
+        elif origen.id == self.jugador.sala_actual:
+            self._avisar(f"{self._nombre(enemigo)} se va.")
+
     # =========================================================
     # COMBATE (§2.6)
     # =========================================================
@@ -865,6 +924,7 @@ class Partida:
         if not self.jugador.esta_vivo():
             self.terminada = True
             self.resultado = "derrota"
+            self._avisar("Has muerto. Fin de la partida.")
 
     def _herir_enemigo(self, enemigo, danio):
         self._anotar(Cambio.de_atributo("vida", enemigo, "vida", enemigo.vida))
@@ -876,6 +936,9 @@ class Partida:
     def _matar_enemigo(self, enemigo):
         """§2.6: muere inmediatamente, deja de ejecutar eventos y suelta
         sus objetos en el suelo de la sala."""
+
+        self._avisar(f"{self._nombre(enemigo)} ha muerto.")
+
         # 1. Su próximo turno se cancela (borrado perezoso, §4.1).
         evento = enemigo.evento_siguiente
 
@@ -907,19 +970,28 @@ class Partida:
         for id_objeto in enemigo.objetos_que_suelta():
             self._dejar_en_el_suelo(sala, id_objeto)
 
+    
     def _dejar_en_el_suelo(self, sala, id_objeto):
         if self._es_pergamino(id_objeto):
-            # Va al contador del suelo (paso 3.3). Esto SÍ se deshace:
-            # si no, matar, deshacer y volver a matar regalaría pergaminos.
+            # Va al contador del suelo (paso 3.3).
             sala.agregar_pergamino()
             self._anotar(Cambio.de_operacion(
                 "suelo", self, "_retirar_pergamino_soltado", sala
             ))
+
+            self._avisar("Cae al suelo: pergamino.")
             return
 
         posicion = sala.cantidad_objetos()
         sala.agregar_objeto(id_objeto)
-        self._anotar(Cambio.de_operacion("suelo", sala, "quitar_objeto", posicion))
+        self._anotar(Cambio.de_operacion(
+            "suelo", sala, "quitar_objeto", posicion
+        ))
+
+        ficha = self._fichas(id_objeto)
+        nombre = ficha.get("nombre", id_objeto) if ficha is not None else id_objeto
+        self._avisar(f"Cae al suelo: {nombre}.")
+
 
     def _retirar_pergamino_soltado(self, sala):
         # Si el jugador ya lo recogió (eso no se deshace, §2.11), no queda
@@ -930,6 +1002,14 @@ class Partida:
     # =========================================================
     # AYUDANTES
     # =========================================================
+    
+    def _avisar(self, texto):
+        """Registra un mensaje sin modificar el estado reversible."""
+        self.bitacora.agregar(self.reloj, texto)
+
+    def _nombre(self, enemigo):
+        """Identifica al enemigo por nombre e ID de instancia."""
+        return f"{enemigo.nombre} ({enemigo.id_instancia})"
 
     def _anotar(self, cambio):
         """Anota un cambio en la acción abierta (si hay una)."""
@@ -1022,6 +1102,7 @@ class Partida:
             enemigo = dormidos.obtener(i)
 
             enemigo.activar(self._fichas(enemigo.tipo))
+            self._avisar(f"{self._nombre(enemigo)} despierta.")
             self._anotar(Cambio.de_operacion("activar", enemigo, "desactivar"))
 
             tiempo = self.reloj + enemigo.intervalo(COSTO_ESPERAR)

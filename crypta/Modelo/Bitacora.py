@@ -1,2 +1,25 @@
-#Esta clase es para ver solucionar el problema 4.8 del enunciado.
-#NOTA: Todos los problemas del punto 4 se deben de justifiacar el el documento de decisiones.
+
+from crypta.estructuras.Cola import Cola
+
+MAXIMO_MENSAJES = 20
+
+
+class Bitacora:
+    """Almacena los últimos 20 mensajes del juego."""
+
+    def __init__(self):
+        self._mensajes = Cola(
+            capacidad_max=MAXIMO_MENSAJES
+        )
+
+    def agregar(self, reloj, texto):
+        self._mensajes.encolar(
+            f"[t={reloj}] {texto}"
+        )
+
+    def __len__(self):
+        return len(self._mensajes)
+
+    def __iter__(self):
+        return iter(self._mensajes)
+

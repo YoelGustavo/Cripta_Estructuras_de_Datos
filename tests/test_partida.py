@@ -23,6 +23,7 @@ import unittest
 from crypta.Modelo.Jugador import Jugador
 from crypta.Modelo.Mapa import Mapa
 from crypta.Modelo.Partida import AccionInvalida, Partida, TURNO_JUGADOR
+from crypta.Modelo.Bitacora import Bitacora
 
 
 SEMILLA = 7
@@ -1841,6 +1842,145 @@ class TestPuntaje(unittest.TestCase):
         partida.esperar()
         self.assertEqual((partida.jugador.nombre, partida.acciones_jugador,
                           partida.enemigos_derrotados, partida.reloj), ("Héroe", 2, 1, 200))
+
+
+# ======================================================================
+# 4.8 BITÁCORA
+# ======================================================================
+
+class TestBitacora(unittest.TestCase):
+
+    def test_conserva_solo_20_mensajes(self):
+        bitacora = Bitacora()
+
+        for i in range(25):
+            bitacora.agregar(i, f"Mensaje {i}")
+
+        mensajes = list(bitacora)
+
+        self.assertEqual(len(bitacora), 20)
+        self.assertEqual(mensajes[0], "[t=5] Mensaje 5")
+        self.assertEqual(mensajes[-1], "[t=24] Mensaje 24")
+
+    def test_mensajes_en_orden_cronologico(self):
+        partida = partida_de_dos_salas(
+            enemigos_sala_1=[("e-1", "ent_rata")]
+        )
+        partida.iniciar()
+
+        mensajes = list(partida.bitacora)
+
+        self.assertIn("Entras en Entrada", mensajes[0])
+        self.assertIn("despierta", mensajes[1])
+        self.assertIn("e-1", mensajes[1])
+
+    def test_muchos_mensajes_no_superan_el_limite(self):
+        bitacora = Bitacora()
+
+        for i in range(1000):
+            bitacora.agregar(i, f"Mensaje {i}")
+
+        self.assertEqual(len(bitacora), 20)
+        self.assertEqual(
+            list(bitacora)[0],
+            "[t=980] Mensaje 980"
+        )
+
+    def test_incluye_marca_de_tiempo(self):
+        bitacora = Bitacora()
+        bitacora.agregar(66, "Hola")
+
+        self.assertEqual(
+            list(bitacora),
+            ["[t=66] Hola"]
+        )
+
+    def test_registra_sala_inicial(self):
+        partida = partida_de_dos_salas()
+        partida.iniciar()
+
+        mensajes = list(partida.bitacora)
+
+        self.assertTrue(
+            any("Entras en Entrada" in m for m in mensajes)
+        )
+
+    def test_registra_ataque_del_enemigo(self):
+        partida = partida_de_dos_salas(
+            enemigos_sala_1=[("e-1", "ent_rata")]
+        )
+        partida.iniciar()
+        partida.esperar()
+
+        mensajes = list(partida.bitacora)
+
+        self.assertTrue(
+            any("e-1" in m and "te ataca" in m for m in mensajes)
+        )
+        self.assertLess(partida.jugador.vida, 30)
+
+    def test_registra_muerte_y_objeto_soltado(self):
+        partida = partida_de_dos_salas(
+            enemigos_sala_1=[("e-1", "ent_rata", 3)]
+        )
+        partida.iniciar()
+        partida.atacar(enemigo(partida, 1))
+
+        mensajes = list(partida.bitacora)
+
+        self.assertTrue(
+            any("e-1" in m and "ha muerto" in m for m in mensajes)
+        )
+        self.assertTrue(
+            any("Cae al suelo: Poción" in m for m in mensajes)
+        )
+
+    def test_accion_invalida_no_agrega_mensaje(self):
+        partida = partida_con_puertas()
+        cantidad_anterior = len(partida.bitacora)
+
+        with self.assertRaises(AccionInvalida):
+            partida.mover("O")
+
+        self.assertEqual(
+            len(partida.bitacora),
+            cantidad_anterior
+        )
+
+    def test_pergamino_no_borra_mensajes(self):
+        partida = partida_de_dos_salas(pergaminos=1)
+        partida.iniciar()
+        partida.esperar()
+
+        mensajes_anteriores = list(partida.bitacora)
+
+        self.assertTrue(partida.usar_pergamino())
+
+        mensajes_actuales = list(partida.bitacora)
+
+        for mensaje in mensajes_anteriores:
+            self.assertIn(mensaje, mensajes_actuales)
+
+        self.assertIn("pergamino", mensajes_actuales[-1])
+
+    def test_misma_semilla_mismos_mensajes(self):
+        partida_a = partida_de_dos_salas(
+            enemigos_sala_1=[("e-1", "ent_rata")]
+        )
+        partida_b = partida_de_dos_salas(
+            enemigos_sala_1=[("e-1", "ent_rata")]
+        )
+
+        partida_a.iniciar()
+        partida_b.iniciar()
+
+        partida_a.esperar()
+        partida_b.esperar()
+
+        self.assertEqual(
+            list(partida_a.bitacora),
+            list(partida_b.bitacora)
+        )
 
 
 if __name__ == "__main__":
