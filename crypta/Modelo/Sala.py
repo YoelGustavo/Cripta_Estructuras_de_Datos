@@ -144,18 +144,27 @@ class Sala:
 
             self.trampas.agregar(trampa)
 
-        # Los enemigos se AGREGAN (no se reinicia el Vector): un enemigo
-        # activo pudo haber entrado caminando antes de que se cargara el
-        # contenido de esta sala. Todos nacen dormidos (§2.4: cargar el
-        # contenido no activa a nadie).
+        # Un enemigo activo pudo haber entrado caminando ANTES de que se
+        # cargara el contenido de esta sala: ese no se borra. Los del
+        # contenido se ponen DELANTE de él, en el orden del JSON. Así el
+        # orden de la sala es siempre "los del contenido, y después los que
+        # llegaron caminando", sin importar CUÁNDO llegó el contenido (al
+        # jugar llega por la red o la precarga; al reproducir puede venir
+        # todo de una copia local). Si no, la partida y su reproducción
+        # podrían quedar con los enemigos en otro orden (§4.11).
+        # Todos nacen dormidos (§2.4: cargar el contenido no activa a nadie).
+        posicion = 0
+
         for datos_enemigo in contenido.get("enemigos") or ():
-            self.agregar_enemigo(
+            self.insertar_enemigo(
+                posicion,
                 Enemigo(
                     id_instancia=datos_enemigo["instancia"],
                     tipo=datos_enemigo["tipo"],
                     vida_inicial=datos_enemigo.get("vida")
                 )
             )
+            posicion += 1
 
     def cantidad_objetos(self):
         return len(self.objetos)

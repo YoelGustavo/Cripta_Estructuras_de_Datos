@@ -223,15 +223,38 @@ class TestSalaEnemigos(unittest.TestCase):
         self.assertEqual(ids(sala.enemigos_dormidos()), ["e-202"])
  
     def test_enemigo_que_llega_antes_del_contenido(self):
-        """§2.4: una sala puede tener a la vez dormidos y activos que llegaron."""
+        """§2.4: una sala puede tener a la vez dormidos y activos que llegaron.
+        Los del contenido quedan delante del que llegó caminando."""
         errante = Enemigo("e-900", "ent_rata_gigante")
         errante.activar(ficha_rata())
         sala = Sala(2, "Pasillo", None)
         sala.agregar_enemigo(errante)                  # llegó caminando
         sala.asignar_contenido(contenido_sala_2())     # luego llega el contenido
         self.assertEqual(sala.cantidad_enemigos(), 3)
-        self.assertIs(sala.enemigo_en(0), errante)     # no se borró
+        self.assertIs(sala.enemigo_en(2), errante)     # no se borró
         self.assertEqual(ids(sala.enemigos_dormidos()), ["e-201", "e-202"])
+
+    def test_el_orden_no_depende_de_cuando_llega_el_contenido(self):
+        """§4.11: al jugar, el contenido llega cuando llega; al reproducir,
+        quizá desde una copia local. El orden de la sala debe ser el mismo."""
+        def errante():
+            enemigo = Enemigo("e-900", "ent_rata_gigante")
+            enemigo.activar(ficha_rata())
+            return enemigo
+
+        antes = Sala(2, "Pasillo", None)
+        antes.asignar_contenido(contenido_sala_2())    # el contenido primero...
+        antes.agregar_enemigo(errante())               # ...y luego llega caminando
+
+        despues = Sala(2, "Pasillo", None)
+        despues.agregar_enemigo(errante())             # llega caminando...
+        despues.asignar_contenido(contenido_sala_2())  # ...y luego el contenido
+
+        orden = ["e-202", "e-201", "e-900"]
+        self.assertEqual([antes.enemigo_en(i).id_instancia for i in range(3)], orden)
+        self.assertEqual([despues.enemigo_en(i).id_instancia for i in range(3)], orden)
+        for i in range(3):
+            self.assertEqual(despues.enemigo_en(i).sala_actual, 2)
  
     def test_contenido_dos_veces_no_duplica(self):
         sala = Sala(2, "Pasillo", None)
