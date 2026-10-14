@@ -108,6 +108,19 @@ class Sala:
 
         return resultado
 
+    def poner_puerta(self, direccion, puerta):
+        """Pone la puerta de esa dirección (al cargar una partida guardada,
+        §4.10, la sala se arma sin el JSON). Solo en una casilla vacía."""
+        indice = indice_direccion(direccion)
+
+        if indice < 0:
+            raise ValueError(f"Dirección inválida: {direccion!r}")
+
+        if self._puertas.obtener(indice) is not None:
+            raise ValueError(f"La sala {self.id} ya tiene salida hacia {direccion}")
+
+        self._puertas.asignar(indice, puerta)
+
     def direccion_de(self, puerta):
         """La dirección ("N", "S", "E" u "O") de una puerta de esta sala."""
         for i in range(len(DIRECCIONES)):
@@ -220,6 +233,28 @@ class Sala:
     def cantidad_pergaminos(self):
         return self.pergaminos
 
+    def pergaminos_ya_apartados(self):
+        return self._pergaminos_apartados
+
+    def restaurar_contenido(self, contenido, objetos, trampas, pergaminos,
+                            pergaminos_apartados):
+        """Al cargar una partida guardada (§4.10): el contenido como ESTABA
+        al guardar (no como vino del servidor). 'contenido' es el original
+        (el que se guarda en la caché); objetos y trampas son Vectores con
+        lo que hay ahora. Los enemigos se ponen aparte, con agregar_enemigo:
+        pueden estar aquí aunque el contenido no se haya cargado."""
+        if self.contenido_cargado():
+            raise ValueError(f"La sala {self.id} ya tiene su contenido")
+
+        if pergaminos < 0:
+            raise ValueError("La cantidad de pergaminos no puede ser negativa")
+
+        self.contenido = contenido
+        self.objetos = objetos
+        self.trampas = trampas
+        self.pergaminos = pergaminos
+        self._pergaminos_apartados = pergaminos_apartados
+
     def agregar_pergamino(self):
         self.pergaminos += 1
 
@@ -234,10 +269,6 @@ class Sala:
 
     def trampa_en(self, posicion):
         return self.trampas.obtener(posicion)
-
-    # =========================================================
-    # ENEMIGOS (§2.4)
-    # =========================================================
 
     def cantidad_enemigos(self):
         return len(self.enemigos)
@@ -288,10 +319,6 @@ class Sala:
         ordenar(dormidos, clave=lambda enemigo: enemigo.id_instancia)
 
         return dormidos
-
-    # =========================================================
-    # RASTRO (§2.9)
-    # =========================================================
 
     def registrar_rastro(self, tiempo):
         self.ultimo_rastro = tiempo

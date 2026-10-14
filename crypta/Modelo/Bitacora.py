@@ -5,8 +5,6 @@ MAXIMO_MENSAJES = 20
 
 
 class Bitacora:
-    """Almacena los últimos 20 mensajes del juego."""
-
     def __init__(self):
         self._mensajes = Cola(
             capacidad_max=MAXIMO_MENSAJES
@@ -17,9 +15,13 @@ class Bitacora:
             f"[t={reloj}] {texto}"
         )
 
+    def restaurar_mensaje(self, mensaje):
+        """Al cargar una partida guardada (§4.10): vuelve a poner un mensaje
+        tal como se guardó (ya trae su [t=...])."""
+        self._mensajes.encolar(mensaje)
+
     def __len__(self):
         return len(self._mensajes)
 
     def __iter__(self):
         return iter(self._mensajes)
-

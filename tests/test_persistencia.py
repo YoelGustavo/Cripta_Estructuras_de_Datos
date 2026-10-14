@@ -3,6 +3,7 @@
     6.1  comandos y registro de partida (§4.11)
     6.2  el reproductor: --replay (§4.11)
     6.3  la tabla de puntajes (§2.12 y §4.9)
+    6.4  el guardado binario de la partida (§4.10)
 
 Cómo correrlas, desde la carpeta raíz del proyecto:
     python -m unittest -v tests.test_persistencia
@@ -11,11 +12,17 @@ o todas las pruebas del proyecto:
 """
 
 import copy
+import json
 import os
 import random
 import tempfile
 import unittest
 
+from crypta.Adaptadores.EstadoPartida import ErrorGuardado
+from crypta.Adaptadores.GuardadoBinario import (
+    ArchivoGuardado, FORMATO_GUARDADO, guardar_partida,
+)
+from crypta.Adaptadores.GuardadoJSON import ArchivoGuardadoJSON, guardar_partida_json
 from crypta.Adaptadores.RegistroPartida import (
     Encabezado, ErrorRegistro, FORMATO_REGISTRO, RegistroPartida, leer_registro,
 )
@@ -23,16 +30,24 @@ from crypta.Controlador.Comandos import ComandoInvalido, ejecutar_comando
 from crypta.Controlador.Reproductor import (
     Reproductor, ReproduccionFallida, ReproduccionIncompatible,
 )
-from crypta.Modelo.Enemigo import Enemigo
+from crypta.Modelo.Agenda import Agenda
+from crypta.Modelo.Efecto import Efecto
+from crypta.Modelo.Historial import Historial
+from crypta.Modelo.Inventario import Inventario
 from crypta.Modelo.Jugador import Jugador
 from crypta.Modelo.Mapa import Mapa
-from crypta.Modelo.Partida import AccionInvalida, Partida
+from crypta.Modelo.Partida import (
+    APAGAR_ANTORCHA, AccionInvalida, CIERRE_PUERTA, FIN_VELOCIDAD, PULSO_VENENO,
+    Partida, REARME_TRAMPA, REGENERACION, TURNO_ENEMIGO,
+)
+from crypta.Modelo.Puerta import Puerta
 from crypta.Modelo.Sala import Sala
+from crypta.estructuras.Vector import Vector
 from crypta.Modelo.TablaPuntajes import (
     DERROTA, ErrorTablaPuntajes, Puntaje, TablaPuntajes, VICTORIA, puntaje_de,
 )
 from tests.test_partida import (
-    CATALOGO, enemigo, ids_inventario, partida_con_puertas, partida_de_dos_salas,
+    CATALOGO, SEMILLA, enemigo, ids_inventario, partida_con_puertas, partida_de_dos_salas,
     partida_efectos, partida_objetos,
 )
 
@@ -342,10 +357,13 @@ class PreparadorDePrueba:
       desde el principio.
     - Solo "tiene" las versiones que se le indican.
     - falta_sala: una sala que no puede dar (copia local incompleta).
-    - vida: la del jugador (las partidas al azar usan más, para durar)."""
+    - vida: la del jugador (las partidas al azar usan más, para durar).
+    - esqueleto: otro mapa (el 6.4 usa uno con cierre automático)."""
 
     def __init__(self, cargar_todo=False, versiones_cripta=("v1",),
-                 versiones_catalogo=("cat-1",), falta_sala=None, vida=60):
+                 versiones_catalogo=("cat-1",), falta_sala=None, vida=60,
+                 esqueleto=None):
+        self._esqueleto = ESQUELETO_REPRO if esqueleto is None else esqueleto
         self._cargar_todo = cargar_todo
         self._versiones_cripta = versiones_cripta
         self._versiones_catalogo = versiones_catalogo
@@ -365,7 +383,7 @@ class PreparadorDePrueba:
     def crear_partida(self, encabezado):
         self.partidas_creadas += 1
         self._mapa = Mapa()
-        self._mapa.cargar_desde_json(ESQUELETO_REPRO)
+        self._mapa.cargar_desde_json(self._esqueleto)
 
         if self._cargar_todo:
             self._mapa.asignar_contenidos(copy.deepcopy(CONTENIDO_REPRO))
@@ -378,6 +396,11 @@ class PreparadorDePrueba:
         return Partida(self._mapa, jugador, 1, CATALOGO_REPRO.get,
                        semilla=encabezado.semilla, id_sala_salida=4,
                        llave_salida="itm_llave_negra")
+
+    def usar_mapa(self, mapa):
+        """Para seguir una partida CARGADA: el contenido que falte se pone
+        en el mapa de esa partida."""
+        self._mapa = mapa
 
     def garantizar_sala(self, id_sala):
         if id_sala == self._falta_sala:
@@ -1068,6 +1091,636 @@ class TestTablaDanada(ConCarpetaTemporal):
     def test_lineas_vacias_se_ignoran(self):
         tabla = self.abrir(self.ENCABEZADO + "\n" + self.BUENA + "\n\n")
         self.assertEqual(nombres(tabla), ["Ana"])
+
+
+# ======================================================================
+# 6.4  EL GUARDADO BINARIO DE LA PARTIDA (§4.10)
+# ======================================================================
+
+# El mapa del 6.2, pero la puerta Entrada -> Bodega (O) está cerrada y se
+# vuelve a cerrar sola a los 2000: así hay un cierre automático pendiente.
+ESQUELETO_GUARDADO = copy.deepcopy(ESQUELETO_REPRO)
+ESQUELETO_GUARDADO[0]["salidas"]["O"] = {"sala": 3, "cerrada": True, "cierre_automatico": 2000}
+
+# Lo que queda pendiente en partida_con_todo (el turno del jugador ya se
+# sacó de la agenda: la partida está parada en su decisión).
+TIPOS_PENDIENTES = {TURNO_ENEMIGO, REGENERACION, CIERRE_PUERTA, PULSO_VENENO,
+                    FIN_VELOCIDAD, APAGAR_ANTORCHA, REARME_TRAMPA}
+
+FORMATOS = (("binario", guardar_partida, ArchivoGuardado),
+            ("json", guardar_partida_json, ArchivoGuardadoJSON))
+
+
+def foto_sin_historial(partida, ids_salas=IDS_SALAS_REPRO):
+    """Como foto(), pero la agenda se mira por sus eventos PENDIENTES (en
+    orden de secuencia) y sin el historial: al cargar, el montículo no trae
+    los cancelados (no van a ocurrir) y el historial empieza vacío. Mira
+    además todo de las puertas, y que cada efecto apunte a su evento."""
+    resultado = foto(partida, ids_salas)
+    pendientes = list_de(partida.agenda.eventos_pendientes())
+    resultado["agenda"] = [(evento(e), nombre_de(e.objetivo)) for e in pendientes]
+    resultado["efectos_enlazados"] = all(e.objetivo.evento is e for e in pendientes
+                                         if isinstance(e.objetivo, Efecto))
+    resultado["puertas"] = [(i, d, partida.mapa.obtener_sala(i).obtener_puerta(d).llave,
+                             partida.mapa.obtener_sala(i).obtener_puerta(d).cierre_automatico)
+                            for i in ids_salas for d in "NSEO"
+                            if partida.mapa.obtener_sala(i).obtener_puerta(d)]
+    del resultado["historial"]
+    return resultado
+
+
+def tipos_pendientes(partida):
+    pendientes = partida.agenda.eventos_pendientes()
+    return {pendientes.obtener(i).tipo for i in range(len(pendientes))}
+
+
+def ver_objeto(partida, id_objeto):
+    """Mueve el inventario hasta ese objeto (como avanzar y retroceder)."""
+    inventario = partida.jugador.inventario
+    while inventario.retroceder() is not None:
+        pass
+    while inventario.actual()["id"] != id_objeto:
+        if inventario.avanzar() is None:
+            raise AssertionError(f"El jugador no tiene {id_objeto}")
+
+
+def partida_con_todo():
+    """(partida, preparador), parada en t=875 con TODO a la vez: veneno,
+    antorcha, velocidad aumentada, un cierre automático, una trampa por
+    rearmarse, un troll que regenera, enemigos activos en dos salas, arma
+    equipada, objetos en el inventario y en el suelo, pergaminos, y dos
+    salas (4 y 6) que todavía no se han cargado."""
+    preparador = PreparadorDePrueba(esqueleto=ESQUELETO_GUARDADO, vida=150)
+    partida = preparador.crear_partida(encabezado_repro())
+    partida.iniciar()
+    for comando in ("recoger 0", "equipar", "abrir O", "mover O", "atacar e-31", "atacar e-31",
+                    "recoger 0", "recoger 0", "recoger 1", "mover E", "mover N", "mover E"):
+        ejecutar_comando(partida, comando, preparador.garantizar_sala)
+    ver_objeto(partida, "itm_antorcha")
+    partida.usar()
+    ver_objeto(partida, "itm_pocion_rapidez")
+    partida.usar()
+    return partida, preparador
+
+
+def intentar(partida, preparador, comando):
+    try:
+        ejecutar_comando(partida, comando, preparador.garantizar_sala)
+        return True
+    except (ComandoInvalido, AccionInvalida):
+        return False
+
+
+def contenido_completo(contenido):
+    """El contenido con sus tres listas, vengan o no en el JSON."""
+    return {"sala": contenido["sala"], "objetos": list(contenido.get("objetos") or ()),
+            "trampas": list(contenido.get("trampas") or ()),
+            "enemigos": list(contenido.get("enemigos") or ())}
+
+
+def foto_sala(sala):
+    puertas = [(d, sala.obtener_puerta(d).sala_destino, sala.obtener_puerta(d).esta_cerrada(),
+                sala.obtener_puerta(d).llave, sala.obtener_puerta(d).cierre_automatico)
+               for d in "NSEO" if sala.obtener_puerta(d)]
+    enemigos = [(e.id_instancia, e.tipo, e.vida_inicial, e.esta_activo(), e.vida, e.velocidad,
+                 evento(e.evento_siguiente), evento(e.evento_regeneracion))
+                for e in (sala.enemigo_en(i) for i in range(sala.cantidad_enemigos()))]
+    return (sala.id, sala.nombre, puertas, sala.ultimo_rastro, sala.contenido_cargado(),
+            sala.contenido and contenido_completo(sala.contenido),
+            [sala.objeto_en(i) for i in range(sala.cantidad_objetos())],
+            sala.cantidad_pergaminos(), sala.pergaminos_ya_apartados(),
+            [(t.instancia, t.tipo, t.esta_activa()) for t in
+             (sala.trampa_en(i) for i in range(sala.cantidad_trampas()))],
+            enemigos)
+
+
+def partida_grande(cantidad=300):
+    """Un pasillo de 'cantidad' salas (1 - 2 - 3 - ...), todas cargadas,
+    con objetos, trampas y enemigos; el jugador ya caminó un poco."""
+    salas, contenidos = [], []
+    for i in range(1, cantidad + 1):
+        salidas = {}
+        if i > 1:
+            salidas["O"] = {"sala": i - 1}
+        if i < cantidad:
+            salidas["E"] = {"sala": i + 1}
+        salas.append({"id": i, "nombre": f"Sala {i}", "salidas": salidas})
+        contenidos.append({"sala": i, "objetos": ["itm_daga"] * (i % 3),
+                           "enemigos": [{"instancia": f"e-{i}", "tipo": "ent_lenta"}] if i % 4 == 0 else [],
+                           "trampas": [{"instancia": f"t-{i}", "tipo": "trp_rapida"}] if i % 5 == 0 else []})
+    mapa = Mapa()
+    mapa.cargar_desde_json(salas)
+    mapa.asignar_contenidos(contenidos)
+    jugador = Jugador("Héroe", vida_max=500, ataque=6, defensa=2, velocidad=100, inventario_max=6)
+    partida = Partida(mapa, jugador, 1, CATALOGO.get, semilla=SEMILLA_REPRO)
+    partida.iniciar()
+    for _ in range(12):
+        partida.mover("E")
+    return partida
+
+
+class TestGuardarYCargar(ConCarpetaTemporal):
+    def guardar_y_cargar(self, partida, formato, fichas=CATALOGO_REPRO.get):
+        nombre, guardar, Archivo = formato
+        ruta = self.ruta(f"partida.{nombre}")
+        guardar(partida, ruta, encabezado_repro(semilla=partida.semilla))
+        return Archivo(ruta).cargar_partida(fichas)
+
+    def test_queda_todo_igual(self):
+        for formato in FORMATOS:
+            with self.subTest(formato=formato[0]):
+                partida, _ = partida_con_todo()
+                self.assertEqual(tipos_pendientes(partida), TIPOS_PENDIENTES)   # sí hay de todo
+                cargada = self.guardar_y_cargar(partida, formato)
+                self.assertEqual(foto_sin_historial(cargada), foto_sin_historial(partida))
+
+    def test_dos_trampas_en_una_sala(self):
+        """Cada rearme vuelve a su trampa (se guarda la posición)."""
+        for formato in FORMATOS:
+            with self.subTest(formato=formato[0]):
+                partida = partida_efectos(trampas_sala_2=("trp_dardos", "trp_rapida"), vida=30)
+                partida.mover("N")
+                self.assertEqual(len(partida.agenda.eventos_pendientes()), 2)
+                nombre, guardar, Archivo = formato
+                guardar(partida, self.ruta(nombre), encabezado_repro(semilla=SEMILLA))
+                cargada = Archivo(self.ruta(nombre)).cargar_partida(CATALOGO.get)
+                partida.estado.historial = Historial()
+                for _ in range(4):
+                    self.assertEqual(foto_sin_historial(cargada, (1, 2)),
+                                     foto_sin_historial(partida, (1, 2)))
+                    cargada.esperar()
+                    partida.esperar()
+                sala = cargada.mapa.obtener_sala(2)
+                self.assertEqual([sala.trampa_en(i).esta_activa() for i in range(2)], [True, True])
+
+    def test_seguir_jugando_da_lo_mismo(self):
+        """Lo importante: cargar y seguir jugando es lo mismo que no haber
+        guardado (con los mismos dados, §2.6). Al original se le vacía el
+        historial, porque al cargar el historial empieza vacío."""
+        comandos = (["esperar"] * 3 + ["atacar e-51", "pergamino", "atacar e-51", "atacar e-22",
+                                       "mover O", "mover S", "mover O", "pergamino"] + ["esperar"] * 25)
+        for formato in FORMATOS:
+            with self.subTest(formato=formato[0]):
+                partida, preparador = partida_con_todo()
+                cargada = self.guardar_y_cargar(partida, formato)
+                partida.estado.historial = Historial()
+                otro = PreparadorDePrueba()
+                otro.usar_mapa(cargada.mapa)
+
+                for numero, comando in enumerate(comandos, 1):
+                    self.assertEqual(intentar(cargada, otro, comando),
+                                     intentar(partida, preparador, comando), f"comando {numero}")
+                    self.assertEqual(foto_sin_historial(cargada), foto_sin_historial(partida),
+                                     f"después del comando {numero} ({comando})")
+
+                # Para que la prueba sirva: después de cargar ocurrió de todo.
+                self.assertFalse(partida.terminada)
+                self.assertEqual(tipos_pendientes(partida) & {CIERRE_PUERTA, PULSO_VENENO,
+                                                              FIN_VELOCIDAD, APAGAR_ANTORCHA}, set())
+
+    def test_partidas_al_azar(self):
+        """Se guarda en un momento al azar de una partida al azar, se carga
+        y se sigue con los mismos comandos: todo igual, paso por paso."""
+        for semilla in range(6):
+            for formato in FORMATOS:
+                with self.subTest(semilla=semilla, formato=formato[0]):
+                    comandos = comandos_al_azar(semilla, 250)
+                    corte = random.Random(semilla).randint(0, 120)
+                    preparador = PreparadorDePrueba(vida=200)
+                    partida = preparador.crear_partida(encabezado_repro(semilla=semilla))
+                    partida.iniciar()
+                    for comando in comandos[:corte]:
+                        if not partida.terminada:
+                            intentar(partida, preparador, comando)
+
+                    cargada = self.guardar_y_cargar(partida, formato)
+                    self.assertEqual(foto_sin_historial(cargada), foto_sin_historial(partida))
+                    partida.estado.historial = Historial()
+                    otro = PreparadorDePrueba()
+                    otro.usar_mapa(cargada.mapa)
+
+                    for numero, comando in enumerate(comandos[corte:], 1):
+                        if partida.terminada:
+                            break
+                        self.assertEqual(intentar(cargada, otro, comando),
+                                         intentar(partida, preparador, comando))
+                        self.assertEqual(foto_sin_historial(cargada), foto_sin_historial(partida),
+                                         f"después del comando {numero} ({comando})")
+
+    def test_guardar_lo_cargado_da_el_mismo_archivo(self):
+        """Nada se pierde ni cambia de orden en el camino."""
+        for nombre, guardar, Archivo in FORMATOS:
+            with self.subTest(formato=nombre):
+                partida, _ = partida_con_todo()
+                guardar(partida, self.ruta("1"), encabezado_repro())
+                cargada = Archivo(self.ruta("1")).cargar_partida(CATALOGO_REPRO.get)
+                guardar(cargada, self.ruta("2"), encabezado_repro())
+                with open(self.ruta("1"), "rb") as uno, open(self.ruta("2"), "rb") as dos:
+                    self.assertEqual(uno.read(), dos.read())
+
+    def test_el_historial_empieza_vacio(self):
+        """Lo que NO se guarda: no se puede retroceder a antes de cargar.
+        Los pergaminos sí se conservan, para usarlos desde ahí."""
+        partida, _ = partida_con_todo()
+        cargada = self.guardar_y_cargar(partida, FORMATOS[0])
+        self.assertEqual(len(cargada.estado.historial), 0)
+        self.assertEqual(cargada.jugador.inventario.cantidad_pergaminos(),
+                         partida.jugador.inventario.cantidad_pergaminos())
+        self.assertFalse(cargada.usar_pergamino())
+        self.assertTrue(partida.usar_pergamino())
+
+    def test_partida_terminada(self):
+        original, _, _ = jugar_y_registrar(self.ruta(), comandos_guiados())
+        for formato in FORMATOS:
+            with self.subTest(formato=formato[0]):
+                cargada = self.guardar_y_cargar(original, formato)
+                self.assertEqual((cargada.terminada, cargada.resultado), (True, "victoria"))
+                with self.assertRaises(RuntimeError):
+                    cargada.esperar()
+
+    def test_salas_y_puertas(self):
+        """Las salas sin cargar siguen sin cargar; el contenido original
+        (el que va a la caché) se conserva; las puertas siguen siendo UNA
+        para las dos salas."""
+        partida, _ = partida_con_todo()
+        cargada = self.guardar_y_cargar(partida, FORMATOS[0])
+        cargadas = [i for i in IDS_SALAS_REPRO if cargada.mapa.obtener_sala(i).contenido_cargado()]
+        self.assertEqual(cargadas, [1, 2, 3, 5])
+        for datos in CONTENIDO_REPRO:
+            if datos["sala"] in cargadas:
+                self.assertEqual(cargada.mapa.obtener_sala(datos["sala"]).contenido,
+                                 contenido_completo(datos))
+
+        oeste = cargada.mapa.obtener_sala(1).obtener_puerta("O")
+        este = cargada.mapa.obtener_sala(3).obtener_puerta("E")
+        self.assertIs(oeste.sala_destino_ref, cargada.mapa.obtener_sala(3))
+        self.assertFalse(este.esta_cerrada())
+        oeste.cerrar()
+        self.assertTrue(este.esta_cerrada())
+
+    def test_lo_que_dice_el_encabezado(self):
+        partida, _ = partida_con_todo()
+        for nombre, guardar, Archivo in FORMATOS:
+            with self.subTest(formato=nombre):
+                guardar(partida, self.ruta(nombre), encabezado_repro())
+                encabezado = Archivo(self.ruta(nombre)).encabezado
+                self.assertEqual((encabezado.cripta_id, encabezado.version_cripta,
+                                  encabezado.version_catalogo, encabezado.semilla, encabezado.jugador),
+                                 ("cripta-prueba", "v1", "cat-1", SEMILLA_REPRO, "Héroe"))
+
+    def test_falta_una_ficha(self):
+        """El catálogo de esa versión ya no está completo: se avisa."""
+        partida, _ = partida_con_todo()
+        sin_troll = dict(CATALOGO_REPRO)
+        del sin_troll["ent_troll"]
+        for formato in FORMATOS:
+            with self.subTest(formato=formato[0]):
+                with self.assertRaises(ErrorGuardado):
+                    self.guardar_y_cargar(partida, formato, sin_troll.get)
+
+    def test_guardar_encima(self):
+        """La segunda vez reemplaza a la primera y no quedan temporales."""
+        primera, _ = partida_con_todo()
+        segunda, _ = partida_con_todo()
+        segunda.esperar()
+        for nombre, guardar, Archivo in FORMATOS:
+            with self.subTest(formato=nombre):
+                guardar(primera, self.ruta(nombre), encabezado_repro())
+                guardar(segunda, self.ruta(nombre), encabezado_repro())
+                self.assertEqual(Archivo(self.ruta(nombre)).cargar_partida(CATALOGO_REPRO.get).reloj,
+                                 segunda.reloj)
+        self.assertEqual(sorted(os.listdir(self.carpeta)), ["binario", "json"])
+
+
+class TestGuardarMal(ConCarpetaTemporal):
+    """Errores de quien llama: no se escribe nada."""
+
+    def no_guarda(self, partida, encabezado):
+        for nombre, guardar, _ in FORMATOS:
+            with self.assertRaises(ValueError):
+                guardar(partida, self.ruta(nombre), encabezado)
+        self.assertEqual(os.listdir(self.carpeta), [])
+
+    def test_sin_iniciar(self):
+        self.no_guarda(PreparadorDePrueba().crear_partida(encabezado_repro()), encabezado_repro())
+
+    def test_otra_semilla(self):
+        self.no_guarda(partida_con_todo()[0], encabezado_repro(semilla=1))
+
+    def test_otro_jugador(self):
+        encabezado = encabezado_repro()
+        encabezado.jugador = "Otro"
+        self.no_guarda(partida_con_todo()[0], encabezado)
+
+
+class TestLeerUnaSala(ConCarpetaTemporal):
+    """§4.10: se puede recuperar UNA sala sin leer el archivo completo."""
+
+    def guardar_grande(self):
+        partida = partida_grande()
+        guardar_partida(partida, self.ruta("p.bin"), encabezado_repro())
+        guardar_partida_json(partida, self.ruta("p.json"), encabezado_repro())
+        return partida
+
+    def test_lee_solo_esa_sala(self):
+        partida = self.guardar_grande()
+        archivo = ArchivoGuardado(self.ruta("p.bin"))
+        sala = archivo.leer_sala(240, CATALOGO.get)
+        self.assertEqual(foto_sala(sala), foto_sala(partida.mapa.obtener_sala(240)))
+        # Cabecera + encabezado + índice + ESA sala: mucho menos que todo.
+        self.assertLess(archivo.bytes_leidos, archivo.tamano * 0.25)
+        self.assertGreater(archivo.bytes_leidos, 300 * 20)        # al menos el índice
+
+        # En cambio, cargar la partida lee cada byte del archivo una vez.
+        completo = ArchivoGuardado(self.ruta("p.bin"))
+        completo.cargar_partida(CATALOGO.get)
+        self.assertEqual(completo.bytes_leidos, completo.tamano)
+
+    def test_el_json_tiene_que_leer_todo(self):
+        partida = self.guardar_grande()
+        archivo = ArchivoGuardadoJSON(self.ruta("p.json"))
+        self.assertEqual(foto_sala(archivo.leer_sala(240, CATALOGO.get)),
+                         foto_sala(partida.mapa.obtener_sala(240)))
+        self.assertEqual(archivo.bytes_leidos, archivo.tamano)
+
+    def test_varias_salas_con_el_mismo_archivo(self):
+        partida = self.guardar_grande()
+        archivo = ArchivoGuardado(self.ruta("p.bin"))
+        for id_sala in (1, 13, 300, 150, 2):
+            self.assertEqual(foto_sala(archivo.leer_sala(id_sala, CATALOGO.get)),
+                             foto_sala(partida.mapa.obtener_sala(id_sala)))
+        self.assertEqual(list_de(archivo.ids_salas()), list(range(1, 301)))
+
+    def test_sala_con_enemigos_activos(self):
+        """Con sus eventos (tiempo, secuencia, tipo), aunque no haya agenda."""
+        partida, _ = partida_con_todo()
+        for nombre, guardar, Archivo in FORMATOS:
+            with self.subTest(formato=nombre):
+                guardar(partida, self.ruta(nombre), encabezado_repro())
+                sala = Archivo(self.ruta(nombre)).leer_sala(5, CATALOGO_REPRO.get)
+                self.assertEqual(foto_sala(sala), foto_sala(partida.mapa.obtener_sala(5)))
+                self.assertEqual(sala.cantidad_enemigos(), 2)
+
+    def test_sala_que_no_esta(self):
+        self.guardar_grande()
+        for Archivo, ruta in ((ArchivoGuardado, "p.bin"), (ArchivoGuardadoJSON, "p.json")):
+            with self.assertRaises(KeyError):
+                Archivo(self.ruta(ruta)).leer_sala(301, CATALOGO.get)
+
+
+def list_de(vector):
+    return [vector.obtener(i) for i in range(len(vector))]
+
+
+class TestGuardadoDanado(ConCarpetaTemporal):
+    """§4.10: detectar otra versión del formato; y un archivo dañado da
+    ErrorGuardado con un mensaje claro, nunca otro error ni datos a medias."""
+
+    def setUp(self):
+        super().setUp()
+        partida, _ = partida_con_todo()
+        guardar_partida(partida, self.ruta("p.bin"), encabezado_repro())
+        with open(self.ruta("p.bin"), "rb") as archivo:
+            self.bytes = archivo.read()
+
+    def con_bytes(self, datos):
+        with open(self.ruta("malo.bin"), "wb") as archivo:
+            archivo.write(datos)
+        return self.ruta("malo.bin")
+
+    def falla(self, datos):
+        """ErrorGuardado al abrir o, si no, al leer las salas o cargar."""
+        with self.assertRaises(ErrorGuardado) as error:
+            archivo = ArchivoGuardado(self.con_bytes(datos))
+            archivo.cargar_partida(CATALOGO_REPRO.get)
+        return str(error.exception)
+
+    def test_otra_version_del_formato(self):
+        otra = (FORMATO_GUARDADO + 1).to_bytes(2, "little")
+        mensaje = self.falla(self.bytes[:4] + otra + self.bytes[6:])
+        self.assertIn("versión", mensaje)
+
+    def test_no_es_un_guardado(self):
+        self.assertIn("no es una partida guardada", self.falla(b"hola, esto no es una partida"))
+        self.assertIn("no es una partida guardada", self.falla(b"CRPX" + self.bytes[4:]))
+        self.falla(b"")
+        with open(self.ruta("p.json"), "w") as archivo:
+            archivo.write('{"formato": 1}')
+        with self.assertRaises(ErrorGuardado):
+            ArchivoGuardado(self.ruta("p.json"))
+
+    def falla_al_abrir(self, datos):
+        """Se detecta YA al abrir (no al leer la sala)."""
+        with self.assertRaises(ErrorGuardado):
+            ArchivoGuardado(self.con_bytes(datos))
+
+    def test_indice_que_apunta_fuera_de_las_salas(self):
+        """La primera entrada apunta al principio del archivo."""
+        inicio = int.from_bytes(self.bytes[16:24], "little")
+        self.falla_al_abrir(self.bytes[:inicio + 8] + (0).to_bytes(8, "little")
+                            + self.bytes[inicio + 16:])
+
+    def test_un_bloque_con_datos_de_mas(self):
+        """Un byte de más al final del encabezado (y todo lo demás corrido
+        para que cuadre): el encabezado no se leyó completo."""
+        largo = int.from_bytes(self.bytes[8:12], "little")
+        indice = int.from_bytes(self.bytes[16:24], "little")
+        cantidad = int.from_bytes(self.bytes[24:28], "little")
+        datos = bytearray(self.bytes[:28 + largo] + b"\0" + self.bytes[28 + largo:])
+        datos[8:12] = (largo + 1).to_bytes(4, "little")
+        datos[16:24] = (indice + 1).to_bytes(8, "little")
+        for i in range(cantidad):
+            posicion = indice + 1 + i * 20 + 8
+            datos[posicion:posicion + 8] = (int.from_bytes(datos[posicion:posicion + 8], "little")
+                                            + 1).to_bytes(8, "little")
+        self.falla_al_abrir(bytes(datos))
+
+    def test_no_existe(self):
+        with self.assertRaises(ErrorGuardado):
+            ArchivoGuardado(self.ruta("no_existe.bin"))
+
+    def test_cortado_en_cualquier_parte(self):
+        for corte in range(0, len(self.bytes), 7):
+            with self.subTest(corte=corte):
+                self.falla(self.bytes[:corte])
+
+    def test_bytes_de_mas(self):
+        self.falla(self.bytes + b"\0")
+
+    def test_dato_imposible(self):
+        """El primer dato de lo general es un booleano: un 7 no es ni 0 ni 1.
+        (Inicio 6 bytes + cabecera 22 = 28; luego el encabezado.)"""
+        largo_encabezado = int.from_bytes(self.bytes[8:12], "little")
+        posicion = 28 + largo_encabezado
+        self.assertIn(self.bytes[posicion], (0, 1))
+        self.falla(self.bytes[:posicion] + b"\x07" + self.bytes[posicion + 1:])
+
+    def test_indice_desordenado(self):
+        """Se intercambian las dos primeras entradas del índice."""
+        inicio = int.from_bytes(self.bytes[16:24], "little")
+        primera, segunda = self.bytes[inicio:inicio + 20], self.bytes[inicio + 20:inicio + 40]
+        self.falla(self.bytes[:inicio] + segunda + primera + self.bytes[inicio + 40:])
+
+    def test_indice_que_no_cuadra_con_la_sala(self):
+        """La última entrada dice sala 99, pero su registro es de la 6."""
+        final = len(self.bytes) - 20
+        self.falla(self.bytes[:final] + (99).to_bytes(8, "little") + self.bytes[final + 8:])
+        archivo = ArchivoGuardado(self.ruta("malo.bin"))
+        with self.assertRaises(ErrorGuardado):
+            archivo.leer_sala(99, CATALOGO_REPRO.get)
+
+    def test_json_danado(self):
+        partida, _ = partida_con_todo()
+        guardar_partida_json(partida, self.ruta("p.json"), encabezado_repro())
+        with open(self.ruta("p.json"), encoding="utf-8") as archivo:
+            documento = json.load(archivo)
+
+        def falla(cambio):
+            copia = copy.deepcopy(documento)
+            cambio(copia)
+            with open(self.ruta("malo.json"), "w", encoding="utf-8") as archivo:
+                json.dump(copia, archivo)
+            with self.assertRaises(ErrorGuardado) as error:
+                ArchivoGuardadoJSON(self.ruta("malo.json")).cargar_partida(CATALOGO_REPRO.get)
+            return str(error.exception)
+
+        def troll(d):
+            return d["salas"][4]["enemigos"][0]
+
+        self.assertEqual(troll(documento)["instancia"], "e-51")
+        self.assertIn("versión", falla(lambda d: d.update(formato=2)))
+        # Un enemigo apunta a su turno con otro tiempo, o al de otro enemigo.
+        falla(lambda d: troll(d)["turno"].update(tiempo=troll(d)["turno"]["tiempo"] + 1))
+        falla(lambda d: troll(d)["turno"].update(secuencia=d["salas"][4]["enemigos"][1]["turno"]["secuencia"]))
+        # Pendiente pero cancelado: imposible.
+        falla(lambda d: troll(d)["turno"].update(valido=False))
+        # La agenda fuera de orden (se avisa eso, no otra cosa).
+        self.assertIn("orden", falla(lambda d: d["general"]["agenda"]["eventos"].reverse()))
+        falla(lambda d: d["general"].pop("reloj"))
+        falla(lambda d: d["general"].update(reloj="mucho"))
+        falla(lambda d: d["salas"][0]["enemigos"].append("de más"))
+        with open(self.ruta("malo.json"), "w", encoding="utf-8") as archivo:
+            archivo.write("{esto no es json")
+        with self.assertRaises(ErrorGuardado):
+            ArchivoGuardadoJSON(self.ruta("malo.json"))
+
+
+class TestComparacionConJSON(ConCarpetaTemporal):
+    """§4.10: comparar tamaño en disco y tiempo de carga contra JSON. Los
+    tiempos se miden con python -m crypta.bench.bench (en una prueba no se
+    puede exigir un tiempo: depende de la máquina)."""
+
+    def test_el_binario_ocupa_menos(self):
+        for partida in (partida_con_todo()[0], partida_grande()):
+            guardar_partida(partida, self.ruta("p.bin"), encabezado_repro())
+            guardar_partida_json(partida, self.ruta("p.json"), encabezado_repro())
+            self.assertLess(os.path.getsize(self.ruta("p.bin")), os.path.getsize(self.ruta("p.json")))
+
+    def test_comparar_formatos(self):
+        from crypta.bench.bench import comparar_formatos
+        partida, _ = partida_con_todo()
+        medida = comparar_formatos(partida, encabezado_repro(), CATALOGO_REPRO.get,
+                                   self.carpeta, repeticiones=1)
+        self.assertEqual(medida.tamano_binario, os.path.getsize(self.ruta("partida.bin")))
+        self.assertEqual(medida.tamano_json, os.path.getsize(self.ruta("partida.json")))
+        self.assertLess(medida.bytes_una_sala_binario, medida.tamano_binario)
+        self.assertEqual(medida.bytes_una_sala_json, medida.tamano_json)
+        for tiempo in (medida.carga_binario, medida.carga_json,
+                       medida.una_sala_binario, medida.una_sala_json):
+            self.assertGreater(tiempo, 0)
+        self.assertIn("binario", str(medida))
+
+
+class TestPiezasDelGuardado(unittest.TestCase):
+    """Lo que se agregó a las clases del modelo para guardar y cargar."""
+
+    def test_agenda_pendientes_en_orden_de_secuencia(self):
+        agenda = Agenda()
+        a, b, c = agenda.programar(300, "x"), agenda.programar(100, "y"), agenda.programar(200, "z")
+        agenda.cancelar(b)
+        self.assertEqual([e.secuencia for e in list_de(agenda.eventos_pendientes())],
+                         [a.secuencia, c.secuencia])
+        self.assertEqual(agenda.siguiente_secuencia, 3)
+
+    def test_agenda_restaurar(self):
+        agenda = Agenda()
+        agenda.restaurar_secuencia(10)
+        with self.assertRaises(ValueError):
+            agenda.restaurar_pendiente(5, 10, "x", None)      # la secuencia tiene que ser < 10
+        viejo = agenda.restaurar_pendiente(50, 7, "x", None)
+        nuevo = agenda.programar(50, "y")
+        self.assertEqual((nuevo.secuencia, len(agenda)), (10, 2))
+        self.assertIs(agenda.siguiente(), viejo)              # mismo tiempo: gana la secuencia 7
+        with self.assertRaises(ValueError):
+            agenda.restaurar_secuencia(20)                    # ya no es nueva
+        with self.assertRaises(ValueError):
+            Agenda().restaurar_secuencia(-1)
+
+    def test_inventario_posiciones_y_restaurar(self):
+        daga, cota, pocion = CATALOGO["itm_daga"], CATALOGO["itm_cota"], CATALOGO["itm_pocion_menor"]
+        self.assertEqual(Inventario(5).posiciones(), (-1, -1, -1))
+        inventario = Inventario(5)
+        inventario.restaurar(vector_de([pocion, cota, daga]), 1, 2, 1, 2)
+        self.assertEqual(inventario.posiciones(), (1, 2, 1))
+        self.assertEqual((inventario.actual(), inventario.arma(), inventario.armadura()),
+                         (cota, daga, cota))
+        self.assertEqual(inventario.cantidad_pergaminos(), 2)
+
+        for argumentos in ((vector_de([daga]), 0, -1, -1, 0),        # no está vacío
+                           ):
+            with self.assertRaises(ValueError):
+                inventario.restaurar(*argumentos)
+        for objetos, actual, arma, armadura, pergaminos in (
+                ([daga], 1, -1, -1, 0),            # fuera
+                ([daga], 0, -1, 0, 0),             # una daga no es armadura
+                ([daga], -1, -1, -1, 0),           # con objetos, uno a la vista
+                ([], 0, -1, -1, 0),                # sin objetos, ninguno
+                ([daga, cota], 0, -1, -1, 4),      # no caben
+                ([daga] * 6, 0, -1, -1, 0)):       # no caben
+            with self.assertRaises(ValueError, msg=repr((objetos, actual, arma, armadura))):
+                Inventario(5).restaurar(vector_de(objetos), actual, arma, armadura, pergaminos)
+
+    def test_mapa_con_salas_repetidas(self):
+        with self.assertRaises(ValueError):
+            Mapa().cargar_salas(vector_de([Sala(1, "a", None), Sala(1, "b", None)]))
+
+    def test_evento_suelto_cancelado(self):
+        """Un objeto que apunta a un evento cancelado (fuera de la agenda):
+        se vuelve a crear cancelado."""
+        partida, _ = partida_con_todo()
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "p.json")
+            guardar_partida_json(partida, ruta, encabezado_repro())
+            with open(ruta, encoding="utf-8") as archivo:
+                documento = json.load(archivo)
+            regeneracion = documento["salas"][4]["enemigos"][0]["regeneracion"]
+            regeneracion.update(pendiente=False, valido=False)
+            with open(ruta, "w", encoding="utf-8") as archivo:
+                json.dump(documento, archivo)
+            cargada = ArchivoGuardadoJSON(ruta).cargar_partida(CATALOGO_REPRO.get)
+        troll = cargada.mapa.obtener_sala(5).enemigo_en(0)
+        self.assertFalse(troll.evento_regeneracion.esta_valido())
+        self.assertEqual(troll.evento_regeneracion.secuencia, regeneracion["secuencia"])
+
+    def test_sala_poner_puerta_y_restaurar(self):
+        sala = Sala(1, "a", None)
+        sala.poner_puerta("N", Puerta(2))
+        for direccion in ("N", "X"):
+            with self.assertRaises(ValueError):
+                sala.poner_puerta(direccion, Puerta(3))
+        sala.restaurar_contenido({"sala": 1}, Vector(), Vector(), 2, True)
+        self.assertEqual((sala.cantidad_pergaminos(), sala.pergaminos_ya_apartados()), (2, True))
+        with self.assertRaises(ValueError):
+            sala.restaurar_contenido({"sala": 1}, Vector(), Vector(), 0, False)
+        with self.assertRaises(ValueError):
+            Sala(2, "b", None).restaurar_contenido({"sala": 2}, Vector(), Vector(), -1, False)
+
+
+def vector_de(elementos):
+    vector = Vector()
+    for elemento in elementos:
+        vector.agregar(elemento)
+    return vector
 
 
 if __name__ == "__main__":

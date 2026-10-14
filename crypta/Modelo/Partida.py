@@ -123,7 +123,19 @@ class Partida:
 
         self.bitacora = Bitacora()
 
-    # Atajos de lectura (para la vista y las pruebas).
+    # Atajos de lectura (para la vista, las pruebas y el guardado).
+    @property
+    def id_sala_inicial(self):
+        return self._id_sala_inicial
+
+    @property
+    def id_sala_salida(self):
+        return self._id_sala_salida
+
+    @property
+    def llave_salida(self):
+        return self._llave_salida
+
     @property
     def reloj(self):
         return self.estado.reloj

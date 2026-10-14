@@ -1,4 +1,5 @@
 from crypta.estructuras.ListaDoble import ListaDoble
+from crypta.estructuras.Vector import Vector
 from crypta.estructuras.ordenamiento import copiar_a_vector, ordenar
 
 
@@ -300,6 +301,67 @@ class Inventario:
         if contexto.ranura is not None:
             self._poner_en(contexto.ranura, contexto.equipado_antes)
 
+    # =========================================================
+    # GUARDAR Y CARGAR LA PARTIDA (§4.10)
+    # =========================================================
+
+    def posiciones(self):
+        """(posición del que se está viendo, del arma, de la armadura) en
+        el orden real; -1 = ninguno. O(n), con n <= inventario_max."""
+        actual = arma = armadura = -1
+        nodo = self._objetos.primero()
+        posicion = 0
+
+        while nodo is not None:
+            if nodo is self._actual:
+                actual = posicion
+            if nodo is self._arma:
+                arma = posicion
+            if nodo is self._armadura:
+                armadura = posicion
+
+            nodo = self._objetos.siguiente(nodo)
+            posicion += 1
+
+        return actual, arma, armadura
+
+    def restaurar(self, objetos, actual, arma, armadura, pergaminos):
+        """Deja un inventario NUEVO exactamente como estaba: las fichas
+        (un Vector, en el orden real), el mismo objeto a la vista, lo mismo
+        equipado y los pergaminos. Las posiciones son las de posiciones()."""
+        if not self.esta_vacio() or self._pergaminos != 0:
+            raise ValueError("Solo se puede restaurar un inventario vacío")
+
+        nodos = Vector()
+
+        for i in range(len(objetos)):
+            nodo = self.recoger_con_nodo(objetos.obtener(i))
+
+            if nodo is None:
+                raise ValueError(f"No caben {len(objetos)} objetos en el inventario")
+
+            nodos.agregar(nodo)
+
+        for posicion in (actual, arma, armadura):
+            if not -1 <= posicion < len(nodos):
+                raise ValueError(f"Posición {posicion} fuera del inventario")
+
+        if (actual == -1) != (len(nodos) == 0):
+            raise ValueError("Con objetos, siempre hay uno a la vista (y sin objetos, ninguno)")
+
+        self._actual = nodos.obtener(actual) if actual != -1 else None
+
+        for ranura, posicion in (("arma", arma), ("armadura", armadura)):
+            if posicion == -1:
+                continue
+
+            if nodos.obtener(posicion).valor.get("clase") != ranura:
+                raise ValueError(f"El objeto {posicion} no es un(a) {ranura}")
+
+            self._poner_en(ranura, nodos.obtener(posicion))
+
+        self.fijar_pergaminos(pergaminos)
+
     def orden_real(self):
         resultado = []
 
@@ -545,8 +607,6 @@ class Inventario:
             contexto.posicion_suelo
         )
 
-        # Lo restauramos en su posición exacta
-        # dentro del inventario.
         self.restaurar_soltado(
             contexto.contexto_inventario
         )

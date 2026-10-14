@@ -1,4 +1,6 @@
 from crypta.estructuras.MonticuloMin import MonticuloMin
+from crypta.estructuras.Vector import Vector
+from crypta.estructuras.ordenamiento import ordenar
 from crypta.Modelo.Evento import Evento, evento_menor
 
 
@@ -132,6 +134,52 @@ class Agenda:
     def deshacer_programacion(self, evento):
         # Deshacer "programé este evento" = que nunca ocurra.
         self.cancelar(evento)
+
+    # =========================================================
+    # GUARDAR Y CARGAR LA PARTIDA (§4.10)
+    # =========================================================
+
+    @property
+    def siguiente_secuencia(self):
+        """El número de secuencia que recibirá el próximo evento."""
+        return self._siguiente_secuencia
+
+    def eventos_pendientes(self):
+        """Vector con los eventos pendientes, ordenados por secuencia. Los
+        cancelados que siguen dentro del montículo (borrado perezoso) no
+        están: no van a ocurrir, así que no hace falta guardarlos."""
+        pendientes = Vector()
+
+        for evento in self._monticulo:
+            if _esta_pendiente(evento):
+                pendientes.agregar(evento)
+
+        ordenar(pendientes, clave=lambda evento: evento.secuencia)
+        return pendientes
+
+    def restaurar_pendiente(self, tiempo, secuencia, tipo, objetivo):
+        """Vuelve a poner un evento guardado CON SU número de secuencia:
+        así los empates se resuelven igual que antes de guardar (§2.3)."""
+        if secuencia >= self._siguiente_secuencia:
+            raise ValueError(
+                f"La secuencia {secuencia} no es menor que la siguiente "
+                f"({self._siguiente_secuencia}): primero restaurar_secuencia"
+            )
+
+        evento = Evento(tiempo=tiempo, secuencia=secuencia, tipo=tipo, objetivo=objetivo)
+        self._insertar(evento)
+        self._pendientes += 1
+        return evento
+
+    def restaurar_secuencia(self, siguiente):
+        """Solo en una agenda nueva: fija el próximo número de secuencia."""
+        if self._siguiente_secuencia != 0 or not self._monticulo.esta_vacia():
+            raise ValueError("Solo se puede restaurar la secuencia de una agenda nueva")
+
+        if siguiente < 0:
+            raise ValueError("La secuencia no puede ser negativa")
+
+        self._siguiente_secuencia = siguiente
 
     def _insertar(self, evento):
         self._monticulo.insertar(evento)

@@ -10,15 +10,27 @@ class Mapa:
         self._salas = ArbolBusqueda()
 
     def cargar_desde_json(self, salas_json):
-        pares = Vector()
+        salas = Vector()
 
         for datos in salas_json:
-            sala = Sala(
-                id_sala=datos["id"],
-                nombre=datos["nombre"],
-                # "salidas" es opcional en el API: puede no venir o venir null.
-                salidas=datos.get("salidas")
+            salas.agregar(
+                Sala(
+                    id_sala=datos["id"],
+                    nombre=datos["nombre"],
+                    # "salidas" es opcional en el API: puede no venir o venir null.
+                    salidas=datos.get("salidas")
+                )
             )
+
+        self.cargar_salas(salas)
+
+    def cargar_salas(self, salas):
+        """Arma el mapa con salas ya creadas (un Vector): desde el JSON o
+        desde una partida guardada (§4.10). Ids repetidos: ValueError."""
+        pares = Vector()
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
 
             pares.agregar(
                 (sala.id, sala)
@@ -28,6 +40,10 @@ class Mapa:
             pares,
             clave=lambda par: par[0]
         )
+
+        for i in range(len(pares) - 1):
+            if pares.obtener(i)[0] == pares.obtener(i + 1)[0]:
+                raise ValueError(f"La sala {pares.obtener(i)[0]} está repetida")
 
         self._salas = ArbolBusqueda.desde_ordenados(
             pares

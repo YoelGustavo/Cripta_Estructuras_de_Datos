@@ -18,6 +18,13 @@ class MonticuloMin:
     def esta_vacia(self):
         return len(self._vector) == 0
 
+    def __iter__(self):
+        """Recorre los elementos en el orden del arreglo interno, que NO es
+        el orden de menor a mayor. O(n). Sirve para revisarlos todos sin
+        sacarlos (por ejemplo, para guardar la agenda)."""
+        for i in range(len(self._vector)):
+            yield self._vector.obtener(i)
+
     #operaciones para sacar padres e hijos.
     def _padre(self, i):
         return (i - 1) // 2
