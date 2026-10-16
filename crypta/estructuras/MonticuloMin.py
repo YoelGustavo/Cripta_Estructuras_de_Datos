@@ -35,46 +35,63 @@ class MonticuloMin:
     def _hijo_der(self, i):
         return 2 * i + 2
 
-    def _intercambiar(self, i, j):
-        temp_i = self._vector.obtener(i)
-        temp_j = self._vector.obtener(j)
-        
-        self._vector.asignar(i, temp_j)
-        self._vector.asignar(j, temp_i)
+    # _subir y _bajar usan la técnica del "HUECO" (Fase 8, la encontró el
+    # --bench): en vez de INTERCAMBIAR en cada nivel (2 lecturas y 2
+    # escrituras), se guarda aparte el elemento que se mueve, se corren los
+    # demás un nivel y el elemento se escribe UNA sola vez, en su lugar
+    # final. Es el mismo algoritmo (deja el arreglo exactamente igual que
+    # con intercambios), con un tercio de los accesos al vector. La agenda
+    # saca un evento por cada turno de cada actor: es lo que más se repite
+    # en todo el juego.
 
     def _subir(self, i):
-        # "Flotamos" el elemento hacia arriba mientras no sea la raíz
+        # "Flotamos" el elemento hacia arriba mientras sea menor que su padre
+        vector = self._vector
+        elemento = vector.obtener(i)
+
         while i > 0:
             p = self._padre(i)
-            # Si el elemento actual es MENOR que su padre, rompe la regla, así que los cambiamos
-            if self._menor(self._vector.obtener(i), self._vector.obtener(p)):
-                self._intercambiar(i, p)
-                i = p  # Actualizamos nuestra posición a la del padre para seguir subiendo
-            else:
-                break  # Si no es menor que el padre, ya encontró su lugar correcto
+            padre = vector.obtener(p)
+
+            if not self._menor(elemento, padre):
+                break  # ya encontró su lugar
+
+            vector.asignar(i, padre)  # el padre baja al hueco...
+            i = p                     # ...y el hueco sube
+
+        vector.asignar(i, elemento)
 
     def _bajar(self, i):
-        # "Hundimos" el elemento hacia abajo
-        n = len(self._vector)
+        # "Hundimos" el elemento hacia abajo mientras algún hijo sea menor
+        vector = self._vector
+        n = len(vector)
+        elemento = vector.obtener(i)
+
         while True:
             izq = self._hijo_izq(i)
-            der = self._hijo_der(i)
-            mas_pequeno = i
 
-            # Si el hijo izquierdo existe y es menor que el actual, él es el nuevo candidato a subir
-            if izq < n and self._menor(self._vector.obtener(izq), self._vector.obtener(mas_pequeno)):
-                mas_pequeno = izq
+            if izq >= n:
+                break  # sin hijos: es una hoja
 
-            # Si el hijo derecho existe y es menor que el candidato anterior, él gana
-            if der < n and self._menor(self._vector.obtener(der), self._vector.obtener(mas_pequeno)):
-                mas_pequeno = der
+            # El menor de los dos hijos (el derecho, si existe y es menor).
+            hijo = izq
+            valor_hijo = vector.obtener(izq)
+            der = izq + 1
 
-            # Si el más pequeño ya no es el actual (alguno de los hijos ganó), los intercambiamos
-            if mas_pequeno != i:
-                self._intercambiar(i, mas_pequeno)
-                i = mas_pequeno  # Seguimos bajando desde la nueva posición
-            else:
-                break  # Si el actual es menor que ambos hijos, terminamos
+            if der < n:
+                valor_der = vector.obtener(der)
+
+                if self._menor(valor_der, valor_hijo):
+                    hijo = der
+                    valor_hijo = valor_der
+
+            if not self._menor(valor_hijo, elemento):
+                break  # el elemento es menor (o igual) que sus dos hijos
+
+            vector.asignar(i, valor_hijo)  # el hijo sube al hueco...
+            i = hijo                       # ...y el hueco baja
+
+        vector.asignar(i, elemento)
 
 
     def insertar(self, valor):

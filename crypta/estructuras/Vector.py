@@ -13,12 +13,18 @@ class Vector:
         if i < 0 or i >= self._n:
             raise IndexError(f"Índice {i} fuera de rango. El vector tiene tamaño {self._n}")
 
+    # obtener y asignar revisan el índice aquí mismo, sin llamar a
+    # _verificar_indice: son lo que más se ejecuta en todo el programa (el
+    # montículo de la agenda las usa en cada evento) y en Python cada
+    # llamada a otra función cuesta. Lo midió el --bench (Fase 8).
     def obtener(self, i):
-        self._verificar_indice(i)
+        if i < 0 or i >= self._n:
+            raise IndexError(f"Índice {i} fuera de rango. El vector tiene tamaño {self._n}")
         return self._array[i]
     
     def asignar(self, i, valor):  # O(1)
-        self._verificar_indice(i)
+        if i < 0 or i >= self._n:
+            raise IndexError(f"Índice {i} fuera de rango. El vector tiene tamaño {self._n}")
         self._array[i] = valor
 
     def _crecer(self): #duplica capacidad

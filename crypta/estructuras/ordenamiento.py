@@ -18,6 +18,11 @@ UMBRAL_PEQUENO = 24
 UMBRAL_PEQUENO_COSTOSA = 16
 FRACCION_CASI_ORDENADO = 0.05
 
+# Fase 8 (lo midió el --bench): en un descenso, si el elemento es menor que
+# el que está esta cantidad de lugares ANTES, inserción tiene que correrlo
+# lejos: ya no es "casi ordenado" aunque haya pocos descensos.
+DISTANCIA_CASI_ORDENADO = 8
+
 
 def _identidad(x):
     return x
@@ -121,17 +126,39 @@ def elegir_algoritmo(vector, clave=None, comparacion_costosa=False):
       nombre): mergesort hace menos comparaciones, así que inserción solo
       conviene en tamaños aún más pequeños.
 
-    Límite conocido: los descensos no ven el caso de "dos bloques ordenados
-    grandes" (p. ej. [6,7,8,9,1,2,3,4]): tiene 1 descenso, pero a inserción
-    le cuesta O(n²). Está documentado en las pruebas y conviene medirlo.
+    Contar descensos no alcanza: "dos bloques ordenados" (p. ej.
+    [6,7,8,9,1,2,3,4]) tiene 1 solo descenso, pero a inserción le cuesta
+    O(n²) porque cada elemento del segundo bloque viaja lejos. El --bench
+    lo midió (1000 elementos: 83 ms contra 5 ms de mergesort). Por eso
+    _casi_ordenado revisa también qué tan lejos tiene que ir cada uno.
     """
     n = len(vector)
     umbral = UMBRAL_PEQUENO_COSTOSA if comparacion_costosa else UMBRAL_PEQUENO
     if n <= umbral:
         return "insercion"
-    if contar_descensos(vector, clave) <= n * FRACCION_CASI_ORDENADO:
+    if _casi_ordenado(vector, clave, n):
         return "insercion"
     return "mergesort"
+
+
+def _casi_ordenado(vector, clave, n):
+    """Pocos descensos Y ninguno obliga a correr un elemento lejos. O(n),
+    y se detiene apenas sabe que no."""
+    if clave is None:
+        clave = _identidad
+    maximo = n * FRACCION_CASI_ORDENADO
+    descensos = 0
+    for i in range(n - 1):
+        siguiente = clave(vector.obtener(i + 1))
+        if siguiente < clave(vector.obtener(i)):
+            descensos += 1
+            if descensos > maximo:
+                return False
+            # ¿Tiene que viajar más de DISTANCIA lugares hacia atrás?
+            lejos = i + 1 - DISTANCIA_CASI_ORDENADO
+            if lejos >= 0 and siguiente < clave(vector.obtener(lejos)):
+                return False
+    return True
 
 
 def ordenar(vector, clave=None, comparacion_costosa=False):

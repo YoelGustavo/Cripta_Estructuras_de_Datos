@@ -11,6 +11,13 @@ from crypta.estructuras.Vector import Vector
 # para lo indispensable, la sala a la que el jugador SÍ quiere entrar.
 RESERVA_PRECARGA = 2
 
+# §5.2: la búsqueda de salas para precargar (BFS) revisa como máximo esta
+# cantidad de salas. Sin tope, con casi toda la cripta cargada recorría el
+# mapa ENTERO en cada turno (5000 salas: unos 150 ms; lo encontró el
+# --bench). La precarga es para lo que está CERCA; lo lejano se pide cuando
+# de verdad se entra (garantizar_sala).
+LIMITE_VISITAS_PRECARGA = 100
+
 
 class GestorContenido:
 
@@ -23,6 +30,16 @@ class GestorContenido:
         # (en lotes de 10) las fichas que usan. Sin esto, la Partida
         # pediría cada ficha por separado, una solicitud por ficha.
         self._repositorio = repositorio
+
+        # Cuántas salas siguen sin contenido. Se cuenta UNA vez aquí y se
+        # descuenta al incorporar: cuando llega a 0 (toda la cripta
+        # cargada, lo normal sin conexión), la precarga no busca nada.
+        self._sin_cargar = 0
+        todas = mapa.obtener_todas()
+
+        for i in range(len(todas)):
+            if not todas.obtener(i).contenido_cargado():
+                self._sin_cargar += 1
 
         # Permite realizar solicitudes HTTP anticipadas
         # sin bloquear inmediatamente el juego.
@@ -65,11 +82,26 @@ class GestorContenido:
             ids
         )
 
-        self._mapa.asignar_contenidos(
-            respuesta["contenido"]
-        )
-
+        self._asignar(respuesta["contenido"])
         self._resolver_fichas(respuesta["contenido"])
+
+    def _asignar(self, contenidos):
+        """Agrega el contenido al mapa y descuenta las salas que pasaron de
+        "sin cargar" a cargadas (una sala que ya estaba no cuenta)."""
+        antes = self._contar_sin_cargar(contenidos)
+        self._mapa.asignar_contenidos(contenidos)
+        self._sin_cargar -= antes - self._contar_sin_cargar(contenidos)
+
+    def _contar_sin_cargar(self, contenidos):
+        cuantas = 0
+
+        for contenido in contenidos:
+            sala = self._mapa.obtener_sala(contenido["sala"])
+
+            if sala is not None and not sala.contenido_cargado():
+                cuantas += 1
+
+        return cuantas
 
     def _resolver_fichas(self, contenidos):
         """Las fichas de todo lo que trae ese contenido, en lotes de 10.
@@ -103,13 +135,20 @@ class GestorContenido:
         visitadas = ArbolBusqueda()
         salas_nuevas = Vector()
 
+        # Ya no falta ninguna: no hay nada que buscar (O(1)).
+        if self._sin_cargar == 0:
+            return salas_nuevas
+
         pendientes.encolar(id_sala)
         visitadas.insertar(id_sala, True)
+        revisadas = 0
 
         while (
             not pendientes.esta_vacia()
             and len(salas_nuevas) < 10
+            and revisadas < LIMITE_VISITAS_PRECARGA
         ):
+            revisadas += 1
             actual_id = pendientes.desencolar()
 
             actual = self._mapa.obtener_sala(
@@ -232,9 +271,7 @@ class GestorContenido:
         except RuntimeError:
             return
 
-        self._mapa.asignar_contenidos(
-            respuesta["contenido"]
-        )
+        self._asignar(respuesta["contenido"])
 
         # Las fichas son una apuesta igual que la precarga: si fallan, se
         # piden después, cuando de verdad se entra (garantizar_sala).

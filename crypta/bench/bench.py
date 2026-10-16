@@ -18,7 +18,7 @@ import sys
 import tempfile
 import time
 
-from crypta.bench import bench_agenda
+from crypta.bench import bench_agenda, bench_cache, bench_ciclo, bench_inventario, bench_ordenamiento
 from crypta.bench.medicion import formato_tiempo
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
@@ -214,6 +214,10 @@ def ejecutar_guardado(rapido=False):
 # (nombre para pedirla, título, función que mide y devuelve el texto)
 SECCIONES = (
     ("agenda", "Agenda de eventos (§4.1)", bench_agenda.ejecutar),
+    ("ciclo", "Ciclo entre dos decisiones (§5.2)", bench_ciclo.ejecutar),
+    ("cache", "Caché de fichas (§4.4)", bench_cache.ejecutar),
+    ("inventario", "Inventario e historial (§4.5 y §4.6)", bench_inventario.ejecutar),
+    ("ordenamiento", "Ordenamiento (§4.9)", bench_ordenamiento.ejecutar),
     ("guardado", "Guardado binario contra JSON (§4.10)", ejecutar_guardado),
 )
 
