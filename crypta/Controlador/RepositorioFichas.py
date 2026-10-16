@@ -19,6 +19,13 @@ class RepositorioFichas:
  
         # Único almacenamiento de fichas completas en memoria.
         self._cache = CacheLRU(cache_size)
+
+        # §5.1: al final de la partida se reportan aciertos y fallos de la
+        # caché en memoria. Un fallo se resuelve leyendo el disco o, si la
+        # ficha nunca se guardó, pidiéndola por red.
+        self.aciertos = 0
+        self.fallos_disco = 0
+        self.fallos_red = 0
  
     def extraer_ids_contenido(self, contenido):
         #ListaSimple con los ids de tipo (sin repetir) de un contenido.
@@ -67,6 +74,7 @@ class RepositorioFichas:
         # 1. Buscar en RAM.
         if self._cache.contiene(id_tipo):
             self._cache.obtener(id_tipo)
+            self.aciertos += 1
             return
  
         # 2. Buscar mediante lectura real de disco.
@@ -74,10 +82,12 @@ class RepositorioFichas:
  
         if ficha is not None:
             self._cache.insertar(id_tipo, ficha)
+            self.fallos_disco += 1
             return
  
         # 3. No existe en RAM ni en almacenamiento
         # persistente válido. Habrá que pedirla por red.
+        self.fallos_red += 1
         por_pedir.agregar_al_final(id_tipo)
  
     @staticmethod
@@ -138,6 +148,7 @@ class RepositorioFichas:
         )
  
         if ficha is not None:
+            self.aciertos += 1
             return ficha
  
         # 2. Disco
@@ -151,10 +162,12 @@ class RepositorioFichas:
                 ficha
             )
  
+            self.fallos_disco += 1
             return ficha
  
         # 3. Red (último recurso: no debería pasar si el contenido de la
         # sala se resolvió antes con resolver_contenidos)
+        self.fallos_red += 1
         lote = ListaSimple()
         lote.agregar_al_final(id_tipo)
  

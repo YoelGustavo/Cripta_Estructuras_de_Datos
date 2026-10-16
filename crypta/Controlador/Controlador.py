@@ -1,4 +1,7 @@
 
+import os
+import shutil
+
 from crypta.Controlador.Comandos import (
     ComandoInvalido,
     ejecutar_comando,
@@ -7,7 +10,28 @@ from crypta.Modelo.Partida import AccionInvalida
 from crypta.Vista.VistaConsola import VistaConsola
 from crypta.Adaptadores.GuardadoBinario import guardar_partida
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado
+from crypta.Adaptadores.RegistroPartida import ErrorRegistro, leer_registro
 from crypta.Controlador.GestorContenido import GestorContenido
+
+
+RUTA_GUARDADO = "partida.cripta"
+
+# Cuántos puestos de la tabla de puntajes se muestran.
+LIMITE_RANKING = 10
+
+
+def ruta_del_log_guardado(ruta_guardado):
+    """Cada partida guardada va acompañada de una COPIA del log hasta ese
+    momento: "partida.cripta" -> "partida.cripta.log"."""
+    return ruta_guardado + ".log"
+
+
+def copiar_archivo(origen, destino):
+    """Copia a un temporal y reemplaza de una sola vez: si el programa se
+    cae a mitad de la copia, el destino anterior queda intacto."""
+    temporal = destino + ".tmp"
+    shutil.copyfile(origen, temporal)
+    os.replace(temporal, destino)
 
 
 class Controlador:
@@ -21,6 +45,7 @@ class Controlador:
         registro=None,
         encabezado=None,
         repositorio_fichas=None,
+        tabla_puntajes=None,
     ):
         self.partida = partida
         self.gestor_contenido = gestor_contenido
@@ -28,10 +53,17 @@ class Controlador:
         self.registro = registro
         self.encabezado = encabezado
         self.repositorio_fichas = repositorio_fichas
+        self.tabla_puntajes = tabla_puntajes
     
     def iniciar(self):
         """Prepara la primera sala y ejecuta el ciclo de consola."""
         if not self.partida.iniciada:
+            # La sala inicial y sus vecinas más cercanas llegan en UNA sola
+            # solicitud (hasta 10 salas por lote, §3.4); garantizar_sala
+            # espera esa respuesta en vez de pedir la sala inicial sola.
+            self.gestor_contenido.precargar_async(
+                self.partida.id_sala_inicial
+            )
             self.gestor_contenido.garantizar_sala(
                 self.partida.id_sala_inicial
             )
@@ -54,7 +86,41 @@ class Controlador:
 
             self.procesar_comando(texto)
 
+        # El ciclo termina por "salir" o porque terminó la partida. Solo en
+        # el segundo caso hay final que mostrar y puntaje que registrar.
+        if self.partida.terminada:
+            self._terminar_partida()
+
         self.vista.mostrar_mensaje("Sesión finalizada.")
+
+    def _terminar_partida(self):
+        """§2.12: mostrar cómo terminó la partida y registrar su puntaje.
+        Se llama UNA sola vez: el ciclo ya no vuelve a empezar."""
+        # La última pantalla: el golpe final, "Has muerto" o la victoria.
+        self.vista.mostrar_estado(self.partida)
+
+        if self.tabla_puntajes is None or self.encabezado is None:
+            return
+
+        try:
+            puntaje = self.tabla_puntajes.registrar_partida(
+                self.partida,
+                self.encabezado.cripta_id,
+                self.encabezado.version_cripta,
+            )
+        except (OSError, ValueError) as error:
+            self.vista.mostrar_error(
+                f"No se pudo registrar el puntaje: {error}"
+            )
+            return
+
+        self.vista.mostrar_puntajes(
+            self.tabla_puntajes.ranking(
+                self.encabezado.cripta_id,
+                LIMITE_RANKING,
+            ),
+            puntaje,
+        )
 
     def procesar_comando(self, texto):
         """Interpreta comandos de interfaz y delega las acciones."""
@@ -81,6 +147,19 @@ class Controlador:
             )
             return True
 
+        if nombre == "puntajes" and len(partes) == 1:
+            if self.tabla_puntajes is None or self.encabezado is None:
+                self.vista.mostrar_error("No hay tabla de puntajes.")
+                return False
+
+            self.vista.mostrar_puntajes(
+                self.tabla_puntajes.ranking(
+                    self.encabezado.cripta_id,
+                    LIMITE_RANKING,
+                )
+            )
+            return True
+
         if nombre == "ordenar" and len(partes) == 2:
             try:
                 self.vista.mostrar_inventario_ordenado(
@@ -92,8 +171,7 @@ class Controlador:
                 self.vista.mostrar_error(str(error))
                 return False
 
-        # Los comandos de persistencia se conectarán
-        # cuando integremos los adaptadores correspondientes.
+        # Guardar y cargar no se anotan en el log: no cambian la partida.
         if nombre == "guardar" and len(partes) == 1:
             if self.encabezado is None:
                 self.vista.mostrar_error(
@@ -102,11 +180,7 @@ class Controlador:
                 return False
 
             try:
-                guardar_partida(
-                    self.partida,
-                    "partida.cripta",
-                    self.encabezado,
-                )
+                self.guardar(RUTA_GUARDADO)
             except (OSError, ValueError) as error:
                 self.vista.mostrar_error(
                     f"No se pudo guardar la partida: {error}"
@@ -114,13 +188,13 @@ class Controlador:
                 return False
 
             self.vista.mostrar_mensaje(
-                "Partida guardada correctamente en partida.cripta"
+                f"Partida guardada correctamente en {RUTA_GUARDADO}"
             )
             return True
 
         if nombre == "cargar" and len(partes) == 1:
             try:
-                self.cargar_partida("partida.cripta")
+                self.cargar_partida(RUTA_GUARDADO)
                 self.vista.mostrar_mensaje(
                     "Partida cargada correctamente."
                 )
@@ -157,8 +231,58 @@ class Controlador:
             self.vista.mostrar_error(str(error))
             return False
 
+        except RuntimeError as error:
+            # Sin red, o se agotó el presupuesto (PresupuestoAgotado es un
+            # RuntimeError). Pasa en garantizar_sala, ANTES de la acción:
+            # la partida no cambió y el comando no se anota. Se puede
+            # seguir jugando en las salas ya cargadas, guardar o salir.
+            self.vista.mostrar_error(
+                f"{error}. La acción no se hizo."
+            )
+            return False
 
-    def cargar_partida(self, ruta="partida.cripta"):
+
+    def guardar(self, ruta=RUTA_GUARDADO):
+        """Guarda la partida y, junto a ella, una copia del log hasta este
+        momento. Al cargar, esa copia vuelve a ser el log: así el log
+        siempre cuenta la historia de la partida que se está jugando, y el
+        --replay la repite exactamente (§4.11)."""
+        if self.registro is not None:
+            copiar_archivo(self.registro.ruta, ruta_del_log_guardado(ruta))
+
+        guardar_partida(
+            self.partida,
+            ruta,
+            self.encabezado,
+        )
+
+    def _revisar_log_guardado(self, ruta_log, encabezado_guardado):
+        """El log que acompaña al guardado tiene que existir y ser de ESA
+        partida. Si no, cargar dejaría un log que el --replay no puede
+        repetir: mejor no cargar y decirlo."""
+        if not os.path.exists(ruta_log):
+            raise ValueError(
+                f"Falta {ruta_log}, el registro de la partida guardada. "
+                f"Sin él, el --replay no podría repetir la partida."
+            )
+
+        try:
+            encabezado_log, _ = leer_registro(ruta_log)
+        except ErrorRegistro as error:
+            raise ValueError(
+                f"El registro de la partida guardada está dañado: {error}"
+            ) from error
+
+        if (encabezado_log.cripta_id != encabezado_guardado.cripta_id
+                or encabezado_log.version_cripta != encabezado_guardado.version_cripta
+                or encabezado_log.version_catalogo != encabezado_guardado.version_catalogo
+                or encabezado_log.semilla != encabezado_guardado.semilla
+                or encabezado_log.jugador != encabezado_guardado.jugador):
+            raise ValueError(
+                f"{ruta_log} no es el registro de la partida guardada."
+            )
+
+    def cargar_partida(self, ruta=RUTA_GUARDADO):
         if self.repositorio_fichas is None:
             raise ValueError(
                 "No hay un repositorio de fichas configurado."
@@ -187,6 +311,11 @@ class Controlador:
                 "La versión del catálogo no coincide."
             )
 
+        ruta_log = ruta_del_log_guardado(ruta)
+
+        if self.registro is not None:
+            self._revisar_log_guardado(ruta_log, encabezado_guardado)
+
         nueva_partida = archivo.cargar_partida(
             self.repositorio_fichas.obtener_ficha
         )
@@ -195,6 +324,7 @@ class Controlador:
             self.gestor_contenido._fuente,
             nueva_partida.mapa,
             encabezado_guardado.cripta_id,
+            self.repositorio_fichas,
         )
 
         # Sustituimos ambos únicamente después de restaurar
@@ -203,6 +333,11 @@ class Controlador:
         self.partida = nueva_partida
         self.gestor_contenido = nuevo_gestor
         self.encabezado = encabezado_guardado
+
+        # El log vuelve a ser el de la partida guardada. Lo que se jugó
+        # después de guardar ya no pasó: no puede quedar en el log.
+        if self.registro is not None:
+            copiar_archivo(ruta_log, self.registro.ruta)
 
         # No esperamos solicitudes HTTP antiguas para continuar.
         gestor_anterior._ejecutor.shutdown(
@@ -221,13 +356,12 @@ class Controlador:
         nombre = partes[0].lower()
 
         # Los nombres de la interfaz son diferentes de los del
-        # lenguaje común utilizado por el replay.
-        alias = {
-            "siguiente": "avanzar",
-            "anterior": "retroceder",
-        }
-
-        nombre = alias.get(nombre, nombre)
+        # lenguaje común utilizado por el replay. Sin dict (§7):
+        # son solo dos nombres, alcanza con comparar.
+        if nombre == "siguiente":
+            nombre = "avanzar"
+        elif nombre == "anterior":
+            nombre = "retroceder"
 
         if nombre == "recoger" and len(partes) == 2:
             if partes[1].lower() == "pergamino":

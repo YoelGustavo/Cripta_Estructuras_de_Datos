@@ -2,15 +2,27 @@ from concurrent.futures import ThreadPoolExecutor
 
 from crypta.estructuras.Cola import Cola
 from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
+from crypta.estructuras.ListaSimple import ListaSimple
 from crypta.estructuras.Vector import Vector
+
+
+# §5.1: la precarga es una apuesta (quizá el jugador nunca va a esas
+# salas). Nunca gasta las últimas solicitudes del presupuesto: esas quedan
+# para lo indispensable, la sala a la que el jugador SÍ quiere entrar.
+RESERVA_PRECARGA = 2
 
 
 class GestorContenido:
 
-    def __init__(self, fuente, mapa, cripta_id):
+    def __init__(self, fuente, mapa, cripta_id, repositorio=None):
         self._fuente = fuente
         self._mapa = mapa
         self._cripta_id = cripta_id
+
+        # Si se da, al llegar el contenido de unas salas se piden JUNTAS
+        # (en lotes de 10) las fichas que usan. Sin esto, la Partida
+        # pediría cada ficha por separado, una solicitud por ficha.
+        self._repositorio = repositorio
 
         # Permite realizar solicitudes HTTP anticipadas
         # sin bloquear inmediatamente el juego.
@@ -56,6 +68,14 @@ class GestorContenido:
         self._mapa.asignar_contenidos(
             respuesta["contenido"]
         )
+
+        self._resolver_fichas(respuesta["contenido"])
+
+    def _resolver_fichas(self, contenidos):
+        """Las fichas de todo lo que trae ese contenido, en lotes de 10.
+        Las que ya están en memoria o en disco no se piden."""
+        if self._repositorio is not None:
+            self._repositorio.resolver_contenidos(contenidos)
 
 
     def precargar_desde(self, id_sala):
@@ -125,7 +145,16 @@ class GestorContenido:
     # PRECARGA ASÍNCRONA
     # =========================================================
 
+    def _hay_presupuesto_para_precargar(self):
+        # Las fuentes de las pruebas no tienen presupuesto: sin el método,
+        # getattr da una función que devuelve None (= sin límite).
+        restantes = getattr(self._fuente, "solicitudes_restantes", lambda: None)()
+        return restantes is None or restantes > RESERVA_PRECARGA
+
     def precargar_async(self, id_sala):
+        if not self._hay_presupuesto_para_precargar():
+            return None
+
         salas = self._salas_para_precargar(id_sala)
 
         ids = []
@@ -186,15 +215,33 @@ class GestorContenido:
             if not futuro.done():
                 return
 
-            # Si ocurrió un error HTTP en el hilo, result()
-            # lo propaga aquí con el contexto manejado por FuenteHTTP.
+            self._incorporar_la_primera()
+
+    def _incorporar_la_primera(self):
+        """Saca la primera solicitud anticipada (espera si no terminó) y
+        agrega su contenido al mapa.
+
+        Si FALLÓ (sin red, presupuesto agotado...), se descarta y el juego
+        sigue: esas salas quedan sin cargar y garantizar_sala las pedirá
+        solo si el jugador de verdad entra. Antes, la solicitud fallida se
+        quedaba al frente de la cola y su error se repetía en cada turno."""
+        secuencia, ids, futuro = self._pendientes.desencolar()
+
+        try:
             respuesta = futuro.result()
+        except RuntimeError:
+            return
 
-            self._mapa.asignar_contenidos(
-                respuesta["contenido"]
-            )
+        self._mapa.asignar_contenidos(
+            respuesta["contenido"]
+        )
 
-            self._pendientes.desencolar()
+        # Las fichas son una apuesta igual que la precarga: si fallan, se
+        # piden después, cuando de verdad se entra (garantizar_sala).
+        try:
+            self._resolver_fichas(respuesta["contenido"])
+        except RuntimeError:
+            pass
 
     # =========================================================
     # ESPERAR UNA SALA QUE YA VIENE EN CAMINO
@@ -210,17 +257,9 @@ class GestorContenido:
 
         while not self._pendientes.esta_vacia():
 
-            secuencia, ids, futuro = self._pendientes.ver_frente()
-
             # Esperamos la solicitud que corresponde incorporar
             # primero según nuestro orden determinista.
-            respuesta = futuro.result()
-
-            self._mapa.asignar_contenidos(
-                respuesta["contenido"]
-            )
-
-            self._pendientes.desencolar()
+            self._incorporar_la_primera()
 
             sala = self._mapa.obtener_sala(id_sala)
 
@@ -239,30 +278,20 @@ class GestorContenido:
                 f"No existe la sala {id_sala}"
             )
 
-        # Caso 1:
-        # El contenido ya está disponible.
-        if sala.contenido_cargado():
-            return sala
+        # Caso 1: el contenido ya está disponible (no se hace nada).
 
         # Caso 2:
         # La sala ya está siendo descargada por una
         # solicitud anticipada.
-        futuro = self._buscar_pendiente_de_sala(id_sala)
-
-        if futuro is not None:
+        if (not sala.contenido_cargado()
+                and self._buscar_pendiente_de_sala(id_sala) is not None):
             self._esperar_hasta_sala(id_sala)
 
         # Caso 3:
-        # La sala no está cargada ni viene en una solicitud.
-        else:
-            respuesta = self._fuente.obtener_contenido(
-                self._cripta_id,
-                [id_sala]
-            )
-
-            self._mapa.asignar_contenidos(
-                respuesta["contenido"]
-            )
+        # La sala no está cargada ni venía en una solicitud (o venía en
+        # una anticipada que falló): se pide sola.
+        if not sala.contenido_cargado():
+            self._solicitar_lote([id_sala])
 
         # Nunca permitimos que el jugador entre a una sala
         # cuyo contenido siga siendo desconocido.
@@ -271,4 +300,17 @@ class GestorContenido:
                 f"No se pudo cargar el contenido de la sala {id_sala}"
             )
 
+        # Las fichas de la sala, ANTES de que la Partida las use. Si el
+        # contenido ya estaba (copia local, o una precarga cuyas fichas
+        # fallaron), aquí se completan. Lo que ya está en memoria o en
+        # disco no gasta red. Si falla, falla ANTES de la acción: la
+        # partida no queda a medias.
+        lote = ListaSimple()
+        lote.agregar_al_final(sala.contenido)
+        self._resolver_fichas(lote)
+
         return sala
+
+    def cerrar(self):
+        """Espera las solicitudes anticipadas en camino y apaga el hilo."""
+        self._ejecutor.shutdown(wait=True)

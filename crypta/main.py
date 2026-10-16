@@ -1,4 +1,3 @@
-
 import argparse
 import random
 import tempfile
@@ -6,24 +5,30 @@ import tempfile
 from crypta.Adaptadores.AlmacenDisco import AlmacenDisco
 from crypta.Adaptadores.FuenteHTTP import FuenteHTTP
 from crypta.Adaptadores.FuenteOffline import FuenteOffline
-from crypta.Controlador.RepositorioFichas import RepositorioFichas
-
 from crypta.Adaptadores.RegistroPartida import (
     Encabezado,
-    RegistroPartida,
-    leer_registro,
     ErrorRegistro,
+    RegistroPartida,
 )
 
 from crypta.Controlador.Controlador import Controlador
-from crypta.Controlador.Comandos import ejecutar_comando
+from crypta.Controlador.Fabrica import nueva_partida
 from crypta.Controlador.GestorContenido import GestorContenido
 from crypta.Controlador.GestorCripta import GestorCripta
-
-from crypta.Modelo.Jugador import Jugador
-from crypta.Modelo.Partida import Partida
+from crypta.Controlador.PreparadorReplay import PreparadorReplay
+from crypta.Controlador.RepositorioFichas import RepositorioFichas
+from crypta.Modelo.TablaPuntajes import ErrorTablaPuntajes, TablaPuntajes
+from crypta.Controlador.Reproductor import (
+    ReproduccionFallida,
+    ReproduccionIncompatible,
+    Reproductor,
+)
 
 from crypta.Vista.VistaConsola import VistaConsola
+
+
+# La tabla de puntajes (§2.12): un archivo de texto de solo anexado.
+RUTA_PUNTAJES = "puntajes.txt"
 
 
 def crear_argumentos():
@@ -79,15 +84,21 @@ def crear_argumentos():
     return parser.parse_args()
 
 
+
+def crear_fuente(args, almacen):
+    """El ÚNICO lugar donde se decide entre red y modo sin conexión (§6)."""
+    if args.offline:
+        return FuenteOffline(almacen)
+
+    return FuenteHTTP()
+
+
 def crear_partida(args):
-    """Construye los componentes de una partida."""
+    """Construye los componentes de una partida para JUGAR.
+    (Para reproducir se usa PreparadorReplay, con el mismo nueva_partida.)"""
 
     almacen = AlmacenDisco()
-
-    if args.offline:
-        fuente = FuenteOffline(almacen)
-    else:
-        fuente = FuenteHTTP()
+    fuente = crear_fuente(args, almacen)
 
     gestor_cripta = GestorCripta(
         fuente,
@@ -98,6 +109,10 @@ def crear_partida(args):
         args.cripta
     )
 
+    # §5.1: desde aquí la fuente no deja pasar del presupuesto de la
+    # cripta. (En modo sin conexión no hace nada: no hay red.)
+    fuente.fijar_presupuesto(datos_cripta["presupuesto_solicitudes"])
+
     version_catalogo = fuente.obtener_version_catalogo()["version"]
 
     repositorio = RepositorioFichas(
@@ -107,37 +122,26 @@ def crear_partida(args):
         cache_size=args.cache_size
     )
 
-    datos_jugador = datos_cripta["jugador"]
-
-    jugador = Jugador(
-        nombre=args.jugador,
-        vida_max=datos_jugador["vida_max"],
-        ataque=datos_jugador["ataque"],
-        defensa=datos_jugador["defensa"],
-        velocidad=datos_jugador["velocidad"],
-        inventario_max=datos_cripta["inventario_max"]
-    )
-
     semilla = (
         args.semilla
         if args.semilla is not None
         else random.randint(0, 2**31 - 1)
     )
 
-    partida = Partida(
-        mapa=mapa,
-        jugador=jugador,
-        id_sala_inicial=datos_cripta["sala_inicial"],
-        fichas=repositorio.obtener_ficha,
-        semilla=semilla,
-        id_sala_salida=datos_cripta["sala_salida"],
-        llave_salida=datos_cripta["llave_salida"]
+    # El MISMO código que usa el replay para armar la partida.
+    partida = nueva_partida(
+        datos_cripta,
+        mapa,
+        repositorio.obtener_ficha,
+        semilla,
+        args.jugador
     )
 
     gestor_contenido = GestorContenido(
         fuente,
         mapa,
-        args.cripta
+        args.cripta,
+        repositorio
     )
 
     encabezado = Encabezado(
@@ -148,24 +152,18 @@ def crear_partida(args):
         jugador=args.jugador
     )
 
-    # En modo replay no se crea ni sobrescribe el registro.
-    registro = None
+    registro = RegistroPartida.crear(
+        "partida.log",
+        encabezado
+    )
 
-    if args.replay is None:
-        registro = RegistroPartida.crear(
-            "partida.log",
-            encabezado
-        )
-
-    # En replay no se instancia VistaConsola ni Controlador.
-    if args.replay is not None:
-        return (
-            partida,
-            gestor_contenido,
-            gestor_cripta,
-            datos_cripta,
-            encabezado,
-        )
+    # Un archivo de puntajes dañado no impide jugar: se avisa y esta
+    # partida simplemente no se registra (no se sobrescribe el archivo).
+    try:
+        tabla = TablaPuntajes(RUTA_PUNTAJES)
+    except ErrorTablaPuntajes as error:
+        print(f"Aviso: {error}. Esta partida no se registrará en la tabla de puntajes.")
+        tabla = None
 
     controlador = Controlador(
         partida=partida,
@@ -173,65 +171,64 @@ def crear_partida(args):
         vista=VistaConsola(),
         registro=registro,
         encabezado=encabezado,
-        repositorio_fichas=repositorio
+        repositorio_fichas=repositorio,
+        tabla_puntajes=tabla
     )
 
-    return controlador, gestor_cripta, datos_cripta
+    return controlador, gestor_cripta, datos_cripta, fuente
 
 
-def reproducir_partida(partida, gestor, encabezado_actual,
-                      encabezado_registro, comandos):
-    """Reproduce comandos internos sin vista ni entrada de teclado."""
+def reproducir(args):
+    """--replay: repite el log con el Reproductor de la Fase 6, SIN vista
+    ni teclado (§6). Devuelve el código de salida del programa."""
 
-    if encabezado_registro.cripta_id != encabezado_actual.cripta_id:
-        raise ValueError(
-            "La cripta del registro no coincide."
-        )
+    almacen = AlmacenDisco()
+    preparador = PreparadorReplay(
+        crear_fuente(args, almacen),
+        almacen,
+        args.cache_size
+    )
 
-    if encabezado_registro.version_cripta != encabezado_actual.version_cripta:
-        raise ValueError(
-            "La versión de la cripta no coincide."
-        )
+    try:
+        resultado = Reproductor(preparador).reproducir(args.replay)
 
-    if encabezado_registro.version_catalogo != encabezado_actual.version_catalogo:
-        raise ValueError(
-            "La versión del catálogo no coincide."
-        )
+    except ErrorRegistro as error:
+        print(f"El registro no se puede leer: {error}")
+        return 1
 
-    if encabezado_registro.semilla != encabezado_actual.semilla:
-        raise ValueError(
-            "La semilla del registro no coincide."
-        )
+    except ReproduccionIncompatible as error:
+        print(f"Reproducción incompatible: {error}")
+        return 1
 
-    if not partida.iniciada:
-        gestor.garantizar_sala(
-            partida.id_sala_inicial
-        )
-        partida.iniciar()
+    except ReproduccionFallida as error:
+        print(f"Reproducción fallida: {error}")
+        return 1
 
-    cantidad = 0
+    except (RuntimeError, ValueError, OSError) as error:
+        print(f"Error durante la reproducción: {error}")
+        return 1
 
-    while not comandos.esta_vacia() and not partida.terminada:
-        comando = comandos.desencolar()
+    finally:
+        preparador.cerrar()
 
-        ejecutar_comando(
-            partida,
-            comando,
-            garantizar_sala=gestor.garantizar_sala
-        )
+    partida = resultado.partida
+    jugador = partida.jugador
 
-        cantidad += 1
-
+    print(f"Cripta: {resultado.encabezado.cripta_id}")
+    print(f"Jugador: {resultado.encabezado.jugador}")
+    print(f"Semilla: {resultado.encabezado.semilla}")
+    print(f"Replay terminado: {resultado.comandos} comandos repetidos.")
+    print(f"Reloj: {partida.reloj}")
+    print(f"Sala actual: {jugador.sala_actual}")
+    print(f"Vida: {jugador.vida}/{jugador.vida_max}")
+    print(f"Acciones del jugador: {partida.acciones_jugador}")
     print(
-        f"Replay finalizado: {cantidad} comandos ejecutados."
+        f"Resultado: {partida.resultado}"
+        if partida.terminada
+        else "Resultado: la partida no había terminado"
     )
 
-    print(f"Sala actual: {partida.jugador.sala_actual}")
-    print(
-        f"Vida: {partida.jugador.vida}/{partida.jugador.vida_max}"
-    )
-
-    return cantidad
+    return 0
 
 
 def ejecutar_benchmarks():
@@ -280,95 +277,67 @@ def main():
         ejecutar_benchmarks()
         return 0
 
-    encabezado_registro = None
-    comandos_replay = None
-
-    if args.replay is not None:
-        try:
-            encabezado_registro, comandos_replay = leer_registro(
-                args.replay
-            )
-        except ErrorRegistro as error:
-            print(f"Error de replay: {error}")
-            return 1
-
-        args.cripta = encabezado_registro.cripta_id
-        args.jugador = encabezado_registro.jugador
-        args.semilla = encabezado_registro.semilla
-
     print("=" * 45)
     print("              CRIPTA")
     print("=" * 45)
 
-    gestor_contenido = None
+    # El replay no crea la vista ni el controlador (§6).
+    if args.replay is not None:
+        print(
+            "Modo: REPLAY OFFLINE"
+            if args.offline
+            else "Modo: REPLAY ONLINE"
+        )
+        return reproducir(args)
+
+    controlador = None
+    codigo = 0
 
     try:
-        if args.replay is not None:
-            (
-                partida,
-                gestor_contenido,
-                gestor_cripta,
-                datos_cripta,
-                encabezado_actual,
-            ) = crear_partida(args)
+        controlador, gestor_cripta, datos_cripta, fuente = crear_partida(
+            args
+        )
 
-            print(f"Cripta: {args.cripta}")
-            print(f"Jugador: {args.jugador}")
-            print(f"Semilla: {partida.semilla}")
-            print(
-                "Modo: REPLAY OFFLINE"
-                if args.offline
-                else "Modo: REPLAY ONLINE"
-            )
+        print(f"Cripta: {args.cripta}")
+        print(f"Jugador: {args.jugador}")
+        print(f"Semilla: {controlador.partida.semilla}")
+        print(
+            "Modo: OFFLINE" if args.offline
+            else "Modo: ONLINE"
+        )
 
-            reproducir_partida(
-                partida,
-                gestor_contenido,
-                encabezado_actual,
-                encabezado_registro,
-                comandos_replay
-            )
-
-            mapa_final = partida.mapa
-
-        else:
-            controlador, gestor_cripta, datos_cripta = crear_partida(
-                args
-            )
-
-            gestor_contenido = controlador.gestor_contenido
-
-            print(f"Cripta: {args.cripta}")
-            print(f"Jugador: {args.jugador}")
-            print(f"Semilla: {controlador.partida.semilla}")
-            print(
-                "Modo: OFFLINE" if args.offline
-                else "Modo: ONLINE"
-            )
-
-            controlador.iniciar()
-
-            mapa_final = controlador.partida.mapa
+        controlador.iniciar()
 
         # Conservar los datos descargados en modo online.
         if not args.offline:
             gestor_cripta.persistir(
                 args.cripta,
                 datos_cripta,
-                mapa_final
+                controlador.partida.mapa
             )
 
     except (RuntimeError, ValueError, OSError) as error:
         print(f"\nError: {error}")
-        return 1
+        codigo = 1
 
     finally:
-        if gestor_contenido is not None:
-            gestor_contenido._ejecutor.shutdown(
-                wait=True
+        if controlador is not None:
+            # Al cargar una partida el controlador cambia de gestor: se
+            # cierra el que tiene AHORA.
+            controlador.gestor_contenido.cerrar()
+
+            # §5.1: el reporte sale siempre que se jugó, aunque haya
+            # habido un error.
+            repositorio = controlador.repositorio_fichas
+            controlador.vista.mostrar_reporte(
+                fuente.cantidad_solicitudes(),
+                datos_cripta["presupuesto_solicitudes"],
+                repositorio.aciertos,
+                repositorio.fallos_disco,
+                repositorio.fallos_red,
             )
 
-    return 0
+    return codigo
 
 
 if __name__ == "__main__":

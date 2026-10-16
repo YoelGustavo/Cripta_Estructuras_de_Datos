@@ -1,3 +1,4 @@
+import threading
 import time
 import uuid
 import requests
@@ -6,6 +7,11 @@ from crypta.Adaptadores.FuenteDatos import FuenteDatos
 
 
 BASE_URL = "https://cripta-api.kad06a0zhgs84.us-east-2.cs.amazonlightsail.com/v1"
+
+
+class PresupuestoAgotado(RuntimeError):
+    """§5.1: se llegó a presupuesto_solicitudes de la cripta. La solicitud
+    NO se envía."""
 
 
 class FuenteHTTP(FuenteDatos):
@@ -20,10 +26,41 @@ class FuenteHTTP(FuenteDatos):
 
         self._solicitudes = 0
 
+        # None = todavía no se conoce la cripta (sin límite). Se fija con
+        # fijar_presupuesto apenas llegan sus datos generales.
+        self._presupuesto = None
+
+        # La precarga pide desde OTRO hilo: el contador se revisa y se
+        # suma de a uno por vez, para que dos hilos no se pasen juntos.
+        self._candado = threading.Lock()
+
+    def fijar_presupuesto(self, presupuesto):
+        self._presupuesto = presupuesto
+
+    def solicitudes_restantes(self):
+        if self._presupuesto is None:
+            return None
+
+        return max(0, self._presupuesto - self._solicitudes)
+
+    def _contar_una(self, ruta):
+        """Cuenta una solicitud ANTES de enviarla; si ya no hay presupuesto,
+        no se envía. Las solicitudes hechas antes de conocer la cripta
+        (lista y datos generales) también cuentan (§5.1: "toda solicitud")."""
+        with self._candado:
+            if (self._presupuesto is not None
+                    and self._solicitudes >= self._presupuesto):
+                raise PresupuestoAgotado(
+                    f"Se agotó el presupuesto de {self._presupuesto} "
+                    f"solicitudes de red de esta cripta (al pedir {ruta})"
+                )
+
+            self._solicitudes += 1
+
     def _get(self, ruta):
         while True:
             # Todo intento HTTP cuenta, incluso un reintento por 429
-            self._solicitudes += 1
+            self._contar_una(ruta)
 
             try:
                 respuesta = requests.get(
