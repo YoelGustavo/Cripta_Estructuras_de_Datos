@@ -144,6 +144,16 @@ class Agenda:
         """El número de secuencia que recibirá el próximo evento."""
         return self._siguiente_secuencia
 
+    def recorrer_pendientes(self):
+        """Recorre los eventos pendientes SIN ordenarlos: O(n). Es para
+        quien solo necesita mirarlos todos (el controlador, al buscar los
+        enemigos despiertos para las fichas en uso, §4.4). No cambia nada.
+        eventos_pendientes, en cambio, los ordena por secuencia porque el
+        guardado necesita ese orden; ordenar en cada turno costaría más."""
+        for evento in self._monticulo:
+            if _esta_pendiente(evento):
+                yield evento
+
     def eventos_pendientes(self):
         """Vector con los eventos pendientes, ordenados por secuencia. Los
         cancelados que siguen dentro del montículo (borrado perezoso) no

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+partida.log
+partida.cripta
+partida.cripta.log
+*.tmp
+puntajes.txt
+
+cache_prueba_integracion/

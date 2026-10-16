@@ -1,3 +1,19 @@
+"""--offline: la fuente de datos sin red (§3).
+
+El enunciado dice que el curso publicaría un "paquete de respuestas
+previamente descargadas". No se publicó, así que el paquete es la COPIA
+LOCAL que el propio programa guarda al jugar con conexión (carpeta cache/):
+el esqueleto, el contenido de las salas que se cargaron, los datos
+generales de la cripta y las fichas del catálogo.
+
+Devuelve lo mismo que FuenteHTTP (el mismo "contrato"): ni el modelo ni el
+controlador saben si los datos vinieron de la red o del disco (§6). Si el
+curso publica el paquete, solo cambia esta clase.
+
+Límite (decisión del grupo): sin conexión solo se puede entrar a las salas
+que se cargaron alguna vez con conexión. Entrar a otra no termina la
+partida: el controlador avisa y la acción no se hace.
+"""
 
 import json
 
@@ -21,8 +37,9 @@ class FuenteOffline(FuenteDatos):
     def _cripta_local(self, cripta_id):
         if not self._almacen.existe_cripta(cripta_id):
             raise RuntimeError(
-                f"La cripta {cripta_id} no está "
-                "disponible en la caché local."
+                f"Modo sin conexión: la cripta {cripta_id} no tiene "
+                f"copia local. Juégala una vez con conexión para que "
+                f"se guarde (queda en la carpeta cache)"
             )
 
         try:
@@ -121,8 +138,9 @@ class FuenteOffline(FuenteDatos):
 
             if encontrado is None:
                 raise RuntimeError(
-                    f"No hay contenido local para "
-                    f"la sala {id_sala}."
+                    f"Modo sin conexión: la sala {id_sala} no está en "
+                    f"la copia local. Sin conexión solo se puede entrar "
+                    f"a salas que ya se cargaron alguna vez con conexión"
                 )
 
             resultado.append(encontrado)

@@ -48,7 +48,15 @@ class VistaConsola:
         print("=" * 55)
 
         print(f"\nSALA: {sala.nombre} (ID: {sala.id})")
-        print(f"Vida: {jugador.vida}/{jugador.vida_max}")
+        # §10.2: "vida y estadísticas relevantes". Ataque y defensa ya
+        # incluyen el arma y la armadura equipadas; la velocidad cambia
+        # con las pociones.
+        print(
+            f"Vida: {jugador.vida}/{jugador.vida_max} | "
+            f"Ataque: {jugador.ataque_total()} | "
+            f"Defensa: {jugador.defensa_total()} | "
+            f"Velocidad: {jugador.velocidad}"
+        )
         print(f"Pergaminos: {inventario.cantidad_pergaminos()}")
 
         efectos = []
@@ -69,6 +77,11 @@ class VistaConsola:
 
             hay_salidas = True
             estado = "Cerrada" if puerta.esta_cerrada() else "Abierta"
+
+            # Para decidir si se puede abrir, hay que saber qué llave pide.
+            if puerta.esta_cerrada() and puerta.requiere_llave():
+                estado += f", necesita {puerta.llave}"
+
             print(f"  {direccion}: sala {puerta.sala_destino} ({estado})")
 
         if not hay_salidas:
@@ -85,7 +98,7 @@ class VistaConsola:
                 print(
                     f"  {i + 1}. {enemigo.nombre} "
                     f"[{enemigo.id_instancia}] "
-                    f"- Vida: {enemigo.vida}"
+                    f"- Vida: {enemigo.vida}/{enemigo.vida_max}"
                 )
 
         print("\nOBJETOS EN EL SUELO")

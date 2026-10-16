@@ -30,6 +30,10 @@ from crypta.Vista.VistaConsola import VistaConsola
 # La tabla de puntajes (§2.12): un archivo de texto de solo anexado.
 RUTA_PUNTAJES = "puntajes.txt"
 
+# El registro de la partida (§4.11). Es el de la ÚLTIMA partida: la
+# siguiente lo reemplaza (para conservarlo, hay que copiarlo).
+RUTA_REGISTRO = "partida.log"
+
 
 def crear_argumentos():
     parser = argparse.ArgumentParser(
@@ -153,7 +157,7 @@ def crear_partida(args):
     )
 
     registro = RegistroPartida.crear(
-        "partida.log",
+        RUTA_REGISTRO,
         encabezado
     )
 
@@ -308,23 +312,39 @@ def main():
 
         controlador.iniciar()
 
-        # Conservar los datos descargados en modo online.
-        if not args.offline:
-            gestor_cripta.persistir(
-                args.cripta,
-                datos_cripta,
-                controlador.partida.mapa
-            )
-
     except (RuntimeError, ValueError, OSError) as error:
         print(f"\nError: {error}")
         codigo = 1
+
+    except KeyboardInterrupt:
+        # Ctrl+C fuera de la lectura de comandos (mientras se carga una
+        # sala, por ejemplo): se termina igual de ordenado.
+        print("\nPartida interrumpida.")
 
     finally:
         if controlador is not None:
             # Al cargar una partida el controlador cambia de gestor: se
             # cierra el que tiene AHORA.
             controlador.gestor_contenido.cerrar()
+
+            # Conservar lo descargado (modo en línea) SIEMPRE, también si
+            # hubo un error o un Ctrl+C: el replay necesita la copia local.
+            if not args.offline:
+                try:
+                    gestor_cripta.persistir(
+                        args.cripta,
+                        datos_cripta,
+                        controlador.partida.mapa
+                    )
+                except OSError as error:
+                    print(f"No se pudo guardar la copia local: {error}")
+
+            print(
+                f"\nLa partida quedó registrada en {RUTA_REGISTRO} "
+                f"(la próxima partida lo reemplaza). Para repetirla:\n"
+                f"  python -m crypta.main"
+                f"{' --offline' if args.offline else ''} --replay {RUTA_REGISTRO}"
+            )
 
             # §5.1: el reporte sale siempre que se jugó, aunque haya
             # habido un error.

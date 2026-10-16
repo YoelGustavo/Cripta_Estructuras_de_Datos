@@ -15,6 +15,7 @@ from crypta.Adaptadores.FuenteOffline import FuenteOffline
 from crypta.Controlador.Controlador import Controlador
 from crypta.Controlador.Comandos import ComandoInvalido
 from crypta.Controlador.Fabrica import nueva_partida
+from crypta.Controlador.FichasEnUso import FichasEnUso
 from crypta.Controlador.GestorContenido import GestorContenido
 from crypta.Controlador.RepositorioFichas import RepositorioFichas
 from crypta.Controlador.PreparadorReplay import PreparadorReplay
@@ -23,8 +24,9 @@ from crypta.Controlador.Reproductor import (
     ReproduccionIncompatible,
     Reproductor,
 )
+from crypta.Modelo.Agenda import Agenda
 from crypta.Modelo.Mapa import Mapa
-from crypta.Modelo.Partida import AccionInvalida
+from crypta.Modelo.Partida import TURNO_ENEMIGO, AccionInvalida
 from crypta.Modelo.TablaPuntajes import Puntaje, TablaPuntajes
 from crypta.Vista.VistaConsola import VistaConsola
 
@@ -278,12 +280,12 @@ class ConCriptaDePrueba(unittest.TestCase):
         os.chdir(self._antes)
         self._carpeta.cleanup()
 
-    def sesion(self, comandos, semilla=7):
+    def sesion(self, comandos, semilla=7, cache_size=25):
         """Una ejecución del programa, con el main y el controlador DE
         VERDAD; solo la vista es falsa (escribe los comandos de la lista y
         al final "salir"). Devuelve el controlador."""
         args = Namespace(cripta="c-prueba", offline=True, jugador="Ana",
-                         semilla=semilla, cache_size=25, replay=None,
+                         semilla=semilla, cache_size=cache_size, replay=None,
                          bench=False)
 
         with patch("crypta.main.AlmacenDisco", return_value=self.almacen):
@@ -980,6 +982,251 @@ class TestPresupuestoEnElJuego(ConCriptaDePrueba):
 
         self.assertEqual(controlador.gestor_contenido._fuente.cantidad_solicitudes(), 0)
         self.assertEqual(repositorio.fallos_red, 0)
+
+
+# ======================================================================
+# CORRECCIÓN 6: las fichas en uso no se desalojan (§4.4)
+# ======================================================================
+
+class TestRecorrerPendientes(unittest.TestCase):
+
+    def test_solo_los_que_todavia_van_a_ocurrir(self):
+        agenda = Agenda()
+        a = agenda.programar(10, "a")
+        b = agenda.programar(20, "b")
+        c = agenda.programar(30, "c")
+        agenda.cancelar(b)
+        agenda.siguiente()                       # ocurre a
+
+        self.assertEqual(list(agenda.recorrer_pendientes()), [c])
+        self.assertEqual(len(agenda), 1)         # mirar no cambia nada
+
+
+def partida_falsa(eventos=(), inventario=(), suelo=(), trampas=(), enemigos=()):
+    """Lo mínimo que FichasEnUso lee de una partida."""
+    sala = Mock()
+    sala.cantidad_objetos.return_value = len(suelo)
+    sala.objeto_en.side_effect = lambda i: suelo[i]
+    sala.cantidad_trampas.return_value = len(trampas)
+    sala.trampa_en.side_effect = lambda i: Mock(tipo=trampas[i])
+    sala.cantidad_enemigos.return_value = len(enemigos)
+    sala.enemigo_en.side_effect = lambda i: Mock(tipo=enemigos[i])
+
+    partida = Mock()
+    partida.sala_actual.return_value = sala
+    partida.jugador.inventario.orden_real.return_value = [
+        {"id": i} for i in inventario]
+    partida.agenda.recorrer_pendientes.side_effect = lambda: iter(eventos)
+    return partida
+
+
+class TestFichasEnUso(unittest.TestCase):
+
+    def setUp(self):
+        self.repositorio = Mock()
+        self.fichas = FichasEnUso(self.repositorio)
+
+    def marcadas(self):
+        return sorted(c[0][0] for c in self.repositorio.marcar_en_uso.call_args_list)
+
+    def liberadas(self):
+        return sorted(c[0][0] for c in self.repositorio.liberar_uso.call_args_list)
+
+    def test_marca_todo_lo_que_pide_el_enunciado(self):
+        despierto = Mock(tipo=TURNO_ENEMIGO, objetivo=Mock(tipo="ent_lejos"))
+        otro_evento = Mock(tipo="cierre_puerta", objetivo=Mock(tipo="no"))
+
+        self.fichas.actualizar(partida_falsa(
+            eventos=[despierto, otro_evento], inventario=["itm_daga"],
+            suelo=["itm_llave"], trampas=["trp_dardos"],
+            enemigos=["ent_rata", "ent_rata"]))
+
+        # Cada id una sola vez, aunque haya dos ratas.
+        self.assertEqual(self.marcadas(), ["ent_lejos", "ent_rata", "itm_daga",
+                                           "itm_llave", "trp_dardos"])
+
+    def test_libera_lo_que_ya_no_se_usa_y_no_repite_marcas(self):
+        self.fichas.actualizar(partida_falsa(inventario=["itm_daga"],
+                                             suelo=["itm_llave"]))
+        self.fichas.actualizar(partida_falsa(inventario=["itm_daga"]))
+
+        self.assertEqual(self.marcadas(), ["itm_daga", "itm_llave"])
+        self.assertEqual(self.liberadas(), ["itm_llave"])
+        self.assertTrue(self.fichas.esta_marcada("itm_daga"))
+        self.assertFalse(self.fichas.esta_marcada("itm_llave"))
+
+
+class TestFichasEnUsoEnElJuego(ConCriptaDePrueba):
+    """Con el juego de verdad y una caché de UNA sola ficha: si no fuera
+    por las fichas en uso, cada ficha nueva desalojaría a la anterior."""
+
+    def en_uso(self, controlador, *ids):
+        repositorio = controlador.repositorio_fichas
+        return [repositorio.esta_en_uso(i) for i in ids]
+
+    def test_al_empezar_ya_esta_en_uso_lo_de_la_sala_inicial(self):
+        controlador = self.sesion([])
+
+        self.assertEqual(self.en_uso(controlador, "itm_antorcha", "itm_daga",
+                                     "ent_rata"),
+                         [True, True, False])
+
+    def test_lo_que_se_usa_queda_en_memoria_aunque_no_quepa(self):
+        controlador = self.sesion(["recoger 2", "mover N"], cache_size=1)
+        repositorio = controlador.repositorio_fichas
+
+        # Daga en el inventario; ratas y llave en la sala 2: en uso.
+        # La antorcha quedó en el suelo de la sala 1: ya no.
+        self.assertEqual(
+            self.en_uso(controlador, "itm_daga", "ent_rata", "itm_llave",
+                        "itm_antorcha"),
+            [True, True, True, False])
+        self.assertTrue(repositorio.esta_en_memoria("itm_daga"))
+        self.assertTrue(repositorio.esta_en_memoria("ent_rata"))
+
+    def test_al_morir_los_enemigos_su_ficha_se_libera(self):
+        controlador = self.sesion(GANAR, cache_size=1)
+
+        self.assertEqual(controlador.partida.resultado, "victoria")
+        self.assertEqual(
+            self.en_uso(controlador, "ent_rata", "itm_daga", "itm_llave"),
+            [False, True, True])
+
+    def test_al_cargar_se_recalcula(self):
+        # Se guarda en la sala 1; después se entra a la 2 (ratas despiertas)
+        # y se carga: las ratas vuelven a estar dormidas y lejos.
+        controlador = self.sesion(["recoger 2", "guardar", "mover N", "cargar"])
+
+        self.assertEqual(controlador.partida.jugador.sala_actual, 1)
+        self.assertEqual(self.en_uso(controlador, "ent_rata", "itm_daga"),
+                         [False, True])
+
+
+# ======================================================================
+# CORRECCIÓN 7: el modo sin conexión (--offline, §3)
+# ======================================================================
+# No hay paquete del curso: --offline usa la copia local que el programa
+# guarda al jugar con conexión (ver FuenteOffline.py).
+
+class TestModoSinConexion(ConCriptaDePrueba):
+
+    def test_no_usa_la_red(self):
+        with patch("crypta.Adaptadores.FuenteHTTP.requests.get",
+                   side_effect=AssertionError("usó la red")) as get:
+            partida = self.jugar(GANAR)
+
+        self.assertEqual(partida.resultado, "victoria")
+        get.assert_not_called()
+
+    def test_una_sala_sin_copia_local_no_termina_la_partida(self):
+        # La copia local solo tiene el contenido de la sala 1.
+        self.almacen.guardar_cripta("c-prueba", "v1", ESQUELETO_PRUEBA,
+                                    CONTENIDOS_PRUEBA[:1],
+                                    datos_generales=DATOS_PRUEBA)
+
+        controlador = self.sesion(["mover N", "recoger 1", "mover N"])
+        errores = [c[0][0] for c in controlador.vista.mostrar_error.call_args_list]
+
+        self.assertEqual(len(errores), 2)
+        self.assertIn("sin conexión", errores[0])
+        self.assertTrue(errores[0].endswith("con conexión. La acción no se hizo."))
+        self.assertEqual(controlador.partida.jugador.sala_actual, 1)
+        self.assertFalse(controlador.partida.terminada)
+        # Se siguió jugando: "recoger 1" sí se hizo y quedó en el log.
+        self.assertEqual(leer("partida.log").split("---")[1].split(),
+                         ["recoger", "0"])
+
+    def test_sin_copia_local_lo_dice_y_termina_bien(self):
+        vacio = AlmacenDisco(os.path.join(self.carpeta, "otra_cache"))
+        salida = io.StringIO()
+        argumentos = ["crypta", "--offline", "--cripta", "c-prueba"]
+
+        with patch("crypta.main.AlmacenDisco", return_value=vacio), \
+                patch.object(sys, "argv", argumentos), \
+                redirect_stdout(salida):
+            codigo = programa.main()
+
+        self.assertEqual(codigo, 1)
+        self.assertIn("no tiene copia local", salida.getvalue())
+
+
+# ======================================================================
+# CORRECCIÓN 8: detalles finales
+# ======================================================================
+
+class TestDetallesFinales(ConCriptaDePrueba):
+
+    def pantalla(self, partida):
+        salida = io.StringIO()
+        with redirect_stdout(salida):
+            VistaConsola().mostrar_estado(partida)
+        return salida.getvalue()
+
+    def correr(self, vista, en_linea=False):
+        """El main de verdad con una vista falsa; en línea usa el servidor
+        falso y una caché vacía."""
+        servidor = ServidorFalso()
+        almacen = (AlmacenDisco(os.path.join(self.carpeta, "cache_vacia"))
+                   if en_linea else self.almacen)
+        argumentos = ["crypta", "--cripta", "c-prueba", "--semilla", "7"]
+        if not en_linea:
+            argumentos.append("--offline")
+        salida = io.StringIO()
+
+        with patch("crypta.main.AlmacenDisco", return_value=almacen), \
+                patch("crypta.main.VistaConsola", return_value=vista), \
+                patch("crypta.Adaptadores.FuenteHTTP.requests.get",
+                      side_effect=servidor.get), \
+                patch.object(sys, "argv", argumentos), \
+                redirect_stdout(salida):
+            codigo = programa.main()
+
+        return codigo, salida.getvalue(), almacen
+
+    def test_la_pantalla_muestra_las_estadisticas(self):
+        partida = self.jugar(["recoger 2", "equipar"])
+
+        texto = self.pantalla(partida)
+
+        # Ataque 6 + 3 de la daga equipada.
+        self.assertIn("Ataque: 9", texto)
+        self.assertIn("Defensa: 2", texto)
+        self.assertIn("Velocidad: 100", texto)
+
+    def test_la_pantalla_dice_que_llave_pide_una_puerta(self):
+        partida = self.jugar(["mover N"])
+
+        texto = self.pantalla(partida)
+
+        self.assertIn("N: sala 3 (Cerrada, necesita itm_llave)", texto)
+        self.assertIn("Vida: 12/12", texto)
+
+    def test_ctrl_c_fuera_de_la_lectura_termina_ordenado(self):
+        vista = Mock()
+        vista.mostrar_estado.side_effect = KeyboardInterrupt
+
+        codigo, texto, _ = self.correr(vista)
+
+        self.assertEqual(codigo, 0)
+        self.assertIn("interrumpida", texto)
+        vista.mostrar_reporte.assert_called_once()
+
+    def test_ctrl_c_en_linea_igual_guarda_la_copia_local(self):
+        vista = Mock()
+        vista.leer_comando.side_effect = ["mover N"]
+        vista.mostrar_estado.side_effect = [None, KeyboardInterrupt]
+
+        _, _, almacen = self.correr(vista, en_linea=True)
+
+        self.assertIsNotNone(almacen.cargar_cripta("c-prueba", "v1"))
+
+    def test_al_terminar_dice_como_repetir_la_partida(self):
+        vista = Mock()
+        vista.leer_comando.side_effect = ["esperar", "salir"]
+
+        _, texto, _ = self.correr(vista)
+
+        self.assertIn("--offline --replay partida.log", texto)
 
 
 if __name__ == "__main__":

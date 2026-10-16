@@ -11,6 +11,7 @@ from crypta.Vista.VistaConsola import VistaConsola
 from crypta.Adaptadores.GuardadoBinario import guardar_partida
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado
 from crypta.Adaptadores.RegistroPartida import ErrorRegistro, leer_registro
+from crypta.Controlador.FichasEnUso import FichasEnUso
 from crypta.Controlador.GestorContenido import GestorContenido
 
 
@@ -54,6 +55,17 @@ class Controlador:
         self.encabezado = encabezado
         self.repositorio_fichas = repositorio_fichas
         self.tabla_puntajes = tabla_puntajes
+
+        # §4.4: las fichas que la partida está usando no se desalojan.
+        self.fichas_en_uso = (
+            FichasEnUso(repositorio_fichas)
+            if repositorio_fichas is not None
+            else None
+        )
+
+    def _actualizar_fichas_en_uso(self):
+        if self.fichas_en_uso is not None:
+            self.fichas_en_uso.actualizar(self.partida)
     
     def iniciar(self):
         """Prepara la primera sala y ejecuta el ciclo de consola."""
@@ -68,6 +80,8 @@ class Controlador:
                 self.partida.id_sala_inicial
             )
             self.partida.iniciar()
+
+        self._actualizar_fichas_en_uso()
 
         self.vista.mostrar_ayuda()
 
@@ -219,6 +233,9 @@ class Controlador:
             if self.registro is not None:
                 self.registro.anotar(comando)
 
+            # El comando pudo cambiar el inventario, la sala o los enemigos.
+            self._actualizar_fichas_en_uso()
+
             # Precargar después de ejecutar el comando.
             if not self.partida.terminada:
                 self.gestor_contenido.precargar_async(
@@ -236,8 +253,9 @@ class Controlador:
             # RuntimeError). Pasa en garantizar_sala, ANTES de la acción:
             # la partida no cambió y el comando no se anota. Se puede
             # seguir jugando en las salas ya cargadas, guardar o salir.
+            # rstrip("."): que no quede ".." si el mensaje ya trae punto.
             self.vista.mostrar_error(
-                f"{error}. La acción no se hizo."
+                f"{str(error).rstrip('.')}. La acción no se hizo."
             )
             return False
 
@@ -338,6 +356,9 @@ class Controlador:
         # después de guardar ya no pasó: no puede quedar en el log.
         if self.registro is not None:
             copiar_archivo(ruta_log, self.registro.ruta)
+
+        # Otra partida, otras fichas en uso.
+        self._actualizar_fichas_en_uso()
 
         # No esperamos solicitudes HTTP antiguas para continuar.
         gestor_anterior._ejecutor.shutdown(
