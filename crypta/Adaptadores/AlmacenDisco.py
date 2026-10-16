@@ -177,3 +177,14 @@ class AlmacenDisco:
         return os.path.exists(
             self._ruta_cripta(cripta_id)
         )
+
+    def criptas_guardadas(self):
+        """Los ids de las criptas que tienen copia local, en orden
+        alfabético (cada una es un archivo <id>.json; catalogo.json no)."""
+        ids = []
+
+        for nombre in sorted(os.listdir(self._ruta)):
+            if nombre.endswith(".json") and nombre != "catalogo.json":
+                ids.append(nombre[:-len(".json")])
+
+        return ids

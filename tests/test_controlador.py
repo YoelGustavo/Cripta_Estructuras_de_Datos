@@ -715,6 +715,12 @@ class ServidorFalso:
         camino, _, consulta = ruta.partition("?")
         valor = consulta.partition("=")[2]
 
+        if camino == "/criptas":
+            return Respuesta({"criptas": [
+                {"id": "c-prueba", "nombre": "Prueba", "salas": 3,
+                 "dificultad": 1},
+                {"id": "c-otra", "nombre": "Otra", "salas": 60,
+                 "dificultad": 2}]})
         if camino == "/criptas/c-prueba":
             return Respuesta(self.datos)
         if camino == "/criptas/c-prueba/salas":
@@ -1227,6 +1233,57 @@ class TestDetallesFinales(ConCriptaDePrueba):
         _, texto, _ = self.correr(vista)
 
         self.assertIn("--offline --replay partida.log", texto)
+
+
+# ======================================================================
+# CORRECCIÓN 9: --listar, para elegir otra cripta (§10.2)
+# ======================================================================
+
+class TestListarCriptas(ConCriptaDePrueba):
+
+    def listar(self, *extra, almacen=None):
+        servidor = ServidorFalso()
+        salida = io.StringIO()
+
+        with patch("crypta.main.AlmacenDisco", return_value=almacen or self.almacen), \
+                patch("crypta.main.VistaConsola",
+                      side_effect=AssertionError("--listar creó la vista")), \
+                patch("crypta.Adaptadores.FuenteHTTP.requests.get",
+                      side_effect=servidor.get), \
+                patch.object(sys, "argv", ["crypta", "--listar"] + list(extra)), \
+                redirect_stdout(salida):
+            codigo = programa.main()
+
+        return codigo, salida.getvalue(), servidor
+
+    def test_en_linea_muestra_las_del_servidor(self):
+        codigo, texto, servidor = self.listar()
+
+        self.assertEqual(codigo, 0)
+        self.assertIn("c-prueba", texto)
+        self.assertIn("c-otra", texto)
+        self.assertIn("60 salas", texto)
+        self.assertEqual(servidor.pedidos, ["/criptas"])
+
+    def test_sin_conexion_muestra_las_que_tienen_copia_local(self):
+        codigo, texto, servidor = self.listar("--offline")
+
+        self.assertEqual(codigo, 0)
+        self.assertIn("c-prueba", texto)
+        self.assertNotIn("c-otra", texto)
+        self.assertIn("3 salas", texto)
+        self.assertEqual(servidor.pedidos, [])
+
+    def test_sin_conexion_y_sin_copias_lo_dice(self):
+        vacio = AlmacenDisco(os.path.join(self.carpeta, "nada"))
+
+        codigo, texto, _ = self.listar("--offline", almacen=vacio)
+
+        self.assertEqual(codigo, 0)
+        self.assertIn("No hay criptas disponibles", texto)
+
+    def test_criptas_guardadas_no_cuenta_el_catalogo(self):
+        self.assertEqual(self.almacen.criptas_guardadas(), ["c-prueba"])
 
 
 if __name__ == "__main__":

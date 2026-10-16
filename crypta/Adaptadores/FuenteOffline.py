@@ -30,9 +30,6 @@ class FuenteOffline(FuenteDatos):
         )
         self._solicitudes = 0
 
-    # =========================================================
-    # LECTURA LOCAL
-    # =========================================================
 
     def _cripta_local(self, cripta_id):
         if not self._almacen.existe_cripta(cripta_id):
@@ -79,11 +76,24 @@ class FuenteOffline(FuenteDatos):
     # =========================================================
 
     def listar_criptas(self):
-        raise RuntimeError(
-            "El listado de criptas no está disponible "
-            "en modo offline. Indica el ID de una "
-            "cripta almacenada localmente."
-        )
+        """Sin conexión, las criptas disponibles son las que tienen copia
+        local. Misma forma que GET /criptas."""
+        criptas = []
+
+        for cripta_id in self._almacen.criptas_guardadas():
+            try:
+                generales = self._cripta_local(cripta_id).get("datos_generales") or {}
+            except RuntimeError:
+                continue      # un archivo dañado no impide listar las demás
+
+            criptas.append({
+                "id": cripta_id,
+                "nombre": "(copia local)",
+                "salas": generales.get("salas_total"),
+                "dificultad": None,
+            })
+
+        return {"criptas": criptas}
 
     def obtener_cripta(self, cripta_id):
         datos = self._cripta_local(cripta_id)

@@ -1,16 +1,25 @@
-"""Cargas sintéticas y tiempos por subsistema (§5.3).
+"""El --bench: cargas sintéticas y tiempos por subsistema (§5.3).
 
-Por ahora tiene la comparación del guardado (§4.10): binario contra JSON,
-en tamaño en disco y tiempo de carga. El resto del --bench es de la Fase 8.
+Cada subsistema es una SECCIÓN con su propio archivo (bench_agenda.py...);
+aquí se juntan. La comparación del guardado (§4.10, binario contra JSON)
+vive en este mismo archivo.
 
 Uso (desde la carpeta raíz del proyecto):
-    python -m crypta.bench.bench
+    python -m crypta.main --bench                  todas las secciones
+    python -m crypta.bench.bench                   lo mismo
+    python -m crypta.bench.bench agenda guardado   solo esas
+    python -m crypta.bench.bench --rapido          tamaños chicos (para probar)
 """
 
 import os
+import platform
 import random
+import sys
 import tempfile
 import time
+
+from crypta.bench import bench_agenda
+from crypta.bench.medicion import formato_tiempo
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
 from crypta.Adaptadores.GuardadoJSON import ArchivoGuardadoJSON, guardar_partida_json
@@ -182,10 +191,65 @@ def _accion_al_azar(partida, azar):
         partida.esperar()
 
 
-if __name__ == "__main__":
-    for cantidad in (100, 1000, 5000):
+def ejecutar_guardado(rapido=False):
+    """La sección GUARDADO: la misma partida en binario y en JSON."""
+    tamanos = (100,) if rapido else (100, 1000, 5000)
+    textos = []
+
+    for cantidad in tamanos:
         partida, encabezado, fichas = partida_sintetica(cantidad)
 
         with tempfile.TemporaryDirectory() as carpeta:
-            print(f"\nCripta sintética de {cantidad} salas")
-            print(comparar_formatos(partida, encabezado, fichas, carpeta, repeticiones=5))
+            resultado = comparar_formatos(partida, encabezado, fichas, carpeta,
+                                          repeticiones=5)
+            textos.append(f"Cripta sintética de {cantidad} salas\n{resultado}")
+
+    return "\n\n".join(textos)
+
+
+# ======================================================================
+# TODAS LAS SECCIONES
+# ======================================================================
+
+# (nombre para pedirla, título, función que mide y devuelve el texto)
+SECCIONES = (
+    ("agenda", "Agenda de eventos (§4.1)", bench_agenda.ejecutar),
+    ("guardado", "Guardado binario contra JSON (§4.10)", ejecutar_guardado),
+)
+
+
+def ejecutar(nombres=None, rapido=False, salida=print):
+    """Corre las secciones pedidas (todas si 'nombres' es None) y muestra
+    cada una apenas termina. 'salida' es print, o algo que junte el texto
+    (las pruebas)."""
+    validos = [nombre for nombre, _, _ in SECCIONES]
+
+    for nombre in nombres or ():
+        if nombre not in validos:
+            raise ValueError(f"No existe la sección '{nombre}'. "
+                             f"Las secciones son: {', '.join(validos)}")
+
+    salida(f"CRIPTA --bench | Python {platform.python_version()} | "
+           f"{platform.system()} {platform.machine()}"
+           + (" | modo rápido" if rapido else ""))
+
+    for nombre, titulo, funcion in SECCIONES:
+        if nombres and nombre not in nombres:
+            continue
+
+        salida(f"\n=== {titulo} ===")
+        inicio = time.perf_counter()
+        salida(funcion(rapido))
+        salida(f"(sección medida en {formato_tiempo(time.perf_counter() - inicio)})")
+
+
+if __name__ == "__main__":
+    argumentos = sys.argv[1:]
+    rapido = "--rapido" in argumentos
+    nombres = [a for a in argumentos if a != "--rapido"]
+
+    try:
+        ejecutar(nombres or None, rapido)
+    except ValueError as error:
+        print(error)
+        sys.exit(1)

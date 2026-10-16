@@ -1,6 +1,5 @@
 import argparse
 import random
-import tempfile
 
 from crypta.Adaptadores.AlmacenDisco import AlmacenDisco
 from crypta.Adaptadores.FuenteHTTP import FuenteHTTP
@@ -70,6 +69,12 @@ def crear_argumentos():
         metavar="ARCHIVO",
         default=None,
         help="Reproducir una partida registrada sin interacción"
+    )
+
+    parser.add_argument(
+        "--listar",
+        action="store_true",
+        help="Mostrar las criptas que se pueden jugar y terminar"
     )
 
     parser.add_argument(
@@ -235,32 +240,45 @@ def reproducir(args):
     return 0
 
 
-def ejecutar_benchmarks():
-    """Ejecuta las mediciones existentes sin crear una vista."""
+def listar_criptas(args):
+    """--listar: las criptas que se pueden jugar (§10.2: "seleccionar una
+    cripta"). En línea las pide al servidor (1 solicitud, fuera de toda
+    partida); con --offline, las que tienen copia local."""
+    try:
+        respuesta = crear_fuente(args, AlmacenDisco()).listar_criptas()
+    except RuntimeError as error:
+        print(f"No se pudo obtener la lista de criptas: {error}")
+        return 1
 
-    from crypta.bench.bench import (
-        partida_sintetica,
-        comparar_formatos,
-    )
+    criptas = respuesta.get("criptas") or []
 
-    for cantidad in (100, 1000, 5000):
-        partida, encabezado, fichas = partida_sintetica(
-            cantidad
+    if len(criptas) == 0:
+        print("No hay criptas disponibles"
+              + (" sin conexión: juega una con conexión primero." if args.offline else "."))
+        return 0
+
+    print("Criptas disponibles:")
+
+    for cripta in criptas:
+        salas = cripta.get("salas")
+        dificultad = cripta.get("dificultad")
+        print(
+            f"  {cripta.get('id'):<14} {cripta.get('nombre') or '':<24}"
+            + (f" {salas} salas" if salas is not None else "")
+            + (f", dificultad {dificultad}" if dificultad is not None else "")
         )
 
-        with tempfile.TemporaryDirectory() as carpeta:
-            resultado = comparar_formatos(
-                partida,
-                encabezado,
-                fichas,
-                carpeta,
-                repeticiones=5
-            )
+    print("\nPara jugar una: python -m crypta.main --cripta <id>"
+          + (" --offline" if args.offline else ""))
+    return 0
 
-            print(
-                f"\nCripta sintética de {cantidad} salas"
-            )
-            print(resultado)
+
+def ejecutar_benchmarks():
+    """--bench (§5.3): todas las secciones de crypta/bench, sin vista.
+    Se importa aquí adentro para que jugar no cargue el bench."""
+    from crypta.bench.bench import ejecutar
+
+    ejecutar()
 
 
 def main():
@@ -275,6 +293,9 @@ def main():
             "Error: --bench y --replay no pueden utilizarse juntos."
         )
         return 1
+
+    if args.listar:
+        return listar_criptas(args)
 
     # Los benchmarks no utilizan HTTP ni vista interactiva.
     if args.bench:
