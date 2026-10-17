@@ -3,8 +3,10 @@ por secciones (B1 agenda, B2...). No miden tiempos (dependen de la
 máquina): revisan que lo que se mide sea correcto y comparable."""
 
 import io
+import os
 import random
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
@@ -20,7 +22,7 @@ from crypta.bench.bench_agenda import (
     hacer_turnos,
     llenar,
 )
-from crypta.bench import bench_cache, bench_ciclo, bench_inventario, bench_ordenamiento
+from crypta.bench import bench_cache, bench_ciclo, bench_inventario, bench_ordenamiento, bench_red
 from crypta.bench.medicion import formato_tiempo, medir, tabla
 from crypta.Controlador.GestorContenido import LIMITE_VISITAS_PRECARGA, GestorContenido
 from crypta.estructuras.MonticuloMin import MonticuloMin
@@ -87,6 +89,28 @@ class TestEjecutarBench(unittest.TestCase):
 
         self.assertEqual(codigo, 0)
         ejecutar.assert_called_once_with()
+
+    # B7: guardado en tabla y --guardar
+
+    def test_el_guardado_sale_en_una_tabla(self):
+        texto = bench.ejecutar_guardado(rapido=True)
+
+        self.assertIn("GUARDADO (§4.10)", texto)
+        self.assertIn("leer UNA sala", texto)
+
+    def test_guardar_escribe_los_resultados_en_utf8(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "docs", "resultados.txt")
+
+            with redirect_stdout(io.StringIO()):
+                codigo = bench.principal(["red", "--rapido", "--guardar", ruta])
+
+            with open(ruta, encoding="utf-8") as archivo:
+                texto = archivo.read()
+
+        self.assertEqual(codigo, 0)
+        self.assertIn("BITÁCORA (§4.8)", texto)
+        self.assertIn("bench completo en", texto)
 
 
 # ======================================================================
@@ -426,6 +450,34 @@ class TestBenchOrdenamiento(unittest.TestCase):
         texto = bench_ordenamiento.ejecutar(rapido=True)
 
         self.assertEqual(texto.count("ORDENAMIENTO (§4.9)"), 2)
+
+
+# ======================================================================
+# B6: bitácora y red (§4.8 y §5.1)
+# ======================================================================
+
+class TestBenchRed(unittest.TestCase):
+
+    def test_las_dos_bitacoras_se_quedan_en_el_tope(self):
+        for clase in (bench_red.BitacoraCola, bench_red.BitacoraVector):
+            bitacora = clase(20)
+            for i in range(50):
+                bitacora.agregar(f"m{i}")
+            self.assertEqual(len(bitacora), 20)
+
+    def test_el_juego_pide_menos_que_la_forma_ingenua(self):
+        _, contenidos = bench_red.cripta_en_cuadricula(25)
+        with tempfile.TemporaryDirectory() as carpeta:
+            fria, caliente = bench_red.solicitudes_del_juego(25, carpeta)
+
+        self.assertLess(fria, bench_red.solicitudes_ingenuas(contenidos))
+        self.assertEqual(caliente, 0)
+
+    def test_la_seccion_arma_las_dos_tablas(self):
+        texto = bench_red.ejecutar(rapido=True)
+
+        self.assertIn("BITÁCORA (§4.8)", texto)
+        self.assertIn("RED (§4.2 y §5.1)", texto)
 
 
 if __name__ == "__main__":

@@ -204,15 +204,30 @@ class TestSelector(unittest.TestCase):
         self.assertEqual(ordenar(v), "mergesort")
         self.assertTrue(esta_ordenado(v))
 
-    def test_limite_conocido_dos_bloques(self):
-        # Dos bloques ordenados: 1 solo descenso, así que el selector elige
-        # inserción aunque aquí le cueste O(n²). Igual ordena bien; esta
-        # prueba deja el límite documentado para el Documento de Decisiones.
+    def test_dos_bloques_usa_mergesort(self):
+        # Dos bloques ordenados: 1 solo descenso, pero cada elemento del
+        # segundo bloque tiene que viajar 250 lugares (O(n²) para inserción).
+        # Antes el selector elegía inserción (límite que encontró el bench).
         datos = list(range(250, 500)) + list(range(250))
         v = vector_de(datos)
-        self.assertEqual(elegir_algoritmo(v), "insercion")
+        self.assertEqual(elegir_algoritmo(v), "mergesort")
         ordenar(v)
         self.assertEqual(contenido(v), sorted(datos))
+
+    def test_un_elemento_que_viaja_poco_sigue_siendo_casi_ordenado(self):
+        # Un elemento corrido 5 lugares (menos de DISTANCIA_CASI_ORDENADO).
+        datos = list(range(500))
+        datos.insert(100, datos.pop(105))
+        self.assertEqual(elegir_algoritmo(vector_de(datos)), "insercion")
+
+    def test_un_elemento_chico_muy_atrasado_va_a_mergesort(self):
+        # El 100 quedó 300 lugares después de donde va. Es conservador: con
+        # UN solo elemento así, inserción también sería O(n); pero desde el
+        # descenso no se puede saber si son uno o muchos, y mergesort nunca
+        # pasa de O(n log n).
+        datos = list(range(500))
+        datos.insert(400, datos.pop(100))
+        self.assertEqual(elegir_algoritmo(vector_de(datos)), "mergesort")
 
 
 class TestCosto(unittest.TestCase):

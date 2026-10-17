@@ -9,6 +9,8 @@ Uso (desde la carpeta raíz del proyecto):
     python -m crypta.bench.bench                   lo mismo
     python -m crypta.bench.bench agenda guardado   solo esas
     python -m crypta.bench.bench --rapido          tamaños chicos (para probar)
+    python -m crypta.bench.bench --guardar docs/resultados_bench.txt
+                                                   además lo guarda en ese archivo
 """
 
 import os
@@ -18,8 +20,9 @@ import sys
 import tempfile
 import time
 
-from crypta.bench import bench_agenda, bench_cache, bench_ciclo, bench_inventario, bench_ordenamiento
-from crypta.bench.medicion import formato_tiempo
+from crypta.bench import (bench_agenda, bench_cache, bench_ciclo, bench_inventario,
+                          bench_ordenamiento, bench_red)
+from crypta.bench.medicion import formato_tiempo, tabla
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
 from crypta.Adaptadores.GuardadoJSON import ArchivoGuardadoJSON, guardar_partida_json
@@ -191,20 +194,40 @@ def _accion_al_azar(partida, azar):
         partida.esperar()
 
 
+def formato_bytes(cantidad):
+    if cantidad < 1024:
+        return f"{cantidad} B"
+    if cantidad < 1024 * 1024:
+        return f"{cantidad / 1024:.1f} KB"
+    return f"{cantidad / (1024 * 1024):.2f} MB"
+
+
 def ejecutar_guardado(rapido=False):
     """La sección GUARDADO: la misma partida en binario y en JSON."""
     tamanos = (100,) if rapido else (100, 1000, 5000)
-    textos = []
+    filas = []
 
     for cantidad in tamanos:
         partida, encabezado, fichas = partida_sintetica(cantidad)
 
         with tempfile.TemporaryDirectory() as carpeta:
-            resultado = comparar_formatos(partida, encabezado, fichas, carpeta,
-                                          repeticiones=5)
-            textos.append(f"Cripta sintética de {cantidad} salas\n{resultado}")
+            r = comparar_formatos(partida, encabezado, fichas, carpeta, repeticiones=5)
 
-    return "\n\n".join(textos)
+        filas.append((
+            str(cantidad),
+            f"{formato_bytes(r.tamano_binario)} / {formato_bytes(r.tamano_json)}",
+            f"{formato_tiempo(r.carga_binario)} / {formato_tiempo(r.carga_json)}",
+            f"{formato_tiempo(r.una_sala_binario)} / {formato_tiempo(r.una_sala_json)}",
+            f"{formato_bytes(r.bytes_una_sala_binario)} / "
+            f"{formato_bytes(r.bytes_una_sala_json)}",
+        ))
+
+    return tabla(
+        "GUARDADO (§4.10): la misma partida en binario / JSON",
+        ("salas", "tamaño", "cargar todo", "leer UNA sala", "bytes leídos para UNA sala"),
+        filas,
+        "El binario tiene un índice al final: para una sala lee solo el índice y ese "
+        "registro. El JSON hay que leerlo entero.")
 
 
 # ======================================================================
@@ -218,6 +241,7 @@ SECCIONES = (
     ("cache", "Caché de fichas (§4.4)", bench_cache.ejecutar),
     ("inventario", "Inventario e historial (§4.5 y §4.6)", bench_inventario.ejecutar),
     ("ordenamiento", "Ordenamiento (§4.9)", bench_ordenamiento.ejecutar),
+    ("red", "Bitácora y red (§4.8 y §5.1)", bench_red.ejecutar),
     ("guardado", "Guardado binario contra JSON (§4.10)", ejecutar_guardado),
 )
 
@@ -237,6 +261,8 @@ def ejecutar(nombres=None, rapido=False, salida=print):
            f"{platform.system()} {platform.machine()}"
            + (" | modo rápido" if rapido else ""))
 
+    inicio_total = time.perf_counter()
+
     for nombre, titulo, funcion in SECCIONES:
         if nombres and nombre not in nombres:
             continue
@@ -246,14 +272,50 @@ def ejecutar(nombres=None, rapido=False, salida=print):
         salida(funcion(rapido))
         salida(f"(sección medida en {formato_tiempo(time.perf_counter() - inicio)})")
 
+    salida(f"\n(bench completo en {formato_tiempo(time.perf_counter() - inicio_total)})")
 
-if __name__ == "__main__":
-    argumentos = sys.argv[1:]
+
+def principal(argumentos):
+    """La línea de comandos de este archivo. Devuelve el código de salida."""
     rapido = "--rapido" in argumentos
-    nombres = [a for a in argumentos if a != "--rapido"]
+    ruta = None
+    nombres = []
+    i = 0
+
+    while i < len(argumentos):
+        if argumentos[i] == "--guardar":
+            if i + 1 >= len(argumentos):
+                print("Falta el archivo después de --guardar")
+                return 1
+            ruta = argumentos[i + 1]
+            i += 2
+            continue
+        if argumentos[i] != "--rapido":
+            nombres.append(argumentos[i])
+        i += 1
+
+    lineas = []
+
+    def mostrar_y_juntar(texto):
+        print(texto, flush=True)
+        lineas.append(str(texto))
 
     try:
-        ejecutar(nombres or None, rapido)
+        ejecutar(nombres or None, rapido, mostrar_y_juntar)
     except ValueError as error:
         print(error)
-        sys.exit(1)
+        return 1
+
+    if ruta is not None:
+        carpeta = os.path.dirname(ruta)
+        if carpeta:
+            os.makedirs(carpeta, exist_ok=True)
+        with open(ruta, "w", encoding="utf-8") as archivo:
+            archivo.write("\n".join(lineas) + "\n")
+        print(f"\nResultados guardados en {ruta}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(principal(sys.argv[1:]))

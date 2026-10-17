@@ -1,0 +1,128 @@
+CRIPTA --bench | Python 3.14.7 | Windows AMD64
+
+=== Agenda de eventos (§4.1) ===
+AGENDA DE EVENTOS (§4.1): costo de UN turno (sacar el próximo evento y volver a programarlo)
+  eventos pendientes   montículo (el juego)   vector ordenado   vector sin orden
+  10                                 8.0 µs            4.6 µs             6.8 µs
+  100                               11.3 µs           18.9 µs            48.3 µs
+  1000                              15.8 µs          184.3 µs           451.9 µs
+  5000                              17.1 µs          998.0 µs            2.30 ms
+  Montículo: O(log n) por turno. Vector ordenado: O(n) al programar. Vector sin orden: O(n) al sacar.
+
+AGENDA DE EVENTOS (§4.1): costo de cancelar UN evento (muere un enemigo, el antídoto cancela el veneno)
+  eventos pendientes   montículo (el juego)   vector ordenado   vector sin orden
+  10                                 0.7 µs            2.5 µs             2.2 µs
+  100                                0.4 µs           12.1 µs             7.7 µs
+  1000                               0.4 µs          142.9 µs            83.4 µs
+  5000                               0.4 µs          771.3 µs           445.4 µs
+  Montículo: O(1), solo se marca (borrado perezoso; sale cuando le toca). Vectores: O(n), hay que buscarlo y quitarlo.
+(sección medida en 15.66 s)
+
+=== Ciclo entre dos decisiones (§5.2) ===
+CICLO ENTRE DOS DECISIONES (§5.2: menos de 20 ms). Cripta de 2500 salas toda cargada; 60 acciones medidas (cada una, la mejor de 3 vueltas)
+  enemigos activos   eventos por acción   modelo: media   ciclo completo: media        p95     máximo   por evento   ¿cumple?
+  50                                 64         2.16 ms                 3.51 ms    4.48 ms    4.58 ms        54 µs         sí
+  100                               127         4.25 ms                 5.64 ms    7.26 ms    7.63 ms        44 µs         sí
+  200                               254         9.27 ms                10.82 ms   13.84 ms   14.45 ms        43 µs         sí
+  300                               379        14.36 ms                16.99 ms   23.60 ms   24.52 ms        45 µs         NO
+  500                               632        28.11 ms                29.94 ms   42.17 ms   44.19 ms        47 µs         NO
+  p95: el 95 % de las acciones tardó eso o menos (se exige al p95; el máximo depende también del sistema operativo).
+
+PRECARGA (§4.2): buscar salas para pedir, en cada acción
+  salas de la cripta   toda cargada   falta el 1 % (lejos)
+  1000                       4.6 µs                1.18 ms
+  5000                       2.8 µs                1.68 ms
+  10000                      2.8 µs                1.22 ms
+  Toda cargada: no busca nada, O(1). Si falta algo: revisa como máximo 100 salas, sin importar el tamaño de la cripta.
+(sección medida en 51.22 s)
+
+=== Caché de fichas (§4.4) ===
+CACHÉ (§4.4): ¿está esta ficha en memoria? (una búsqueda)
+  fichas en caché   árbol de búsqueda (el juego)   recorrer la lista
+  25                                      0.6 µs              4.0 µs
+  250                                     1.0 µs             37.9 µs
+  2500                                    1.6 µs            413.6 µs
+  Árbol: O(log n) en promedio. Lista: O(n). --cache-size es 25 por defecto.
+
+CACHÉ (§4.4): obtener una ficha
+  dónde estaba                           tiempo
+  en memoria (acierto)                   1.1 µs
+  liberada, se lee del disco (fallo)   646.0 µs
+  Una ficha liberada nunca vuelve a costar red: solo una lectura de disco.
+(sección medida en 3.00 s)
+
+=== Inventario e historial (§4.5 y §4.6) ===
+INVENTARIO (§4.5): soltar el objeto que se ve (y volver a ponerlo)
+  objetos   lista doble: el 1.º   lista doble: el último   vector: el 1.º   vector: el último
+  10                     1.9 µs                   1.6 µs           2.7 µs              0.9 µs
+  100                    1.6 µs                   1.5 µs          20.3 µs              0.9 µs
+  1000                   1.5 µs                   1.5 µs         223.8 µs              1.0 µs
+  Lista doble: igual en cualquier posición, O(1). Vector: soltar el 1.º corre a todos los demás, O(n).
+
+HISTORIAL (§4.6): usar un pergamino (deshacer UNA acción)
+  enemigos activos   anotar los cambios (el juego)   foto completa (deepcopy, solo sacarla)
+  10                                       68.2 µs                                 17.41 ms
+  100                                     574.0 µs                                 27.71 ms
+  300                                      1.95 ms                                 57.26 ms
+  El historial guarda solo lo que cambió; la foto copia la partida entera ANTES de cada acción, aunque nunca se use un pergamino.
+(sección medida en 743.77 ms)
+
+=== Ordenamiento (§4.9) ===
+ORDENAMIENTO (§4.9): números (comparar es barato). Umbral: hasta 24 elementos, inserción
+  datos              n   inserción   mergesort   ordenar() elige   ¿bien?
+  aleatorio          8     19.0 µs     39.6 µs         insercion       sí
+  aleatorio         24    120.4 µs    123.3 µs         insercion       sí
+  aleatorio         50    403.1 µs    302.2 µs         mergesort       sí
+  aleatorio        200     5.91 ms     1.72 ms         mergesort       sí
+  aleatorio       1000   173.66 ms    13.37 ms         mergesort       sí
+  casi ordenado      8      9.6 µs     28.4 µs         insercion       sí
+  casi ordenado     24     26.3 µs    114.6 µs         insercion       sí
+  casi ordenado     50     33.5 µs    295.9 µs         insercion       sí
+  casi ordenado    200    134.3 µs     1.47 ms         insercion       sí
+  casi ordenado   1000    713.5 µs     9.37 ms         insercion       sí
+  invertido          8     20.4 µs     28.6 µs         insercion       sí
+  invertido         24    169.2 µs    115.3 µs         insercion       NO
+  invertido         50    710.0 µs    281.3 µs         mergesort       sí
+  invertido        200    13.52 ms     3.03 ms         mergesort       sí
+  invertido       1000   330.27 ms     9.95 ms         mergesort       sí
+  dos bloques        8     14.9 µs     27.8 µs         insercion       sí
+  dos bloques       24     95.4 µs    110.8 µs         insercion       sí
+  dos bloques       50    380.8 µs    269.7 µs         mergesort       sí
+  dos bloques      200     5.82 ms     1.42 ms         mergesort       sí
+  dos bloques     1000   170.68 ms     9.43 ms         mergesort       sí
+  ¿bien? = lo que eligió no tardó más de un 20 % que el más rápido. 'dos bloques': 1 solo descenso, pero O(n²) para inserción (por eso el selector no puede mirar solo los descensos).
+
+ORDENAMIENTO (§4.9): comparación costosa (por nombre). Umbral: hasta 16 elementos, inserción
+  datos         n   inserción   mergesort   ordenar() elige   ¿bien?
+  por nombre    8     28.5 µs     42.1 µs         insercion       sí
+  por nombre   16     79.8 µs    101.4 µs         insercion       sí
+  por nombre   24    149.1 µs    180.3 µs         mergesort       NO
+  por nombre   50    631.2 µs    484.4 µs         mergesort       sí
+  Mergesort hace menos comparaciones; cuando comparar cuesta, le gana a inserción con menos elementos.
+(sección medida en 2.51 s)
+
+=== Bitácora y red (§4.8 y §5.1) ===
+BITÁCORA (§4.8): agregar UN mensaje con la bitácora llena
+  mensajes guardados   cola con tope (el juego)   vector (corre a todos)
+  20                                     1.5 µs                   3.4 µs
+  1000                                   1.9 µs                 125.0 µs
+  Con 20 casi no se nota; la cola no corre a nadie y su memoria nunca pasa del tope (se revisa en cada medición).
+
+RED (§4.2 y §5.1): solicitudes para recorrer TODA la cripta (contenido + fichas)
+  salas   ingenuo (1 por sala y por ficha)   el juego, caché vacía   el juego, caché caliente
+  25                                    52                       8                          0
+  100                                  130                      16                          0
+  400                                  430                     196                          0
+  Lotes de 10 salas y de 10 fichas, precarga por cercanía y caché en disco. Sin contar los datos generales y el esqueleto (iguales en todos). Límite: la precarga revisa como máximo 100 salas alrededor (para no pasarse del tiempo del turno, §5.2); en una cripta grande ya casi toda cargada, encuentra pocas salas nuevas por vez y los lotes salen chicos.
+(sección medida en 2.95 s)
+
+=== Guardado binario contra JSON (§4.10) ===
+GUARDADO (§4.10): la misma partida en binario / JSON
+  salas                tamaño             cargar todo          leer UNA sala   bytes leídos para UNA sala
+  100       29.2 KB / 83.4 KB     25.18 ms / 23.66 ms      8.03 ms / 3.09 ms             2.4 KB / 83.4 KB
+  1000    247.1 KB / 770.8 KB   188.37 ms / 179.76 ms     3.19 ms / 90.47 ms           20.0 KB / 770.8 KB
+  5000      1.21 MB / 3.80 MB      938.04 ms / 1.20 s   15.35 ms / 162.45 ms            98.1 KB / 3.80 MB
+  El binario tiene un índice al final: para una sala lee solo el índice y ese registro. El JSON hay que leerlo entero.
+(sección medida en 17.43 s)
+
+(bench completo en 93.52 s)
