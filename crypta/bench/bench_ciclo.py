@@ -1,29 +1,3 @@
-"""--bench, sección CICLO (§5.2: menos de 20 ms entre dos decisiones).
-
-§5.2: "Con la cripta de referencia ya cargada y excluyendo tiempo de red y
-renderizado, resolver un ciclo completo de eventos entre dos decisiones
-consecutivas del jugador debe tomar menos de 20 ms en el equipo local."
-
-Qué se mide, en dos niveles:
-
-  - MODELO: ejecutar_comando(partida, linea, ...). Es la acción del
-    jugador más TODOS los eventos que ocurren hasta su próxima decisión
-    (turnos de enemigos, veneno, regeneración, puertas, trampas...).
-  - CICLO COMPLETO: Controlador.procesar_comando(texto), lo mismo que pasa
-    al jugar: traducir el texto, el modelo, anotar el comando en el log
-    (disco), actualizar las fichas en uso y buscar salas para precargar.
-    Solo quedan afuera la pantalla (una vista muda) y la red (la cripta ya
-    está toda cargada, como pide el §5.2).
-
-La carga: una cripta de SALAS_CICLO salas toda cargada, con N enemigos en
-la sala inicial. Por el §2.4 se activan TODOS en el instante 0, así que
-desde el principio hay N actores con turnos en la agenda: rastreadores
-rápidos que siguen al jugador, errantes que se reparten por la cripta (con
-regeneración) y guardianes que se quedan. Tienen vida enorme para que
-nadie muera y la carga no baje durante la medición: es una prueba de
-ESTRÉS, más dura que una partida normal.
-"""
-
 import os
 import random
 import tempfile
@@ -41,12 +15,12 @@ from crypta.Modelo.Mapa import Mapa
 from crypta.Modelo.Partida import AccionInvalida, Partida
 
 
-LIMITE_MS = 20                      # §5.2
-SALAS_CICLO = 2500                  # cuadrícula de 50 x 50
+LIMITE_MS = 20     
+SALAS_CICLO = 2500 
 ENEMIGOS = (50, 100, 200, 300, 500)
 ENEMIGOS_RAPIDO = (20, 50)
-CALENTAMIENTO = 20                  # acciones antes de medir (que se repartan)
-ACCIONES = 60                       # acciones medidas
+CALENTAMIENTO = 20 
+ACCIONES = 60      
 
 CATALOGO = {
     "ent_rastreador": {"id": "ent_rastreador", "clase": "enemigo", "nombre": "Rata",
@@ -65,14 +39,7 @@ CATALOGO = {
 }
 TIPOS_ENEMIGO = ("ent_rastreador", "ent_errante", "ent_guardian")
 
-
-# ======================================================================
-# LA CRIPTA DE CARGA
-# ======================================================================
-
 def esqueleto_y_contenidos(cantidad_salas, enemigos, semilla=1, cargadas=None):
-    """Cuadrícula de 'cantidad_salas' salas. Los 'enemigos' empiezan en la
-    sala 1. 'cargadas': cuántas salas traen contenido (None = todas)."""
     azar = random.Random(semilla)
     ancho = max(1, int(cantidad_salas ** 0.5))
     salas = []
@@ -114,7 +81,6 @@ def partida_de_carga(enemigos, fichas, semilla=1, cantidad_salas=SALAS_CICLO):
     mapa.cargar_desde_json(salas)
     mapa.asignar_contenidos(contenidos)
 
-    # Vida enorme: el jugador tampoco muere durante la medición.
     jugador = Jugador("Bench", vida_max=10 ** 9, ataque=8, defensa=3,
                       velocidad=100, inventario_max=8)
     partida = Partida(mapa, jugador, 1, fichas, semilla=semilla)
@@ -123,7 +89,6 @@ def partida_de_carga(enemigos, fichas, semilla=1, cantidad_salas=SALAS_CICLO):
 
 
 def proxima_accion(partida, azar):
-    """El "jugador" del bench: casi siempre camina, a veces ataca o espera."""
     presentes = partida.enemigos_presentes()
 
     if len(presentes) > 0 and azar.random() < 0.3:
@@ -135,13 +100,8 @@ def proxima_accion(partida, azar):
     return "mover " + azar.choice("NSEO")
 
 
-# ======================================================================
-# LAS DOS MEDICIONES
-# ======================================================================
 
 class _FuenteEnMemoria:
-    """El catálogo sin red. El contenido ya está todo cargado: si alguien lo
-    pidiera, la medición estaría contando red, y eso no se permite."""
 
     def obtener_catalogo(self, ids):
         return {"entidades": [CATALOGO[i] for i in ids]}
@@ -151,19 +111,17 @@ class _FuenteEnMemoria:
 
 
 class _VistaMuda:
-    """La pantalla queda fuera de la medición (§5.2): no hace nada."""
 
     def __getattr__(self, nombre):
         return lambda *argumentos, **opciones: None
 
 
 class Medicion:
-    """Lo que se midió para una cantidad de enemigos. Tiempos en segundos."""
 
     def __init__(self, enemigos):
         self.enemigos = enemigos
         self.eventos_por_accion = 0.0
-        self.modelo = Vector()        # un tiempo por acción
+        self.modelo = Vector()
         self.ciclo = Vector()
 
     def media(self, tiempos):
@@ -173,12 +131,11 @@ class Medicion:
         return total / len(tiempos)
 
     def percentil(self, tiempos, p):
-        """El tiempo que no supera el p % de las acciones."""
         copia = Vector(len(tiempos))
         for i in range(len(tiempos)):
             copia.agregar(tiempos.obtener(i))
         ordenar(copia)
-        indice = max(0, -(-len(copia) * p // 100) - 1)    # techo(n·p/100) - 1
+        indice = max(0, -(-len(copia) * p // 100) - 1)
         return copia.obtener(indice)
 
     def maximo(self, tiempos):
@@ -202,7 +159,7 @@ def _una_vuelta_modelo(enemigos, acciones, calentamiento, semilla):
             try:
                 ejecutar_comando(partida, linea, lambda id_sala: None)
             except (AccionInvalida, ComandoInvalido):
-                pass    # una pared: el jugador no se movió y no gastó tiempo
+                pass
 
         transcurrido = cronometrar(accion)
 
@@ -246,9 +203,6 @@ def _una_vuelta_ciclo(enemigos, acciones, calentamiento, semilla, carpeta):
 
 
 def _mejor_de(vueltas, una_vuelta):
-    """La partida es determinista: cada vuelta juega EXACTAMENTE las mismas
-    acciones. Para cada acción se queda el mejor tiempo de las vueltas, como
-    en medicion.medir (lo que se meta en medio solo puede sumar)."""
     mejores, eventos = una_vuelta()
 
     for _ in range(vueltas - 1):
@@ -275,20 +229,12 @@ def medir(enemigos, acciones=ACCIONES, calentamiento=CALENTAMIENTO, vueltas=3,
         resultado.ciclo, eventos_ciclo = _mejor_de(vueltas, lambda: _una_vuelta_ciclo(
             enemigos, acciones, calentamiento, semilla, carpeta))
 
-    # El controlador juega la MISMA partida que el modelo solo.
     if eventos_ciclo != eventos:
         raise AssertionError("el ciclo completo jugó otra partida que el modelo")
 
     return resultado
 
-
-# ======================================================================
-# LA PRECARGA YA NO RECORRE TODO EL MAPA
-# ======================================================================
-
 def costo_precarga(cantidad_salas, cargadas, repeticiones=20):
-    """Lo que tarda buscar salas para precargar con 'cargadas' de
-    'cantidad_salas' salas con contenido (y el resto, lejos)."""
     salas, contenidos = esqueleto_y_contenidos(cantidad_salas, 0, cargadas=cargadas)
     mapa = Mapa()
     mapa.cargar_desde_json(salas)
@@ -304,10 +250,6 @@ def costo_precarga(cantidad_salas, cargadas, repeticiones=20):
     gestor.cerrar()
     return mejor
 
-
-# ======================================================================
-# LA SECCIÓN DEL --bench
-# ======================================================================
 
 def ejecutar(rapido=False):
     cantidades = ENEMIGOS_RAPIDO if rapido else ENEMIGOS

@@ -3,11 +3,8 @@ from crypta.estructuras.Vector import Vector
 from crypta.estructuras.ordenamiento import copiar_a_vector, ordenar
 
 
-# Clase de la ficha de los pergaminos de retroceso (§2.7 y §2.11).
 CLASE_PERGAMINO = "pergamino_retroceso"
 
-# Lo único que se puede equipar (§2.7). La clase de la ficha es también
-# el nombre de la "ranura": una para el arma y otra para la armadura.
 CLASES_EQUIPABLES = ("arma", "armadura")
 
 
@@ -16,15 +13,14 @@ class ContextoSoltar:
         self.nodo = nodo
         self.anterior = anterior
         self.objeto = nodo.valor
-        # "arma" o "armadura" si lo que se soltó estaba equipado; None si no.
         self.ranura = ranura
 
 class ContextoEquipar:
     def __init__(self, nodo, anterior, ranura=None, equipado_antes=None):
-        self.nodo = nodo            # el nodo que se movió al frente
+        self.nodo = nodo          
         self.anterior = anterior
-        self.ranura = ranura                  # "arma" o "armadura"
-        self.equipado_antes = equipado_antes  # nodo que estaba equipado ahí (o None)
+        self.ranura = ranura         
+        self.equipado_antes = equipado_antes
 
 class ContextoRecoger:
 
@@ -62,31 +58,16 @@ class Inventario:
         self._capacidad = capacidad
         self._objetos = ListaDoble()
 
-        # Nodo que el jugador está viendo actualmente.
         self._actual = None
 
-        # Lo equipado (§2.7: como máximo un arma y una armadura). Se guarda
-        # el NODO y no la ficha: dos dagas son la misma ficha (el mismo
-        # dict), pero cada una está en su propio nodo. Así se sabe cuál de
-        # las dos es la equipada, y soltar la otra no la desequipa.
         self._arma = None
         self._armadura = None
-
-        # Pergaminos de retroceso: una CANTIDAD aparte, fuera de la
-        # ListaDoble. §2.11 los excluye del estado reversible (ni usarlos,
-        # ni recogerlos, ni soltarlos se deshace). Si fueran nodos de la
-        # lista, quitar uno sin deshacerlo dejaría a otros contextos de
-        # deshacer apuntando a un vecino que ya no está (se cae). Con un
-        # contador no hay vecinos ni posiciones que se desordenen.
         self._pergaminos = 0
 
     def __len__(self):
-        """Objetos de la lista (sin contar los pergaminos)."""
         return len(self._objetos)
 
     def ocupados(self):
-        """Posiciones usadas: §2.7 "cada objeto ocupa una posición", y un
-        pergamino también es un objeto."""
         return len(self._objetos) + self._pergaminos
 
     def esta_vacio(self):
@@ -101,11 +82,6 @@ class Inventario:
     def espacio_disponible(self):
         return self._capacidad - self.ocupados()
 
-    # =========================================================
-    # PERGAMINOS DE RETROCESO (§2.11 y §4.6)
-    # =========================================================
-    # Ninguno de estos métodos devuelve un contexto para deshacer: a
-    # propósito, porque nada de esto se registra en el historial.
 
     def cantidad_pergaminos(self):
         return self._pergaminos
@@ -114,7 +90,6 @@ class Inventario:
         return self._pergaminos > 0
 
     def consumir_pergamino(self):
-        """Gasta uno al usarlo. Devuelve False si no había."""
         if self._pergaminos == 0:
             return False
 
@@ -122,7 +97,6 @@ class Inventario:
         return True
 
     def recoger_pergamino_de(self, sala):
-        """Pasa un pergamino del suelo de la sala al inventario."""
         if sala.cantidad_pergaminos() == 0 or self.esta_lleno():
             return False
 
@@ -131,7 +105,6 @@ class Inventario:
         return True
 
     def soltar_pergamino_en(self, sala):
-        """Deja un pergamino en el suelo de la sala."""
         if self._pergaminos == 0:
             return False
 
@@ -140,8 +113,6 @@ class Inventario:
         return True
 
     def fijar_pergaminos(self, cantidad):
-        """Pone la cantidad directamente (al cargar una partida guardada,
-        o en pruebas)."""
         if cantidad < 0 or len(self._objetos) + cantidad > self._capacidad:
             raise ValueError(
                 f"No caben {cantidad} pergaminos en el inventario"
@@ -150,9 +121,6 @@ class Inventario:
         self._pergaminos = cantidad
 
     def buscar_por_id(self, id_objeto):
-        """La ficha del primer objeto con ese id, o None. Recorre la lista:
-        O(n), con n <= inventario_max (unos pocos objetos). Sirve, por
-        ejemplo, para saber si el jugador tiene la llave de una puerta."""
         for objeto in self._objetos:
             if objeto.get("id") == id_objeto:
                 return objeto
@@ -196,8 +164,6 @@ class Inventario:
         return self._actual.valor
 
     def soltar_actual(self):
-        # Igual que soltar_actual_con_contexto, pero sin devolver el
-        # contexto (así no hay dos versiones de la misma lógica).
         contexto = self.soltar_actual_con_contexto()
 
         if contexto is None:
@@ -205,24 +171,17 @@ class Inventario:
 
         return contexto.objeto
 
-    # =========================================================
-    # EQUIPO (§2.7 y §4.5)
-    # =========================================================
 
     def arma(self):
-        """La ficha del arma equipada, o None."""
         return None if self._arma is None else self._arma.valor
 
     def armadura(self):
-        """La ficha de la armadura equipada, o None."""
         return None if self._armadura is None else self._armadura.valor
 
     def actual_esta_equipado(self):
-        """Para que la vista marque el objeto que se está viendo."""
         return self._ranura_de(self._actual) is not None
 
     def _ranura_de(self, nodo):
-        """En qué ranura está equipado ese nodo, o None si no lo está."""
         if nodo is None:
             return None
 
@@ -252,10 +211,6 @@ class Inventario:
         return contexto.nodo.valor
 
     def equipar_actual_con_contexto(self):
-        """Equipa el objeto que se está viendo: lo mueve al frente del
-        orden real (§4.5) y lo pone en su ranura. Si ya había otra arma
-        (o armadura), esa queda desequipada pero sigue en el inventario
-        (§2.7). Todo es O(1)."""
         if self._actual is None:
             return None
 
@@ -268,8 +223,6 @@ class Inventario:
                 f"puede equipar: solo armas y armaduras"
             )
 
-        # Se guarda todo lo necesario para deshacer ANTES de cambiar nada:
-        # quién estaba antes en la lista y qué estaba equipado.
         contexto = ContextoEquipar(
             nodo,
             self._objetos.anterior(nodo),
@@ -286,8 +239,6 @@ class Inventario:
         if contexto is None:
             return
 
-        # Se saca del frente y vuelve justo después de su vecino de antes.
-        # Es el mismo truco del paso anterior: el MISMO nodo, en O(1).
         self._objetos.quitar_nodo(contexto.nodo)
 
         self._objetos.reinsertar_despues(
@@ -297,17 +248,10 @@ class Inventario:
 
         self._actual = contexto.nodo
 
-        # Vuelve a estar equipado lo que estaba antes (o nada).
         if contexto.ranura is not None:
             self._poner_en(contexto.ranura, contexto.equipado_antes)
 
-    # =========================================================
-    # GUARDAR Y CARGAR LA PARTIDA (§4.10)
-    # =========================================================
-
     def posiciones(self):
-        """(posición del que se está viendo, del arma, de la armadura) en
-        el orden real; -1 = ninguno. O(n), con n <= inventario_max."""
         actual = arma = armadura = -1
         nodo = self._objetos.primero()
         posicion = 0
@@ -326,9 +270,6 @@ class Inventario:
         return actual, arma, armadura
 
     def restaurar(self, objetos, actual, arma, armadura, pergaminos):
-        """Deja un inventario NUEVO exactamente como estaba: las fichas
-        (un Vector, en el orden real), el mismo objeto a la vista, lo mismo
-        equipado y los pergaminos. Las posiciones son las de posiciones()."""
         if not self.esta_vacio() or self._pergaminos != 0:
             raise ValueError("Solo se puede restaurar un inventario vacío")
 
@@ -371,8 +312,6 @@ class Inventario:
         return resultado
 
     def vista_ordenada(self, criterio):
-        # Creamos una copia del orden real.
-        # Así nunca modificamos la ListaDoble del inventario.
         vista = copiar_a_vector(self._objetos)
 
         if criterio == "peso":
@@ -404,14 +343,11 @@ class Inventario:
         if nodo is None:
             return None
 
-        # Lo que sale del inventario deja de estar equipado.
         ranura = self._ranura_de(nodo)
 
         if ranura is not None:
             self._poner_en(ranura, None)
 
-        # Si justamente estamos viendo este nodo,
-        # elegimos una nueva posición actual.
         if self._actual is nodo:
             siguiente = self._objetos.siguiente(nodo)
             anterior = self._objetos.anterior(nodo)
@@ -444,7 +380,6 @@ class Inventario:
         return nodo
 
     def recoger_con_nodo(self, objeto):
-        # Un pergamino nunca entra a la lista (ver __init__).
         if objeto.get("clase") == CLASE_PERGAMINO:
             raise ValueError(
                 "Los pergaminos de retroceso se recogen con "
@@ -472,7 +407,6 @@ class Inventario:
 
         nodo = self._actual
 
-        # Guardamos quién está antes: O(1), sin recorrer la lista.
         siguiente = self._objetos.siguiente(nodo)
         anterior = self._objetos.anterior(nodo)
 
@@ -485,7 +419,6 @@ class Inventario:
 
         self._objetos.quitar_nodo(nodo)
 
-        # Si estaba equipado, se desequipa (y se anota para deshacer).
         ranura = self._ranura_de(nodo)
 
         if ranura is not None:
@@ -501,9 +434,6 @@ class Inventario:
         if contexto is None:
             return
 
-        # Vuelve el MISMO nodo, justo después del que tenía antes.
-        # Como se deshace en orden inverso, ese vecino ya está de vuelta
-        # en la lista (y también es el mismo nodo de siempre).
         self._objetos.reinsertar_despues(
             contexto.nodo,
             contexto.anterior
@@ -511,7 +441,6 @@ class Inventario:
 
         self._actual = contexto.nodo
 
-        # Si estaba equipado cuando se soltó, vuelve a estarlo.
         if contexto.ranura is not None:
             self._poner_en(contexto.ranura, contexto.nodo)
 
@@ -524,18 +453,14 @@ class Inventario:
         if self.esta_lleno():
             return None
 
-        # Primero quitamos el ID del suelo.
         id_objeto = sala.quitar_objeto(
             posicion
         )
 
-        # La ficha completa entra al inventario.
         nodo = self.recoger_con_nodo(
             objeto
         )
 
-        # Por seguridad: si por alguna razón no pudo entrar,
-        # restauramos inmediatamente el suelo.
         if nodo is None:
             sala.insertar_objeto(
                 posicion,
@@ -555,13 +480,10 @@ class Inventario:
         if contexto is None:
             return
 
-        # Sale exactamente el nodo que entró al recoger.
         self.quitar_nodo(
             contexto.nodo_inventario
         )
 
-        # El ID vuelve exactamente a su posición
-        # original en el suelo.
         contexto.sala.insertar_objeto(
             contexto.posicion_suelo,
             contexto.id_objeto
@@ -571,8 +493,6 @@ class Inventario:
         if self._actual is None:
             return None
 
-        # Primero guardamos y quitamos el objeto
-        # del inventario.
         contexto_inventario = (
             self.soltar_actual_con_contexto()
         )
@@ -583,7 +503,6 @@ class Inventario:
         objeto = contexto_inventario.objeto
         id_objeto = objeto["id"]
 
-        # Lo dejamos al final del suelo.
         posicion_suelo = sala.cantidad_objetos()
 
         sala.agregar_objeto(
@@ -601,8 +520,6 @@ class Inventario:
         if contexto is None:
             return
 
-        # Quitamos del suelo el objeto que
-        # apareció al soltarlo.
         contexto.sala.quitar_objeto(
             contexto.posicion_suelo
         )

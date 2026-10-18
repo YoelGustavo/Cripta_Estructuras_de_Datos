@@ -1,11 +1,3 @@
-"""Una sola manera de crear una Partida nueva.
-
-La usan el juego (main.crear_partida) y la reproducción (PreparadorReplay).
-Si cada uno armara la Partida a su manera, bastaría una diferencia mínima
-(otro orden de parámetros, otra sala inicial) para que el --replay diera
-otra partida. Con una sola función eso no puede pasar.
-"""
-
 from crypta.Modelo.Jugador import Jugador
 from crypta.Modelo.Partida import Partida
 

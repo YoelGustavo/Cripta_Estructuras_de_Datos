@@ -47,7 +47,6 @@ class Cambio:
         )
 
     def deshacer(self):
-        # Cambio sencillo de atributo.
         if self.atributo is not None:
             setattr(
                 self.objetivo,
@@ -56,7 +55,6 @@ class Cambio:
             )
             return
 
-        # Cambio estructural.
         if self.operacion is not None:
             metodo = getattr(
                 self.objetivo,

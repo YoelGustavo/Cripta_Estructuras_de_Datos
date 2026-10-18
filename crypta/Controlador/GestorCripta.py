@@ -8,19 +8,15 @@ class GestorCripta:
         self._fuente = fuente
         self._almacen = almacen
 
-        # Esqueleto original recibido de la fuente.
         self._esqueleto_json = None
 
     def cargar(self, cripta_id):
-        # Obtener los datos generales de la cripta.
         datos_cripta = self._fuente.obtener_cripta(
             cripta_id
         )
 
         version = datos_cripta["version"]
 
-        # Intentar recuperar el esqueleto y los
-        # contenidos previamente almacenados.
         guardada = self._almacen.cargar_cripta(
             cripta_id,
             version
@@ -43,8 +39,6 @@ class GestorCripta:
 
             return datos_cripta, mapa, True
 
-        # No existe una copia válida.
-        # Recuperar todas las páginas del esqueleto.
         esqueleto = []
 
         for numero_pagina in range(
@@ -80,8 +74,6 @@ class GestorCripta:
 
         contenidos = []
 
-        # Guardamos todas las salas cuyo contenido
-        # ya está disponible.
         salas = mapa.obtener_todas()
 
         for i in range(len(salas)):
@@ -92,8 +84,6 @@ class GestorCripta:
                     sala.contenido
                 )
 
-        # Guardar el esqueleto original, los contenidos
-        # y ahora también los datos generales completos.
         self._almacen.guardar_cripta(
             cripta_id,
             datos_cripta["version"],

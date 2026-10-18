@@ -1,15 +1,3 @@
-"""--bench, secciones BITÁCORA (§4.8) y RED (§4.2, §4.3 y §5.1).
-
-Bitácora: los últimos 20 mensajes, memoria constante y sin "desplazar
-físicamente los 19 anteriores". El juego usa una Cola con tope sobre una
-ListaSimple; la alternativa descartada es un Vector (al llenarse, quitar el
-primero corre a todos los demás).
-
-Red: lo que importa es CUÁNTAS solicitudes se hacen (el presupuesto de
-cada cripta, §5.1), no cuánto tardan. Se cuenta cuántas pide el juego al
-recorrer una cripta entera, contra la forma ingenua: una solicitud por
-sala y una por cada tipo de ficha.
-"""
 
 import random
 import tempfile
@@ -24,13 +12,7 @@ from crypta.estructuras.Vector import Vector
 from crypta.Modelo.Mapa import Mapa
 
 
-# ======================================================================
-# BITÁCORA
-# ======================================================================
-
 class BitacoraVector:
-    """La alternativa descartada: un Vector con tope; al llenarse se quita
-    el primero, y quitar(0) corre a todos los demás un lugar."""
 
     def __init__(self, maximo):
         self._mensajes = Vector(maximo)
@@ -46,8 +28,6 @@ class BitacoraVector:
 
 
 class BitacoraCola:
-    """Lo mismo que Modelo/Bitacora.py, pero con el tope como parámetro
-    (la del juego tiene 20 fijo)."""
 
     def __init__(self, maximo):
         self._mensajes = Cola(capacidad_max=maximo)
@@ -60,7 +40,6 @@ class BitacoraCola:
 
 
 def costo_agregar(clase, maximo, mensajes=5000):
-    """Segundos por mensaje agregado, con la bitácora ya llena."""
     bitacora = clase(maximo)
     for i in range(maximo):
         bitacora.agregar(f"m{i}")
@@ -71,15 +50,10 @@ def costo_agregar(clase, maximo, mensajes=5000):
 
     tiempo = medir(agregar_muchos, repeticiones=3) / mensajes
 
-    if len(bitacora) != maximo:     # memoria constante: nunca más de 'maximo'
+    if len(bitacora) != maximo:
         raise AssertionError("la bitácora creció")
 
     return tiempo
-
-
-# ======================================================================
-# RED
-# ======================================================================
 
 TIPOS_ENEMIGO = [f"ent_{i}" for i in range(10)]
 TIPOS_OBJETO = [f"itm_{i}" for i in range(15)]
@@ -87,7 +61,6 @@ TIPOS_TRAMPA = [f"trp_{i}" for i in range(5)]
 
 
 def cripta_en_cuadricula(cantidad_salas, semilla=1):
-    """Esqueleto y contenido de una cripta sintética en cuadrícula."""
     azar = random.Random(semilla)
     ancho = max(1, int(cantidad_salas ** 0.5))
     salas = []
@@ -119,7 +92,6 @@ def cripta_en_cuadricula(cantidad_salas, semilla=1):
 
 
 class FuenteContada:
-    """Un servidor en memoria que cuenta las solicitudes."""
 
     def __init__(self, contenidos):
         self.contenidos = contenidos
@@ -136,7 +108,6 @@ class FuenteContada:
 
 
 def solicitudes_ingenuas(contenidos):
-    """Una solicitud por sala y una por cada tipo de ficha nuevo."""
     vistos = ArbolBusqueda()
     for contenido in contenidos:
         tipos = ([e["tipo"] for e in contenido["enemigos"]] + contenido["objetos"]
@@ -148,9 +119,6 @@ def solicitudes_ingenuas(contenidos):
 
 
 def solicitudes_del_juego(cantidad_salas, carpeta, semilla=1):
-    """(en frío, con caché caliente): solicitudes para recorrer TODA la
-    cripta como el juego: entrar a cada sala (garantizar_sala) y precargar
-    las vecinas (lotes de 10 salas), con las fichas en lotes de 10."""
     salas, contenidos = cripta_en_cuadricula(cantidad_salas, semilla)
     almacen = AlmacenDisco(carpeta)
     resultados = []
@@ -161,7 +129,6 @@ def solicitudes_del_juego(cantidad_salas, carpeta, semilla=1):
         mapa.cargar_desde_json(salas)
 
         if vuelta == "caliente":
-            # Como GestorCripta con la copia local de la misma versión.
             mapa.asignar_contenidos(contenidos)
 
         repositorio = RepositorioFichas(fuente, almacen, "v1")
@@ -176,10 +143,6 @@ def solicitudes_del_juego(cantidad_salas, carpeta, semilla=1):
 
     return resultados[0], resultados[1]
 
-
-# ======================================================================
-# LA SECCIÓN DEL --bench
-# ======================================================================
 
 def ejecutar(rapido=False):
     filas = []

@@ -3,7 +3,6 @@ from crypta.Modelo.Sala import DIRECCIONES
 
 
 class VistaConsola:
-    """Interfaz de texto. No ejecuta reglas del juego."""
 
     def mostrar_mensaje(self, mensaje):
         print(mensaje)
@@ -12,7 +11,6 @@ class VistaConsola:
         print(f"Error: {mensaje}")
 
     def leer_comando(self):
-        """Devuelve el texto introducido, sin interpretarlo."""
         return input("\n¿Qué deseas hacer? > ").strip()
 
     def mostrar_ayuda(self):
@@ -48,9 +46,6 @@ class VistaConsola:
         print("=" * 55)
 
         print(f"\nSALA: {sala.nombre} (ID: {sala.id})")
-        # §10.2: "vida y estadísticas relevantes". Ataque y defensa ya
-        # incluyen el arma y la armadura equipadas; la velocidad cambia
-        # con las pociones.
         print(
             f"Vida: {jugador.vida}/{jugador.vida_max} | "
             f"Ataque: {jugador.ataque_total()} | "
@@ -78,7 +73,6 @@ class VistaConsola:
             hay_salidas = True
             estado = "Cerrada" if puerta.esta_cerrada() else "Abierta"
 
-            # Para decidir si se puede abrir, hay que saber qué llave pide.
             if puerta.esta_cerrada() and puerta.requiere_llave():
                 estado += f", necesita {puerta.llave}"
 
@@ -138,7 +132,6 @@ class VistaConsola:
 
     def mostrar_reporte(self, solicitudes, presupuesto, aciertos,
                         fallos_disco, fallos_red):
-        """§5.1: lo que costó la partida en red y cómo le fue a la caché."""
         fallos = fallos_disco + fallos_red
 
         print("\nRECURSOS DE LA PARTIDA")
@@ -149,9 +142,6 @@ class VistaConsola:
         )
 
     def mostrar_puntajes(self, ranking, actual=None):
-        """La tabla de puntajes ya ordenada (TablaPuntajes.ranking).
-        'actual' es el puntaje de la partida que acaba de terminar: se
-        marca para que el jugador vea en qué puesto quedó."""
         print("\nTABLA DE PUNTAJES")
 
         if len(ranking) == 0:
@@ -213,7 +203,6 @@ class VistaConsola:
             )
 
     def mostrar_inventario_ordenado(self, inventario, criterio):
-        """Muestra una copia ordenada, sin cambiar el inventario."""
         objetos, algoritmo = inventario.vista_ordenada(criterio)
 
         print(f"\nINVENTARIO ORDENADO POR {criterio.upper()}")

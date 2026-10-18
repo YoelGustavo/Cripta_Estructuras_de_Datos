@@ -2,33 +2,29 @@ from crypta.Modelo.Actor import Actor
 
 class Enemigo(Actor):
     def __init__(self, id_instancia, tipo, vida_inicial=None):
-        # Mientras duerme no se sabe su nombre ni su velocidad.
         super().__init__(tipo, 0)
  
-        self.id_instancia = id_instancia   # p. ej. "e-201" (único en la cripta)
-        self.tipo = tipo                   # id de la ficha, p. ej. "ent_rata_gigante"
-        self.vida_inicial = vida_inicial   # None = empieza con vida_max
+        self.id_instancia = id_instancia
+        self.tipo = tipo                
+        self.vida_inicial = vida_inicial
  
         self.ficha = None
         self.vida_max = 0
         self.vida = 0
         self.ataque = 0
         self.defensa = 0
-        self.comportamiento = None# "guardián", "errante" o "rastreador"
-
-        # §2.10: si la ficha declara "regeneracion", recupera esa cantidad
-        # cada 200. La API actual no la trae, pero el contrato del juego sí.
+        self.comportamiento = None
         self.regeneracion = 0
-        self.evento_regeneracion = None    # para cancelarlo en O(1) al morir
+        self.evento_regeneracion = None
  
         self.activo = False
-        self.sala_actual = None            # id de la sala (igual que en Jugador)
+        self.sala_actual = None        
  
   
     def esta_activo(self):
         return self.activo
  
-    def activar(self, ficha): #activa al enemigo con la ficha correspondiente (si no lo estaba ya)
+    def activar(self, ficha):
         if self.activo:
             return
  
@@ -60,10 +56,7 @@ class Enemigo(Actor):
  
         self.activo = True
  
-    def desactivar(self): #desactiva el enemigo, solo sirve para la funcion del pergamino.
-        # Vuelve EXACTAMENTE a como estaba dormido (lo mismo que pone
-        # __init__). Si solo se apagara "activo", se quedaría con la vida y
-        # la velocidad de la ficha, y el pergamino no dejaría todo igual.
+    def desactivar(self):
         self.nombre = self.tipo
         self.velocidad = 0
         self.ficha = None

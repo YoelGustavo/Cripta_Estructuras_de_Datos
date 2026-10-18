@@ -5,7 +5,6 @@ from crypta.Modelo.Evento import Evento, evento_menor
 
 
 def _esta_pendiente(evento):
-    # Pendiente = todavía va a ocurrir: no se canceló y sigue en el montículo.
     return evento.esta_valido() and evento.en_monticulo
 
 
@@ -14,8 +13,6 @@ class Agenda:
         self._monticulo = MonticuloMin(evento_menor)
         self._siguiente_secuencia = 0
 
-        # Cuántos eventos PENDIENTES hay. Los cancelados que todavía están
-        # dentro del montículo (borrado perezoso) NO cuentan.
         self._pendientes = 0
 
     def programar(self, tiempo, tipo, objetivo=None, datos=None):
@@ -33,8 +30,6 @@ class Agenda:
         return evento
 
     def cancelar(self, evento):
-        # Solo se cancela algo que todavía va a ocurrir. Cancelar dos veces,
-        # o cancelar un evento que ya se ejecutó, no hace nada.
         if evento is None or not _esta_pendiente(evento):
             return False
 
@@ -48,8 +43,6 @@ class Agenda:
         
         evento_anterior = actor.evento_siguiente
 
-        # Si su acción no está pendiente (no tiene, se canceló, o es la que
-        # se está ejecutando ahora mismo), solo cambia la velocidad.
         if evento_anterior is None or not _esta_pendiente(evento_anterior):
             actor.velocidad = velocidad_nueva
             return None
@@ -94,13 +87,10 @@ class Agenda:
         while not self._monticulo.esta_vacia():
             evento = self._monticulo.ver_min()
 
-            # Quitamos eventos cancelados que hayan
-            # quedado físicamente en el montículo.
             if not evento.esta_valido():
                 self._sacar()
                 continue
 
-            # El próximo evento todavía no debe ejecutarse.
             if evento.tiempo > reloj_actual:
                 return None
 
@@ -110,8 +100,6 @@ class Agenda:
         return None
 
     def esta_vacia(self):
-        # Vacía para el JUEGO: no queda nada pendiente, aunque el montículo
-        # todavía tenga cancelados esperando a ser descartados.
         return self._pendientes == 0
 
     def __len__(self):
@@ -121,43 +109,25 @@ class Agenda:
         if evento is None or _esta_pendiente(evento):
             return
 
-        # Vuelve a estar pendiente.
         evento.reactivar()
         self._pendientes += 1
-
-        # Si ya había salido del montículo (se ejecutó, o se canceló y
-        # ya se descartó), hay que volver a meterlo. Si sigue adentro,
-        # basta con reactivarlo: meterlo otra vez lo duplicaría.
         if not evento.en_monticulo:
             self._insertar(evento)
 
     def deshacer_programacion(self, evento):
-        # Deshacer "programé este evento" = que nunca ocurra.
         self.cancelar(evento)
 
-    # =========================================================
-    # GUARDAR Y CARGAR LA PARTIDA (§4.10)
-    # =========================================================
 
     @property
     def siguiente_secuencia(self):
-        """El número de secuencia que recibirá el próximo evento."""
         return self._siguiente_secuencia
 
     def recorrer_pendientes(self):
-        """Recorre los eventos pendientes SIN ordenarlos: O(n). Es para
-        quien solo necesita mirarlos todos (el controlador, al buscar los
-        enemigos despiertos para las fichas en uso, §4.4). No cambia nada.
-        eventos_pendientes, en cambio, los ordena por secuencia porque el
-        guardado necesita ese orden; ordenar en cada turno costaría más."""
         for evento in self._monticulo:
             if _esta_pendiente(evento):
                 yield evento
 
     def eventos_pendientes(self):
-        """Vector con los eventos pendientes, ordenados por secuencia. Los
-        cancelados que siguen dentro del montículo (borrado perezoso) no
-        están: no van a ocurrir, así que no hace falta guardarlos."""
         pendientes = Vector()
 
         for evento in self._monticulo:
@@ -168,8 +138,6 @@ class Agenda:
         return pendientes
 
     def restaurar_pendiente(self, tiempo, secuencia, tipo, objetivo):
-        """Vuelve a poner un evento guardado CON SU número de secuencia:
-        así los empates se resuelven igual que antes de guardar (§2.3)."""
         if secuencia >= self._siguiente_secuencia:
             raise ValueError(
                 f"La secuencia {secuencia} no es menor que la siguiente "
@@ -182,7 +150,6 @@ class Agenda:
         return evento
 
     def restaurar_secuencia(self, siguiente):
-        """Solo en una agenda nueva: fija el próximo número de secuencia."""
         if self._siguiente_secuencia != 0 or not self._monticulo.esta_vacia():
             raise ValueError("Solo se puede restaurar la secuencia de una agenda nueva")
 

@@ -1,14 +1,3 @@
-"""--bench, sección RASTRO (§4.7).
-
-La decisión de un rastreador tiene que costar según las salidas de su sala,
-no según el tamaño de la cripta ni lo largo del recorrido del jugador.
-
-El juego guarda en cada sala un solo número: el instante en que el jugador
-estuvo allí por última vez. La alternativa descartada es guardar el
-recorrido completo del jugador (sala y tiempo de cada paso) y, para saber
-el rastro de una sala, buscarlo desde el paso más reciente hacia atrás.
-"""
-
 from crypta.bench.bench_red import cripta_en_cuadricula
 from crypta.bench.medicion import formato_tiempo, medir, tabla
 from crypta.estructuras.Vector import Vector
@@ -17,8 +6,6 @@ from crypta.Modelo.Rastreador import VIGENCIA_RASTRO, sala_con_rastro_mas_fresco
 
 
 class HuellasEnLista:
-    """La alternativa descartada: todos los pasos del jugador en un Vector."""
-
     def __init__(self):
         self._huellas = Vector()
 
@@ -33,7 +20,6 @@ class HuellasEnLista:
         return None
 
     def decidir(self, sala, reloj):
-        """Las mismas reglas que sala_con_rastro_mas_fresco (§2.9)."""
         mejor = None
         mejor_tiempo = None
         puertas = sala.puertas(solo_abiertas=True)
@@ -52,9 +38,6 @@ class HuellasEnLista:
 
 
 def preparar(cantidad_salas, pasos):
-    """El jugador camina 'pasos' veces entre las salas 1 y 2 (cada paso,
-    100 de tiempo). Devuelve (mapa, huellas, reloj, sala del rastreador):
-    el rastreador está en la última sala, lejos del jugador."""
     salas, _ = cripta_en_cuadricula(cantidad_salas)
     mapa = Mapa()
     mapa.cargar_desde_json(salas)
@@ -71,7 +54,6 @@ def preparar(cantidad_salas, pasos):
 
 
 def costo_decision(cantidad_salas, pasos, vueltas=200):
-    """(juego, lista de huellas): segundos por decisión de un rastreador."""
     mapa, huellas, reloj, sala = preparar(cantidad_salas, pasos)
 
     def juego():

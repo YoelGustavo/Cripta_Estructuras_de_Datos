@@ -53,11 +53,8 @@ class Puerta:
 
     def compartir_estado_con(self, otra_puerta):
         if otra_puerta._estado is self._estado:
-            return  # ya comparten estado
+            return
 
-        # Las dos mitades describen la MISMA puerta, cada una desde su
-        # lado. Antes de compartir se junta lo que dice cada una; si no,
-        # se pierde lo que solo decía la otra (por ejemplo, la llave).
         mio = self._estado
         suyo = otra_puerta._estado
 

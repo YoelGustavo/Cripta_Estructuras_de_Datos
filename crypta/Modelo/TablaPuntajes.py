@@ -20,7 +20,6 @@ class ErrorTablaPuntajes(Exception):
 
 
 class Puntaje:
-    """Una partida terminada, tal como queda en la tabla."""
 
     def __init__(self, jugador, cripta_id, version_cripta, resultado,
                  acciones, enemigos, tiempo):
@@ -46,15 +45,6 @@ class Puntaje:
         self.enemigos = enemigos
         self.tiempo = tiempo
 
-        # Por qué se ordena la tabla (se calcula UNA vez, no en cada
-        # comparación). Menor = mejor puesto:
-        #   - primero las victorias, de la más rápida (menor tiempo) a la
-        #     más lenta; empate: menos acciones; luego más enemigos;
-        #   - después las derrotas, de la que llegó más lejos (más
-        #     enemigos derrotados, más tiempo sobrevivido) a la que menos;
-        #     empate: menos acciones.
-        # Si todo empata, queda primero la que se registró antes (los dos
-        # algoritmos de ordenar son estables).
         if resultado == VICTORIA:
             self.clave_ranking = (0, tiempo, acciones, -enemigos)
         else:
@@ -67,8 +57,6 @@ class Puntaje:
 
 
 def puntaje_de(partida, cripta_id, version_cripta):
-    """El Puntaje de una partida TERMINADA. El id y la versión de la
-    cripta los pone el controlador (la Partida no los conoce)."""
     if not partida.terminada:
         raise ValueError("Solo se registran partidas terminadas (§2.12)")
 
@@ -80,9 +68,6 @@ def puntaje_de(partida, cripta_id, version_cripta):
 class TablaPuntajes:
 
     def __init__(self, ruta=None):
-        """ruta: el archivo donde vive la tabla. Si ya existe, se lee
-        (ErrorTablaPuntajes si está dañado o es de otro formato). None =
-        tabla solo en memoria (para pruebas y mediciones)."""
         self._ruta = ruta
         self._puntajes = Vector()
 
@@ -93,13 +78,10 @@ class TablaPuntajes:
         return len(self._puntajes)
 
     def __iter__(self):
-        """En el orden en que se registraron."""
         for i in range(len(self._puntajes)):
             yield self._puntajes.obtener(i)
 
     def registrar(self, puntaje):
-        """Agrega el puntaje: al final del Vector y al final del archivo.
-        O(1) (amortizado): no se ordena ni se reescribe nada."""
         if self._ruta is not None:
             nuevo = _sin_tabla(self._ruta)
 
@@ -111,19 +93,11 @@ class TablaPuntajes:
         self._puntajes.agregar(puntaje)
 
     def registrar_partida(self, partida, cripta_id, version_cripta):
-        """Atajo para el controlador: registra una partida terminada."""
         puntaje = puntaje_de(partida, cripta_id, version_cripta)
         self.registrar(puntaje)
         return puntaje
 
     def ranking(self, cripta_id=None, limite=None):
-        """Vector NUEVO con los puntajes del mejor al peor (ver
-        Puntaje.clave_ranking). cripta_id: solo los de esa cripta (las
-        criptas distintas no se comparan). limite: solo los primeros.
-
-        La tabla no cambia: se ordena una copia. La clave es una tupla de
-        4 números; se midió que compararla casi no cuesta más que comparar
-        un número, así que no se marca como comparación costosa."""
         copia = Vector()
 
         for i in range(len(self._puntajes)):
@@ -167,9 +141,6 @@ class TablaPuntajes:
 
 
 def _sin_tabla(ruta):
-    """El archivo no existe o está vacío (0 bytes: por ejemplo, el programa
-    se cerró justo al crearlo). En los dos casos la tabla empieza de cero
-    y el primer registrar escribe el encabezado."""
     return not os.path.exists(ruta) or os.path.getsize(ruta) == 0
 
 
@@ -215,7 +186,6 @@ def _puntaje_de_linea(linea, numero):
 
 
 def _separar_campos(linea):
-    """Vector con los campos de una línea (sin usar split, que da una list)."""
     campos = Vector(CANTIDAD_CAMPOS)
     resto = linea
 

@@ -17,18 +17,13 @@ class RepositorioFichas:
         self._almacen = almacen
         self._version_catalogo = version_catalogo
  
-        # Único almacenamiento de fichas completas en memoria.
         self._cache = CacheLRU(cache_size)
 
-        # §5.1: al final de la partida se reportan aciertos y fallos de la
-        # caché en memoria. Un fallo se resuelve leyendo el disco o, si la
-        # ficha nunca se guardó, pidiéndola por red.
         self.aciertos = 0
         self.fallos_disco = 0
         self.fallos_red = 0
  
     def extraer_ids_contenido(self, contenido):
-        #ListaSimple con los ids de tipo (sin repetir) de un contenido.
         ids = ListaSimple()
         vistos = ArbolBusqueda()
  
@@ -41,7 +36,7 @@ class RepositorioFichas:
  
 
     def resolver_contenidos(self, contenidos):
-        vistos = ArbolBusqueda()#cambie los sets por arboles.
+        vistos = ArbolBusqueda()
         por_pedir = ListaSimple()
 
         for contenido in contenidos:
@@ -58,8 +53,6 @@ class RepositorioFichas:
                 self._fuente.obtener_catalogo(lote)
             )
  
-            # Lo que sueltan los enemigos recin descargados entra a la
-            # misma cola, así viaja en el prximo lote
             for ficha in recibidas:
                 if ficha.get("clase") == "enemigo":
                     for id_suelta in ficha.get("suelta") or ():
@@ -71,13 +64,11 @@ class RepositorioFichas:
  
         vistos.insertar(id_tipo, True)
  
-        # 1. Buscar en RAM.
         if self._cache.contiene(id_tipo):
             self._cache.obtener(id_tipo)
             self.aciertos += 1
             return
  
-        # 2. Buscar mediante lectura real de disco.
         ficha = self._cargar_desde_disco(id_tipo)
  
         if ficha is not None:
@@ -85,15 +76,11 @@ class RepositorioFichas:
             self.fallos_disco += 1
             return
  
-        # 3. No existe en RAM ni en almacenamiento
-        # persistente válido. Habrá que pedirla por red.
         self.fallos_red += 1
         por_pedir.agregar_al_final(id_tipo)
  
     @staticmethod
     def _tipos_de(contenido):
-        # Recorre los ids de tipo de un contenido (pueden repetirse).
-        # "or ()": las listas pueden no venir, o venir en null.
         for enemigo in contenido.get("enemigos") or ():
             yield enemigo["tipo"]
  
@@ -116,12 +103,9 @@ class RepositorioFichas:
         )
  
     def _guardar_respuesta(self, respuesta):
-        """Guarda en la caché y en disco las fichas que llegaron por red.
-        Devuelve una ListaSimple con ellas."""
         recibidas = ListaSimple()
  
         for ficha in respuesta.get("entidades") or ():
-            # Entra en la caché limitada.
             self._cache.insertar(
                 ficha["id"],
                 ficha
@@ -142,7 +126,6 @@ class RepositorioFichas:
         return recibidas
  
     def obtener_ficha(self, id_tipo):
-        # 1. RAM
         ficha = self._cache.obtener(
             id_tipo
         )
@@ -151,7 +134,6 @@ class RepositorioFichas:
             self.aciertos += 1
             return ficha
  
-        # 2. Disco
         ficha = self._cargar_desde_disco(
             id_tipo
         )
@@ -165,8 +147,6 @@ class RepositorioFichas:
             self.fallos_disco += 1
             return ficha
  
-        # 3. Red (último recurso: no debería pasar si el contenido de la
-        # sala se resolvió antes con resolver_contenidos)
         self.fallos_red += 1
         lote = ListaSimple()
         lote.agregar_al_final(id_tipo)
@@ -182,8 +162,6 @@ class RepositorioFichas:
         return None
  
     def contiene(self, id_tipo):
-        # Esta operación representa pertenencia a la
-        # caché EN MEMORIA y debe ser rápida.
         return self._cache.contiene(
             id_tipo
         )
@@ -194,8 +172,6 @@ class RepositorioFichas:
         )
  
     def marcar_en_uso(self, id_tipo):
-        # Para proteger una ficha debe estar cargada
-        # en memoria.
         ficha = self.obtener_ficha(
             id_tipo
         )
@@ -216,7 +192,6 @@ class RepositorioFichas:
         )
  
     def cantidad_fichas(self):
-        # Total de fichas persistidas válidas.
         if (
             self._almacen is None
             or self._version_catalogo is None

@@ -9,7 +9,6 @@ DIRECCIONES = "NSEO"
 
 
 def indice_direccion(direccion):
-    """Casilla de esa dirección: N=0, S=1, E=2, O=3. -1 si no es válida."""
     if not isinstance(direccion, str) or len(direccion) != 1:
         return -1
 
@@ -21,16 +20,11 @@ class Sala:
         self.id = id_sala
         self.nombre = nombre
 
-        # Vector de 4 casillas, una por dirección (en el orden de
-        # DIRECCIONES). None = no hay salida en esa dirección.
-        # Antes era un dict: §7 prohíbe usarlo como estructura propia.
         self._puertas = Vector(len(DIRECCIONES))
 
         for _ in range(len(DIRECCIONES)):
             self._puertas.agregar(None)
 
-        # 'salidas' es el dict del JSON (se puede LEER, §7) o None si la
-        # sala no trae salidas. Se lee aquí y no se guarda.
         if salidas is not None:
             for direccion in salidas:
                 indice = indice_direccion(direccion)
@@ -59,28 +53,14 @@ class Sala:
         self.objetos = Vector()
         self.trampas = Vector()
 
-        # Enemigos que están AHORA en la sala: los dormidos que trajo su
-        # contenido y los activos que llegaron caminando desde otra (§2.4).
         self.enemigos = Vector()
 
-        # Pergaminos de retroceso en el suelo: una CANTIDAD aparte, por la
-        # misma razón que en el inventario (§2.11). Si su id se quedara en
-        # el Vector de objetos, recogerlo (sin deshacerlo) correría las
-        # posiciones que otros contextos de deshacer tienen anotadas.
         self.pergaminos = 0
         self._pergaminos_apartados = False
 
-        # Instante del último rastro dejado por el jugador.
-        # None significa que el jugador nunca ha estado en esta sala.
         self.ultimo_rastro = None
 
-    # =========================================================
-    # PUERTAS
-    # =========================================================
-
     def obtener_puerta(self, direccion):
-        """La puerta en esa dirección, o None si no hay salida (o si la
-        dirección no es N, S, E u O). O(1): es una casilla del Vector."""
         indice = indice_direccion(direccion)
 
         if indice < 0:
@@ -89,10 +69,6 @@ class Sala:
         return self._puertas.obtener(indice)
 
     def puertas(self, solo_abiertas=False):
-        """Vector con las puertas que existen, SIEMPRE en orden N, S, E, O.
-
-        solo_abiertas=True: solo las que se pueden atravesar (para moverse,
-        el errante y el rastreador: los enemigos no abren puertas, §2.5)."""
         resultado = Vector(len(DIRECCIONES))
 
         for i in range(len(DIRECCIONES)):
@@ -109,8 +85,6 @@ class Sala:
         return resultado
 
     def poner_puerta(self, direccion, puerta):
-        """Pone la puerta de esa dirección (al cargar una partida guardada,
-        §4.10, la sala se arma sin el JSON). Solo en una casilla vacía."""
         indice = indice_direccion(direccion)
 
         if indice < 0:
@@ -122,25 +96,17 @@ class Sala:
         self._puertas.asignar(indice, puerta)
 
     def direccion_de(self, puerta):
-        """La dirección ("N", "S", "E" u "O") de una puerta de esta sala."""
         for i in range(len(DIRECCIONES)):
             if self._puertas.obtener(i) is puerta:
                 return DIRECCIONES[i]
 
         return None
 
-    # =========================================================
-    # CONTENIDO
-    # =========================================================
 
     def contenido_cargado(self):
         return self.contenido is not None
 
     def asignar_contenido(self, contenido):
-        # El contenido de una sala se incorpora UNA sola vez. Si llegara
-        # de nuevo (p. ej. una respuesta anticipada que llega tarde), se
-        # ignora: volver a cargarlo reviviría objetos que el jugador ya
-        # recogió y duplicaría los enemigos.
         if self.contenido_cargado():
             return
 
@@ -157,15 +123,6 @@ class Sala:
 
             self.trampas.agregar(trampa)
 
-        # Un enemigo activo pudo haber entrado caminando ANTES de que se
-        # cargara el contenido de esta sala: ese no se borra. Los del
-        # contenido se ponen DELANTE de él, en el orden del JSON. Así el
-        # orden de la sala es siempre "los del contenido, y después los que
-        # llegaron caminando", sin importar CUÁNDO llegó el contenido (al
-        # jugar llega por la red o la precarga; al reproducir puede venir
-        # todo de una copia local). Si no, la partida y su reproducción
-        # podrían quedar con los enemigos en otro orden (§4.11).
-        # Todos nacen dormidos (§2.4: cargar el contenido no activa a nadie).
         posicion = 0
 
         for datos_enemigo in contenido.get("enemigos") or ():
@@ -197,18 +154,8 @@ class Sala:
             objeto
         )
 
-    # =========================================================
-    # PERGAMINOS EN EL SUELO (§2.11)
-    # =========================================================
 
     def apartar_pergaminos(self, es_pergamino):
-        """Saca del Vector de objetos los ids que son pergaminos y los
-        cuenta aparte. 'es_pergamino(id)' dice si un id lo es (eso lo sabe
-        la ficha del catálogo, que la sala no tiene).
-
-        Se llama UNA vez, cuando el jugador entra a la sala y ya se
-        conocen las fichas, antes de cualquier acción allí. O(k), con k
-        los objetos del suelo; las demás vuelven en el mismo orden."""
         if self._pergaminos_apartados:
             return
 
@@ -238,11 +185,6 @@ class Sala:
 
     def restaurar_contenido(self, contenido, objetos, trampas, pergaminos,
                             pergaminos_apartados):
-        """Al cargar una partida guardada (§4.10): el contenido como ESTABA
-        al guardar (no como vino del servidor). 'contenido' es el original
-        (el que se guarda en la caché); objetos y trampas son Vectores con
-        lo que hay ahora. Los enemigos se ponen aparte, con agregar_enemigo:
-        pueden estar aquí aunque el contenido no se haya cargado."""
         if self.contenido_cargado():
             raise ValueError(f"La sala {self.id} ya tiene su contenido")
 
@@ -277,23 +219,14 @@ class Sala:
         return self.enemigos.obtener(posicion)
 
     def agregar_enemigo(self, enemigo):
-        """Un enemigo entra a esta sala (viene en el contenido o llega
-        caminando). Su sala_actual pasa a ser esta."""
         enemigo.sala_actual = self.id
         self.enemigos.agregar(enemigo)
 
     def insertar_enemigo(self, posicion, enemigo):
-        """Lo vuelve a poner en la posición que tenía (para deshacer)."""
         enemigo.sala_actual = self.id
         self.enemigos.insertar(posicion, enemigo)
 
     def quitar_enemigo(self, enemigo):
-        """Saca ESE enemigo de la sala (porque se movió o murió) y devuelve
-        la posición que tenía, para poder deshacerlo con insertar_enemigo.
-
-        Se busca con 'is' y no con '==': dos ratas del mismo tipo son
-        objetos distintos y hay que quitar la que es. O(k), con k los
-        enemigos de esta sala (pocos)."""
         for i in range(len(self.enemigos)):
             if self.enemigos.obtener(i) is enemigo:
                 self.enemigos.quitar(i)
@@ -304,10 +237,6 @@ class Sala:
         )
 
     def enemigos_dormidos(self):
-        """Vector con los enemigos que aún no se activan, en orden
-        ascendente de id de instancia. §2.4: si varios se activan en el
-        mismo instante, se programan en ese orden para que sus números de
-        secuencia sean deterministas."""
         dormidos = Vector()
 
         for i in range(len(self.enemigos)):

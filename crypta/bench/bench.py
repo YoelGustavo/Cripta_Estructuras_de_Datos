@@ -1,18 +1,3 @@
-"""El --bench: cargas sintéticas y tiempos por subsistema (§5.3).
-
-Cada subsistema es una SECCIÓN con su propio archivo (bench_agenda.py...);
-aquí se juntan. La comparación del guardado (§4.10, binario contra JSON)
-vive en este mismo archivo.
-
-Uso (desde la carpeta raíz del proyecto):
-    python -m crypta.main --bench                  todas las secciones
-    python -m crypta.bench.bench                   lo mismo
-    python -m crypta.bench.bench agenda guardado   solo esas
-    python -m crypta.bench.bench --rapido          tamaños chicos (para probar)
-    python -m crypta.bench.bench --guardar docs/resultados_bench.txt
-                                                   además lo guarda en ese archivo
-"""
-
 import os
 import platform
 import random
@@ -32,19 +17,16 @@ from crypta.Modelo.Mapa import Mapa
 from crypta.Modelo.Partida import AccionInvalida, Partida
 
 
-#compara los 2 guardados (bin y jason)
 class ComparacionGuardado:
-    """Lo que mide comparar_formatos. Tiempos en segundos (el promedio de
-    las repeticiones); tamaños y bytes en bytes."""
-
+ 
     def __init__(self):
         self.tamano_binario = 0
         self.tamano_json = 0
-        self.carga_binario = 0.0           # abrir + cargar_partida
+        self.carga_binario = 0.0     
         self.carga_json = 0.0
-        self.una_sala_binario = 0.0        # abrir + leer_sala
+        self.una_sala_binario = 0.0
         self.una_sala_json = 0.0
-        self.bytes_una_sala_binario = 0    # lo que se leyó del archivo
+        self.bytes_una_sala_binario = 0
         self.bytes_una_sala_json = 0
 
     def __str__(self):
@@ -58,8 +40,7 @@ class ComparacionGuardado:
 
 
 def comparar_formatos(partida, encabezado, fichas, carpeta, repeticiones=10, id_sala=None):
-    """Guarda la MISMA partida en los dos formatos y mide. id_sala: la sala
-    que se lee sola (por defecto, la del jugador)."""
+    
     if id_sala is None:
         id_sala = partida.jugador.sala_actual
 
@@ -102,10 +83,6 @@ def _medir(funcion, repeticiones):
     return (time.perf_counter() - inicio) / repeticiones
 
 
-# ======================================================================
-# UNA CRIPTA SINTÉTICA
-# ======================================================================
-
 def _enemigo(id_tipo, velocidad, comportamiento):
     return {"id": id_tipo, "clase": "enemigo", "nombre": id_tipo, "vida_max": 20,
             "ataque": 4, "defensa": 1, "velocidad": velocidad,
@@ -126,11 +103,6 @@ CATALOGO_SINTETICO = {
 
 
 def partida_sintetica(cantidad_salas, semilla=1, pasos=200):
-    """Una cripta en cuadrícula con 'cantidad_salas' salas, todas con su
-    contenido cargado, y 'pasos' acciones al azar ya jugadas (para que haya
-    enemigos activos, eventos pendientes, objetos movidos...).
-
-    Devuelve (partida, encabezado, fichas)."""
     azar = random.Random(semilla)
     ancho = max(1, int(cantidad_salas ** 0.5))
     salas = []
@@ -203,7 +175,6 @@ def formato_bytes(cantidad):
 
 
 def ejecutar_guardado(rapido=False):
-    """La sección GUARDADO: la misma partida en binario y en JSON."""
     tamanos = (100,) if rapido else (100, 1000, 5000)
     filas = []
 
@@ -229,12 +200,6 @@ def ejecutar_guardado(rapido=False):
         "El binario tiene un índice al final: para una sala lee solo el índice y ese "
         "registro. El JSON hay que leerlo entero.")
 
-
-# ======================================================================
-# TODAS LAS SECCIONES
-# ======================================================================
-
-# (nombre para pedirla, título, función que mide y devuelve el texto)
 SECCIONES = (
     ("agenda", "Agenda de eventos (§4.1)", bench_agenda.ejecutar),
     ("ciclo", "Ciclo entre dos decisiones (§5.2)", bench_ciclo.ejecutar),
@@ -248,9 +213,7 @@ SECCIONES = (
 
 
 def ejecutar(nombres=None, rapido=False, salida=print):
-    """Corre las secciones pedidas (todas si 'nombres' es None) y muestra
-    cada una apenas termina. 'salida' es print, o algo que junte el texto
-    (las pruebas)."""
+    
     validos = [nombre for nombre, _, _ in SECCIONES]
 
     for nombre in nombres or ():

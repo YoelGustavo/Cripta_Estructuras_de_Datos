@@ -17,7 +17,6 @@ class Mapa:
                 Sala(
                     id_sala=datos["id"],
                     nombre=datos["nombre"],
-                    # "salidas" es opcional en el API: puede no venir o venir null.
                     salidas=datos.get("salidas")
                 )
             )
@@ -25,8 +24,6 @@ class Mapa:
         self.cargar_salas(salas)
 
     def cargar_salas(self, salas):
-        """Arma el mapa con salas ya creadas (un Vector): desde el JSON o
-        desde una partida guardada (§4.10). Ids repetidos: ValueError."""
         pares = Vector()
 
         for i in range(len(salas)):
@@ -62,7 +59,6 @@ class Mapa:
         return len(self._salas)
 
     def obtener_vecinas(self, id_sala, solo_abiertas=False):
-        """Vector de salas vecinas, siempre en orden N, S, E, O."""
         sala = self.obtener_sala(id_sala)
 
         if sala is None:
@@ -152,8 +148,6 @@ class Mapa:
                 if destino is None:
                     continue
 
-                # Se busca, entre las puertas del destino, la que vuelve
-                # a esta sala: es la otra mitad de la MISMA puerta.
                 puertas_destino = destino.puertas()
 
                 for k in range(len(puertas_destino)):

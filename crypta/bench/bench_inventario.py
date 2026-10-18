@@ -1,16 +1,3 @@
-"""--bench, secciones INVENTARIO (§4.5) e HISTORIAL (§4.6).
-
-Inventario: §4.5 pide soltar el objeto que se ve "en cualquier posición,
-sin que el costo dependa de la posición". El juego usa una ListaDoble (se
-quita el nodo); la alternativa descartada es un Vector (quitar corre a
-todos los que están después).
-
-Historial: el pergamino deshace la última acción y TODO lo que pasó
-después. El juego anota solo los CAMBIOS de cada acción (Pila de Cambio);
-la alternativa descartada es sacar una FOTO completa de la partida antes
-de cada acción (copy.deepcopy).
-"""
-
 import copy
 import sys
 
@@ -19,19 +6,12 @@ from crypta.bench.medicion import cronometrar, formato_tiempo, medir, tabla
 from crypta.estructuras.Vector import Vector
 from crypta.Modelo.Inventario import Inventario
 
-
-# ======================================================================
-# INVENTARIO
-# ======================================================================
-
 def _ficha(i):
     return {"id": f"itm_{i}", "nombre": f"Objeto {i}", "clase": "arma",
             "peso": 1, "valor": 1}
 
 
 def costo_soltar_lista(cantidad, posicion, vueltas=200):
-    """Soltar el objeto de 'posicion' del inventario real (y devolverlo,
-    para que el inventario no cambie entre vueltas)."""
     inventario = Inventario(cantidad)
     for i in range(cantidad):
         inventario.recoger(_ficha(i))
@@ -47,7 +27,6 @@ def costo_soltar_lista(cantidad, posicion, vueltas=200):
 
 
 def costo_soltar_vector(cantidad, posicion, vueltas=200):
-    """Lo mismo con un Vector: quitar(posicion) e insertar(posicion)."""
     vector = Vector()
     for i in range(cantidad):
         vector.agregar(_ficha(i))
@@ -60,28 +39,20 @@ def costo_soltar_vector(cantidad, posicion, vueltas=200):
     return medir(soltar_y_devolver) / vueltas
 
 
-# ======================================================================
-# HISTORIAL
-# ======================================================================
-
 def costo_deshacer(enemigos, cantidad_salas=100, vueltas=10):
-    """(deshacer con el historial, sacar una foto completa): segundos.
-    La partida es la de estrés del ciclo: con más enemigos, cada acción
-    del jugador arrastra más eventos que hay que deshacer."""
     partida = bench_ciclo.partida_de_carga(enemigos, bench_ciclo.CATALOGO.get,
                                            cantidad_salas=cantidad_salas)
     mejor = None
 
     for _ in range(vueltas):
         partida.jugador.inventario.fijar_pergaminos(1)
-        partida.esperar()                                  # no se mide
+        partida.esperar()
         transcurrido = cronometrar(partida.usar_pergamino)
 
         if mejor is None or transcurrido < mejor:
             mejor = transcurrido
 
-    # deepcopy recorre los nodos enlazados (listas, árboles) uno dentro de
-    # otro: con una partida grande pasa el límite de recursión de Python.
+    
     limite = sys.getrecursionlimit()
     sys.setrecursionlimit(max(limite, 50000))
     try:
@@ -91,10 +62,6 @@ def costo_deshacer(enemigos, cantidad_salas=100, vueltas=10):
 
     return mejor, foto
 
-
-# ======================================================================
-# LA SECCIÓN DEL --bench
-# ======================================================================
 
 def ejecutar(rapido=False):
     tamanos = (10, 100) if rapido else (10, 100, 1000)

@@ -26,11 +26,8 @@ from crypta.Controlador.Reproductor import (
 from crypta.Vista.VistaConsola import VistaConsola
 
 
-# La tabla de puntajes (§2.12): un archivo de texto de solo anexado.
 RUTA_PUNTAJES = "puntajes.txt"
 
-# El registro de la partida (§4.11). Es el de la ÚLTIMA partida: la
-# siguiente lo reemplaza (para conservarlo, hay que copiarlo).
 RUTA_REGISTRO = "partida.log"
 
 
@@ -95,7 +92,6 @@ def crear_argumentos():
 
 
 def crear_fuente(args, almacen):
-    """El ÚNICO lugar donde se decide entre red y modo sin conexión (§6)."""
     if args.offline:
         return FuenteOffline(almacen)
 
@@ -103,8 +99,6 @@ def crear_fuente(args, almacen):
 
 
 def crear_partida(args):
-    """Construye los componentes de una partida para JUGAR.
-    (Para reproducir se usa PreparadorReplay, con el mismo nueva_partida.)"""
 
     almacen = AlmacenDisco()
     fuente = crear_fuente(args, almacen)
@@ -118,8 +112,6 @@ def crear_partida(args):
         args.cripta
     )
 
-    # §5.1: desde aquí la fuente no deja pasar del presupuesto de la
-    # cripta. (En modo sin conexión no hace nada: no hay red.)
     fuente.fijar_presupuesto(datos_cripta["presupuesto_solicitudes"])
 
     version_catalogo = fuente.obtener_version_catalogo()["version"]
@@ -137,7 +129,6 @@ def crear_partida(args):
         else random.randint(0, 2**31 - 1)
     )
 
-    # El MISMO código que usa el replay para armar la partida.
     partida = nueva_partida(
         datos_cripta,
         mapa,
@@ -166,8 +157,6 @@ def crear_partida(args):
         encabezado
     )
 
-    # Un archivo de puntajes dañado no impide jugar: se avisa y esta
-    # partida simplemente no se registra (no se sobrescribe el archivo).
     try:
         tabla = TablaPuntajes(RUTA_PUNTAJES)
     except ErrorTablaPuntajes as error:
@@ -188,8 +177,6 @@ def crear_partida(args):
 
 
 def reproducir(args):
-    """--replay: repite el log con el Reproductor de la Fase 6, SIN vista
-    ni teclado (§6). Devuelve el código de salida del programa."""
 
     almacen = AlmacenDisco()
     preparador = PreparadorReplay(
@@ -241,9 +228,6 @@ def reproducir(args):
 
 
 def listar_criptas(args):
-    """--listar: las criptas que se pueden jugar (§10.2: "seleccionar una
-    cripta"). En línea las pide al servidor (1 solicitud, fuera de toda
-    partida); con --offline, las que tienen copia local."""
     try:
         respuesta = crear_fuente(args, AlmacenDisco()).listar_criptas()
     except RuntimeError as error:
@@ -274,8 +258,6 @@ def listar_criptas(args):
 
 
 def ejecutar_benchmarks():
-    """--bench (§5.3): todas las secciones de crypta/bench, sin vista.
-    Se importa aquí adentro para que jugar no cargue el bench."""
     from crypta.bench.bench import ejecutar
 
     ejecutar()
@@ -297,7 +279,6 @@ def main():
     if args.listar:
         return listar_criptas(args)
 
-    # Los benchmarks no utilizan HTTP ni vista interactiva.
     if args.bench:
         ejecutar_benchmarks()
         return 0
@@ -306,7 +287,6 @@ def main():
     print("              CRIPTA")
     print("=" * 45)
 
-    # El replay no crea la vista ni el controlador (§6).
     if args.replay is not None:
         print(
             "Modo: REPLAY OFFLINE"
@@ -338,18 +318,12 @@ def main():
         codigo = 1
 
     except KeyboardInterrupt:
-        # Ctrl+C fuera de la lectura de comandos (mientras se carga una
-        # sala, por ejemplo): se termina igual de ordenado.
         print("\nPartida interrumpida.")
 
     finally:
         if controlador is not None:
-            # Al cargar una partida el controlador cambia de gestor: se
-            # cierra el que tiene AHORA.
             controlador.gestor_contenido.cerrar()
 
-            # Conservar lo descargado (modo en línea) SIEMPRE, también si
-            # hubo un error o un Ctrl+C: el replay necesita la copia local.
             if not args.offline:
                 try:
                     gestor_cripta.persistir(
@@ -367,8 +341,6 @@ def main():
                 f"{' --offline' if args.offline else ''} --replay {RUTA_REGISTRO}"
             )
 
-            # §5.1: el reporte sale siempre que se jugó, aunque haya
-            # habido un error.
             repositorio = controlador.repositorio_fichas
             controlador.vista.mostrar_reporte(
                 fuente.cantidad_solicitudes(),

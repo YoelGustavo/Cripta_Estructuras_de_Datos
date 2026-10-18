@@ -1,11 +1,3 @@
-"""--bench, sección CACHÉ (§4.4).
-
-1. Averiguar si una ficha está en la caché "es una de las operaciones más
-   frecuentes" (§4.4). La CacheLRU del juego busca en un ArbolBusqueda;
-   la alternativa descartada es recorrer la lista de fichas una por una.
-2. Recuperar una ficha que la caché ya liberó cuesta una lectura de disco
-   (no red). Se compara con encontrarla en memoria.
-"""
 
 import random
 import tempfile
@@ -18,8 +10,6 @@ from crypta.estructuras.Vector import Vector
 
 
 class CacheLineal:
-    """La alternativa descartada: las fichas en un Vector y, para saber si
-    una está, revisarlas todas: O(n)."""
 
     def __init__(self):
         self._ids = Vector()
@@ -35,11 +25,9 @@ class CacheLineal:
 
 
 def costo_busqueda(clase, cantidad, busquedas=1000, semilla=1):
-    """Segundos por búsqueda con 'cantidad' fichas guardadas. La mitad de
-    las búsquedas encuentran la ficha y la otra mitad no."""
     azar = random.Random(semilla)
     ids = [f"itm_{i:05d}" for i in range(cantidad)]
-    azar.shuffle(ids)      # llegan en el orden en que se descubren, no ordenadas
+    azar.shuffle(ids)
 
     cache = clase(cantidad) if clase is CacheLRU else clase()
     for id_tipo in ids:
@@ -60,23 +48,20 @@ class _SinRed:
 
 
 def costo_recuperar(cantidad_fichas=200):
-    """(memoria, disco): segundos para obtener una ficha que está en la
-    caché y una que la caché ya liberó (sigue guardada en disco)."""
     with tempfile.TemporaryDirectory() as carpeta:
         almacen = AlmacenDisco(carpeta)
         fichas = {f"itm_{i}": {"id": f"itm_{i}", "nombre": f"Objeto {i}"}
                   for i in range(cantidad_fichas)}
         almacen.guardar_catalogo("v1", fichas)
 
-        # Caché de 1: al traer la itm_1, la itm_0 queda liberada.
         repositorio = RepositorioFichas(_SinRed(), almacen, "v1", cache_size=1)
 
         def en_memoria():
             repositorio.obtener_ficha("itm_1")
 
         def desde_disco():
-            repositorio.obtener_ficha("itm_0")    # la libera la itm_1...
-            repositorio.obtener_ficha("itm_1")    # ...y viceversa
+            repositorio.obtener_ficha("itm_0")
+            repositorio.obtener_ficha("itm_1")
 
         memoria = medir(lambda: [en_memoria() for _ in range(200)]) / 200
         disco = medir(lambda: [desde_disco() for _ in range(50)]) / 100

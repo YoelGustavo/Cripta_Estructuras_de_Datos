@@ -16,15 +16,7 @@ class RegistroAccion:
         return len(self._cambios) == 0
 
     def deshacer(self):
-        """
-        Los cambios deben deshacerse en orden inverso.
-
-        Si una acción produjo:
-            A -> B -> C
-
-        restauramos:
-            C -> B -> A
-        """
+        
         nodo = self._cambios.ultimo()
 
         while nodo is not None:
@@ -53,14 +45,7 @@ class Historial:
         return self._acciones.esta_vacia()
 
     def registrar(self, accion):
-        """Abre la acción del jugador que empieza AHORA.
-
-        Llamarlo al EMPEZAR la acción, antes de hacer cualquier cambio.
-        Desde aquí y hasta la próxima acción del jugador, todo cambio
-        (lo que hace el jugador, las ratas, el veneno, el reloj...) se
-        anota en esta acción con registrar_cambio (§2.11). Por eso se
-        guarda aunque todavía esté vacía.
-        """
+        
         if accion is None:
             raise ValueError("Falta la acción a registrar")
 
@@ -77,10 +62,6 @@ class Historial:
                 )
 
     def registrar_cambio(self, cambio):
-        """Anota un cambio en la acción abierta (la última registrada).
-
-        Antes de la primera acción del jugador no hay nada que deshacer:
-        el cambio no se anota."""
         nodo = self._acciones.ultimo()
 
         if nodo is None or cambio is None:

@@ -3,7 +3,7 @@ from crypta.Modelo.Inventario import Inventario
 from crypta.Modelo.Rastro import Rastro
  
  
-class Jugador(Actor): #hereda de Actor.
+class Jugador(Actor):
  
     def __init__(
         self,
@@ -31,7 +31,6 @@ class Jugador(Actor): #hereda de Actor.
  
         self.sala_actual = None
  
-        # Guarda el recorrido real del jugador.
         self.rastro = Rastro()
  
     def esta_vivo(self):
@@ -45,13 +44,11 @@ class Jugador(Actor): #hereda de Actor.
         return self.inventario.armadura()
  
     def ataque_total(self):
-        """Ataque base + ataque_bonus del arma equipada (si hay)."""
         arma = self.inventario.arma()
         bono = 0 if arma is None else arma.get("ataque_bonus", 0)
         return self.ataque + bono
  
     def defensa_total(self):
-        """Defensa base + defensa_bonus de la armadura equipada (si hay)."""
         armadura = self.inventario.armadura()
         bono = 0 if armadura is None else armadura.get("defensa_bonus", 0)
         return self.defensa + bono

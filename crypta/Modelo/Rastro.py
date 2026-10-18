@@ -21,10 +21,8 @@ class Huella:
 
 class Rastro:
     def __init__(self):
-        # Recorrido real del jugador.
         self._huellas = ListaDoble()
 
-        # Última huella conocida de cada sala.
         self._por_sala = ArbolBusqueda()
 
     def __len__(self):
@@ -99,8 +97,6 @@ class Rastro:
                 huella.anterior_misma_sala
             )
 
-        # Restauramos también el rastro almacenado
-        # directamente en la sala.
         if huella.sala is not None:
             if huella.anterior_misma_sala is None:
                 huella.sala.ultimo_rastro = None
