@@ -9,9 +9,6 @@ class AlmacenDisco:
         self._ruta = ruta
         os.makedirs(self._ruta, exist_ok=True)
 
-    # =========================================================
-    # CATÁLOGO
-    # =========================================================
 
     def _ruta_catalogo(self):
         return os.path.join(self._ruta, "catalogo.json")
@@ -110,9 +107,6 @@ class AlmacenDisco:
     def existe_catalogo(self):
         return os.path.exists(self._ruta_catalogo())
 
-    # =========================================================
-    # CRIPTAS
-    # =========================================================
 
     def _ruta_cripta(self, cripta_id):
         return os.path.join(
@@ -134,8 +128,7 @@ class AlmacenDisco:
             "contenidos": contenidos
         }
 
-        # Nuevo campo opcional. Las llamadas antiguas
-        # con cuatro argumentos siguen funcionando.
+        
         if datos_generales is not None:
             datos["datos_generales"] = datos_generales
 
@@ -179,8 +172,7 @@ class AlmacenDisco:
         )
 
     def criptas_guardadas(self):
-        """Los ids de las criptas que tienen copia local, en orden
-        alfabético (cada una es un archivo <id>.json; catalogo.json no)."""
+        
         ids = []
 
         for nombre in sorted(os.listdir(self._ruta)):

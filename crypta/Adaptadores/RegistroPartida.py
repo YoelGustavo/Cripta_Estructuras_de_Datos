@@ -1,12 +1,5 @@
-# Aquí se registra la bitácora de la partida (vease 4.11): un archivo de
-# texto de SOLO ANEXADO, con un encabezado y una línea por comando.
-
 from crypta.estructuras.Cola import Cola
 
-
-# Versión del formato del archivo. Si algún día cambia la forma de escribir
-# el log, se sube este número y los logs viejos se rechazan con un mensaje
-# claro en vez de leerse mal.
 FORMATO_REGISTRO = 1
 
 MARCA = "# CRIPTA registro de partida"
@@ -18,9 +11,7 @@ class ErrorRegistro(Exception):
 
 
 class Encabezado:
-    """§4.11: como mínimo, id de cripta, versión de cripta, versión de
-    catálogo y semilla. Con eso se puede rearmar la MISMA partida."""
-
+    
     def __init__(self, cripta_id, version_cripta, version_catalogo, semilla,
                  jugador="", formato=FORMATO_REGISTRO):
         self.cripta_id = cripta_id
@@ -36,17 +27,12 @@ class Encabezado:
 
 
 class RegistroPartida:
-    """Escribe el log de una partida. Solo AGREGA al final: cada comando se
-    escribe apenas se ejecuta (si el programa se cae, el log tiene todo lo
-    que pasó hasta ese momento) y nunca se reescribe lo anterior."""
-
+    
     def __init__(self, ruta):
         self.ruta = ruta
 
     @classmethod
     def crear(cls, ruta, encabezado):
-        """Empieza un log nuevo con su encabezado. Es lo ÚNICO que abre el
-        archivo para escribir desde cero."""
         for valor in (encabezado.cripta_id, encabezado.version_cripta,
                       encabezado.version_catalogo, encabezado.jugador):
             _revisar_una_linea(str(valor))
@@ -64,7 +50,6 @@ class RegistroPartida:
         return cls(ruta)
 
     def anotar(self, comando):
-        """Agrega un comando al final del archivo (modo "a": append)."""
         _revisar_una_linea(comando)
 
         with open(self.ruta, "a", encoding="utf-8") as archivo:
@@ -72,10 +57,6 @@ class RegistroPartida:
 
 
 def leer_registro(ruta):
-    """Devuelve (Encabezado, Cola con los comandos en orden).
-
-    Lanza ErrorRegistro si el archivo no tiene el formato esperado; nunca
-    devuelve un encabezado a medias."""
     try:
         archivo = open(ruta, encoding="utf-8")
     except OSError as error:
@@ -88,7 +69,6 @@ def leer_registro(ruta):
         formato = cripta_id = version_cripta = version_catalogo = semilla = None
         jugador = ""
 
-        # --- Encabezado: "clave valor" hasta el separador ---
         while True:
             linea = archivo.readline()
 
@@ -136,7 +116,6 @@ def leer_registro(ruta):
         encabezado = Encabezado(cripta_id, version_cripta, version_catalogo,
                                 semilla, jugador, int(formato))
 
-        # --- Comandos: uno por línea, en orden ---
         comandos = Cola()
 
         for linea in archivo:

@@ -17,7 +17,6 @@ class PresupuestoAgotado(RuntimeError):
 class FuenteHTTP(FuenteDatos):
 
     def __init__(self):
-        # Se genera UNA sola vez por ejecución de esta fuente
         self._client_id = str(uuid.uuid4())
 
         self._headers = {
@@ -26,12 +25,8 @@ class FuenteHTTP(FuenteDatos):
 
         self._solicitudes = 0
 
-        # None = todavía no se conoce la cripta (sin límite). Se fija con
-        # fijar_presupuesto apenas llegan sus datos generales.
         self._presupuesto = None
 
-        # La precarga pide desde OTRO hilo: el contador se revisa y se
-        # suma de a uno por vez, para que dos hilos no se pasen juntos.
         self._candado = threading.Lock()
 
     def fijar_presupuesto(self, presupuesto):
@@ -44,9 +39,6 @@ class FuenteHTTP(FuenteDatos):
         return max(0, self._presupuesto - self._solicitudes)
 
     def _contar_una(self, ruta):
-        """Cuenta una solicitud ANTES de enviarla; si ya no hay presupuesto,
-        no se envía. Las solicitudes hechas antes de conocer la cripta
-        (lista y datos generales) también cuentan (§5.1: "toda solicitud")."""
         with self._candado:
             if (self._presupuesto is not None
                     and self._solicitudes >= self._presupuesto):
@@ -59,7 +51,6 @@ class FuenteHTTP(FuenteDatos):
 
     def _get(self, ruta):
         while True:
-            # Todo intento HTTP cuenta, incluso un reintento por 429
             self._contar_una(ruta)
 
             try:
@@ -88,7 +79,6 @@ class FuenteHTTP(FuenteDatos):
                     f"HTTP 429. Reintentando en {espera} segundos..."
                 )
 
-                # Tiempo REAL, no modifica el reloj virtual
                 time.sleep(espera)
                 continue
 

@@ -1,19 +1,4 @@
-"""--offline: la fuente de datos sin red (§3).
 
-El enunciado dice que el curso publicaría un "paquete de respuestas
-previamente descargadas". No se publicó, así que el paquete es la COPIA
-LOCAL que el propio programa guarda al jugar con conexión (carpeta cache/):
-el esqueleto, el contenido de las salas que se cargaron, los datos
-generales de la cripta y las fichas del catálogo.
-
-Devuelve lo mismo que FuenteHTTP (el mismo "contrato"): ni el modelo ni el
-controlador saben si los datos vinieron de la red o del disco (§6). Si el
-curso publica el paquete, solo cambia esta clase.
-
-Límite (decisión del grupo): sin conexión solo se puede entrar a las salas
-que se cargaron alguna vez con conexión. Entrar a otra no termina la
-partida: el controlador avisa y la acción no se hace.
-"""
 
 import json
 
@@ -71,13 +56,8 @@ class FuenteOffline(FuenteDatos):
 
         return cripta
 
-    # =========================================================
-    # CRIPTAS
-    # =========================================================
-
+    
     def listar_criptas(self):
-        """Sin conexión, las criptas disponibles son las que tienen copia
-        local. Misma forma que GET /criptas."""
         criptas = []
 
         for cripta_id in self._almacen.criptas_guardadas():
@@ -157,9 +137,6 @@ class FuenteOffline(FuenteDatos):
 
         return {"contenido": resultado}
 
-    # =========================================================
-    # CATÁLOGO
-    # =========================================================
 
     def obtener_catalogo(self, ids):
         if len(ids) == 0:
@@ -193,9 +170,6 @@ class FuenteOffline(FuenteDatos):
 
         return {"entidades": entidades}
 
-    # =========================================================
-    # VERSIONES
-    # =========================================================
 
     def obtener_version_cripta(self, cripta_id):
         datos = self._cripta_local(cripta_id)

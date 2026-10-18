@@ -1,42 +1,3 @@
-"""Guardado binario de la partida, en un formato propio (§4.10).
-
-Cómo es el archivo (todos los números en little-endian):
-
-    INICIO        6 bytes   "CRPT" + versión del formato (2 bytes).
-                            Estos 6 bytes NO cambian nunca entre versiones:
-                            así siempre se puede saber de qué versión es
-                            un archivo antes de intentar leer lo demás.
-    CABECERA     22 bytes   reservado, largo del encabezado, largo de lo
-                            general, posición del índice, cantidad de salas
-    ENCABEZADO              cripta, versiones, semilla y jugador
-    GENERAL                 reloj, azar, jugador, efectos, agenda, bitácora
-    SALAS                   un registro por sala, uno detrás del otro
-    ÍNDICE                  por cada sala: id (8), posición (8), largo (4),
-                            ordenado por id
-
-Leer UNA sala sin leer el archivo completo: se leen el inicio, la cabecera
-y el índice (20 bytes por sala), y después solo los bytes de esa sala
-(seek + read). El índice se guarda ordenado por id (con ordenar, §4.9) y
-al abrir se arma con él un ArbolBusqueda balanceado (desde_ordenados): cada
-búsqueda es O(log n), sin búsqueda binaria sobre el archivo.
-
-Detectar otra versión del formato: lo primero que se lee es la versión;
-si no es FORMATO_GUARDADO, ErrorGuardado y no se lee nada más. También se
-rechazan archivos cortados, con bytes de más o con datos que no cuadran.
-
-Cómo se escribe cada dato (EscritorBinario / LectorBinario):
-
-    entero              8 bytes con signo
-    entero_opcional     1 byte (0 = no hay) + el entero
-    texto               4 bytes de largo + el texto en UTF-8
-    texto_opcional      1 byte + el texto
-    booleano            1 byte (0 o 1)
-    real_opcional       1 byte + 8 bytes (double)
-    enteros32           4 bytes de cantidad + 4 bytes por número
-    lista               4 bytes de cantidad + los elementos
-    grupo               nada: el orden ya dice qué es cada cosa
-"""
-
 import os
 import struct
 
@@ -53,11 +14,9 @@ from crypta.estructuras.ordenamiento import ordenar
 MAGIA = b"CRPT"
 FORMATO_GUARDADO = 1
 
-_INICIO = struct.Struct("<4sH")          # magia, formato (no cambia nunca)
-_CABECERA = struct.Struct("<HIIQI")      # reservado, largo encabezado,
-                                         # largo general, posición índice,
-                                         # cantidad de salas
-_ENTRADA = struct.Struct("<qQI")         # id de sala, posición, largo
+_INICIO = struct.Struct("<4sH")
+_CABECERA = struct.Struct("<HIIQI")
+_ENTRADA = struct.Struct("<qQI")
 
 _ENTERO = struct.Struct("<q")
 _CANTIDAD = struct.Struct("<I")
@@ -65,17 +24,7 @@ _REAL = struct.Struct("<d")
 _BYTE = struct.Struct("<B")
 
 
-# ======================================================================
-# GUARDAR
-# ======================================================================
-
 def guardar_partida(partida, ruta, encabezado):
-    """Guarda la partida en 'ruta'. 'encabezado' es el mismo Encabezado
-    del registro de partida (cripta, versiones, semilla, jugador).
-
-    Se escribe primero en un archivo temporal y después se reemplaza el
-    anterior de una sola vez: si el programa se cae a mitad de camino, la
-    partida guardada antes sigue intacta."""
     revisar_antes_de_guardar(partida, encabezado)
 
     e = EscritorBinario()
@@ -100,8 +49,6 @@ def guardar_partida(partida, ruta, encabezado):
         indice.agregar((salas.obtener(i).id, posicion, len(registro)))
         posicion += len(registro)
 
-    # §4.9: el índice se ordena por id. Las salas ya vienen casi siempre en
-    # orden (el mapa las da así): el selector lo detecta y usa inserción, O(n).
     ordenar(indice, clave=_id_de_entrada)
 
     temporal = ruta + ".tmp"
@@ -125,10 +72,6 @@ def guardar_partida(partida, ruta, encabezado):
 def _id_de_entrada(entrada):
     return entrada[0]
 
-
-# ======================================================================
-# CARGAR
-# ======================================================================
 
 class ArchivoGuardado:
     """Una partida guardada, abierta para leer.
@@ -271,10 +214,6 @@ class ArchivoGuardado:
         return leida
 
 
-# ======================================================================
-# ESCRITOR Y LECTOR
-# ======================================================================
-
 class EscritorBinario:
     """Va juntando los bytes de un bloque. Los nombres no se escriben."""
 
@@ -396,8 +335,6 @@ class LectorBinario:
         pass
 
     def _cantidad(self):
-        # Si la cantidad es imposible (archivo dañado), lo detecta _tomar
-        # al intentar leer más allá del bloque.
         return _CANTIDAD.unpack(self._tomar(_CANTIDAD.size))[0]
 
     def _hay(self):

@@ -1,39 +1,3 @@
-"""Qué se guarda de una partida y cómo se vuelve a armar (§4.10).
-
-Lo usan los DOS formatos: GuardadoBinario (el nuestro) y GuardadoJSON (el
-que se usa para comparar tamaño y tiempo de carga). El recorrido del
-estado es UNO solo, este; cada formato pone su "escritor" y su "lector":
-
-    escritor.entero(nombre, valor)         lector.entero(nombre)
-    escritor.entero_opcional(nombre, v)    lector.entero_opcional(nombre)
-    escritor.texto(nombre, valor)          lector.texto(nombre)
-    escritor.texto_opcional(nombre, v)     lector.texto_opcional(nombre)
-    escritor.booleano(nombre, valor)       lector.booleano(nombre)
-    escritor.real_opcional(nombre, v)      lector.real_opcional(nombre)
-    escritor.enteros32(nombre, tupla)      lector.enteros32(nombre)
-    escritor.empezar_grupo(nombre)         lector.empezar_grupo(nombre)
-    escritor.terminar_grupo()              lector.terminar_grupo()
-    escritor.empezar_lista(nombre, n)      lector.empezar_lista(nombre) -> n
-    escritor.terminar_lista()              lector.terminar_lista()
-
-Dentro de una lista, cada elemento va con nombre None. El binario no
-escribe los nombres (por eso lee en el MISMO orden en que se escribió); el
-JSON los usa como claves. Así los dos guardan exactamente el mismo estado.
-
-Qué se guarda:
-  - el encabezado: cripta, versiones, semilla y jugador (como en el log);
-  - lo general: reloj, contadores, resultado, el estado del generador de
-    azar (§2.6: cargar y seguir jugando da lo mismo que no haber guardado),
-    el jugador con su inventario, el veneno y la antorcha, la agenda (los
-    eventos pendientes con SU número de secuencia) y la bitácora;
-  - cada sala por separado: puertas, rastro, contenido (el original, que
-    es el que va a la caché, y el actual) y los enemigos que están ahí.
-
-Qué NO se guarda: el historial de deshacer. Al cargar, los pergaminos
-sirven desde la siguiente acción (no se puede retroceder a antes de
-cargar). Guardarlo obligaría a guardar cómo deshacer cada cambio, que son
-referencias a objetos de memoria; y §4.6 ya limita el historial a 5.
-"""
 
 from crypta.Adaptadores.RegistroPartida import Encabezado
 from crypta.Modelo.Efecto import ANTORCHA, VELOCIDAD, VENENO, Efecto
@@ -62,7 +26,7 @@ class ErrorGuardado(Exception):
 
 
 def revisar_antes_de_guardar(partida, encabezado):
-    """Errores de programación del que llama (no del archivo)."""
+    
     if not partida.iniciada:
         raise ValueError("Solo se puede guardar una partida iniciada")
 
@@ -78,10 +42,6 @@ def revisar_antes_de_guardar(partida, encabezado):
             f"es de {partida.jugador.nombre!r}"
         )
 
-
-# ======================================================================
-# ENCABEZADO
-# ======================================================================
 
 def escribir_encabezado(e, encabezado):
     e.texto("cripta", encabezado.cripta_id)
@@ -100,10 +60,6 @@ def leer_encabezado(l):
         jugador=l.texto("jugador"),
     )
 
-
-# ======================================================================
-# LO GENERAL (todo menos las salas)
-# ======================================================================
 
 def escribir_general(e, partida):
     e.booleano("terminada", partida.terminada)
@@ -185,10 +141,7 @@ def _escribir_efecto(e, nombre, efecto):
 
 
 def _escribir_evento(e, nombre, evento):
-    """Un evento al que apunta un objeto (el turno de un actor, el pulso
-    del veneno...). Si está pendiente, al cargar se busca en la agenda por
-    su número de secuencia; si no (ya se ejecutó o se canceló), se vuelve a
-    crear suelto, fuera de la agenda."""
+    
     e.empezar_grupo(nombre)
     e.booleano("hay", evento is not None)
 
@@ -228,8 +181,7 @@ def _escribir_agenda(e, partida):
 
 
 def _escribir_objetivo(e, partida, evento):
-    """El objetivo de un evento no se puede guardar (es un objeto en
-    memoria): se guarda CÓMO encontrarlo al cargar."""
+    
     tipo, objetivo = evento.tipo, evento.objetivo
 
     if tipo == TURNO_JUGADOR:
@@ -266,8 +218,7 @@ def _escribir_objetivo(e, partida, evento):
 
 
 def _ubicar_enemigo(mapa, enemigo):
-    """(sala, posición en la sala). El enemigo sabe en qué sala está: solo
-    se recorren los de esa sala (unos pocos)."""
+    
     _exigir(isinstance(enemigo, Enemigo), "un turno de enemigo sin enemigo")
     sala = mapa.obtener_sala(enemigo.sala_actual)
 
@@ -310,9 +261,6 @@ def _exigir(condicion, mensaje):
         raise ValueError(f"Estado inesperado al guardar: {mensaje}")
 
 
-# ======================================================================
-# UNA SALA
-# ======================================================================
 
 def escribir_sala(e, sala):
     e.entero("id", sala.id)
@@ -357,8 +305,7 @@ def escribir_sala(e, sala):
             e.terminar_grupo()
         e.terminar_lista()
 
-    # Los enemigos que están AHORA aquí (aunque el contenido no se haya
-    # cargado: uno activo pudo llegar caminando, §2.4), en su orden.
+    
     e.empezar_lista("enemigos", sala.cantidad_enemigos())
 
     for i in range(sala.cantidad_enemigos()):
@@ -381,8 +328,7 @@ def escribir_sala(e, sala):
 
 
 def _escribir_contenido_original(e, contenido):
-    """El contenido como vino del servidor (es lo que GestorCripta guarda
-    en la caché). El API solo trae estos tres campos (§3.3)."""
+    
     objetos = contenido.get("objetos") or ()
     trampas = contenido.get("trampas") or ()
     enemigos = contenido.get("enemigos") or ()
@@ -415,9 +361,6 @@ def _escribir_contenido_original(e, contenido):
 
 
 class SalaLeida:
-    """Una sala recién leída. Los eventos de sus enemigos todavía no se
-    pueden enlazar (la agenda se arma después): quedan en 'referencias'
-    como (enemigo, ref_turno, ref_regeneracion)."""
 
     def __init__(self, sala, referencias):
         self.sala = sala
@@ -501,9 +444,7 @@ def leer_sala(l, fichas):
 
 
 def _leer_contenido_original(l, id_sala):
-    """Vuelve a armar el contenido tal como vino del servidor. Son los
-    datos del JSON del API (como los que da json.load), no una estructura
-    del juego: la Sala lo guarda para la caché (GestorCripta.persistir)."""
+    
     l.empezar_grupo("original")
 
     objetos = []
@@ -562,8 +503,7 @@ def _leer_evento(l, nombre):
 
 
 def evento_suelto(ref, objetivo):
-    """Un evento que NO está en la agenda (ya se ejecutó o se canceló), o
-    el de una sala leída sola, sin su partida."""
+    
     if ref is None:
         return None
 
@@ -575,9 +515,6 @@ def evento_suelto(ref, objetivo):
     return evento
 
 
-# ======================================================================
-# LEER LO GENERAL Y ARMAR LA PARTIDA
-# ======================================================================
 
 class _EventoLeido:
     def __init__(self, tiempo, secuencia, tipo):
@@ -699,11 +636,7 @@ def _leer_objetivo(l, evento):
 
 
 def armar_partida(encabezado, general, salas_leidas, fichas):
-    """Junta todo lo leído en una Partida lista para seguir jugando, parada
-    en la decisión del jugador, igual que cuando se guardó.
-
-    salas_leidas: Vector de SalaLeida. fichas: id -> ficha, del catálogo
-    de la versión del encabezado (la revisa quien llama)."""
+    
     try:
         return _armar(encabezado, general, salas_leidas, fichas)
     except ValueError as error:
@@ -714,7 +647,7 @@ def armar_partida(encabezado, general, salas_leidas, fichas):
 
 
 def _armar(encabezado, g, salas_leidas, fichas):
-    # --- 1. El mapa ---
+    
     salas = Vector()
     for i in range(len(salas_leidas)):
         salas.agregar(salas_leidas.obtener(i).sala)
@@ -722,7 +655,7 @@ def _armar(encabezado, g, salas_leidas, fichas):
     mapa = Mapa()
     mapa.cargar_salas(salas)
 
-    # --- 2. El jugador ---
+    
     jugador = Jugador(g.nombre, g.vida_max, g.ataque, g.defensa, g.velocidad, g.capacidad)
     jugador.vida = g.vida
     jugador.sala_actual = g.sala_jugador
@@ -739,7 +672,6 @@ def _armar(encabezado, g, salas_leidas, fichas):
     if jugador.sala_actual is None or mapa.obtener_sala(jugador.sala_actual) is None:
         raise ErrorGuardado(f"El jugador está en la sala {jugador.sala_actual}, que no existe")
 
-    # --- 3. La partida ---
     partida = Partida(mapa, jugador, g.sala_inicial, fichas, semilla=encabezado.semilla,
                       id_sala_salida=g.sala_salida, llave_salida=g.llave_salida)
     partida.iniciada = True
@@ -760,7 +692,6 @@ def _armar(encabezado, g, salas_leidas, fichas):
     partida.veneno = veneno
     partida.antorcha = antorcha
 
-    # --- 4. La agenda, con los MISMOS números de secuencia ---
     partida.agenda.restaurar_secuencia(g.siguiente_secuencia)
     pares = Vector()
 
@@ -781,7 +712,6 @@ def _armar(encabezado, g, salas_leidas, fichas):
 
     pendientes = ArbolBusqueda.desde_ordenados(pares)
 
-    # --- 5. Lo que apunta a un evento ---
     jugador.evento_siguiente = _enlazar(g.turno_jugador, jugador, pendientes)
 
     if veneno is not None:
@@ -798,7 +728,6 @@ def _armar(encabezado, g, salas_leidas, fichas):
             enemigo.evento_siguiente = _enlazar(turno, enemigo, pendientes)
             enemigo.evento_regeneracion = _enlazar(regeneracion, enemigo, pendientes)
 
-    # --- 6. La bitácora ---
     for i in range(len(g.bitacora)):
         partida.bitacora.restaurar_mensaje(g.bitacora.obtener(i))
 
@@ -837,7 +766,6 @@ def _objetivo(leido, partida):
     if tipo == FIN_VELOCIDAD:
         return Efecto(VELOCIDAD, leido.valor, leido.hasta)
 
-    # REARME_TRAMPA (leer_general ya rechazó los tipos desconocidos)
     sala = partida.mapa.obtener_sala(leido.sala)
     if sala is None or not 0 <= leido.posicion < sala.cantidad_trampas():
         raise ErrorGuardado(f"Un rearme apunta a una trampa que no está ({leido.sala}, {leido.posicion})")

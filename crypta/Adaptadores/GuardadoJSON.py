@@ -1,20 +1,3 @@
-"""El MISMO estado de la partida, guardado en JSON (§4.10).
-
-No es el formato del juego: existe para comparar contra el binario el
-tamaño en disco y el tiempo de carga (crypta/bench/bench.py). Usa el mismo
-recorrido del estado (EstadoPartida); solo cambian el escritor y el lector.
-
-    {"formato": 1,
-     "encabezado": {"cripta": ..., "semilla": ...},
-     "general":    {"reloj": ..., "jugador": {...}, "agenda": {...}, ...},
-     "salas":      [{"id": 1, ...}, {"id": 2, ...}, ...]}
-
-La diferencia que importa: para sacar UNA sala de aquí hay que leer y
-decodificar el archivo COMPLETO (json.load no puede saltar a una parte).
-
-Los dict y list de este archivo son SOLO el documento JSON (lo que pide y
-da el módulo json, como en AlmacenDisco), no estructuras del juego.
-"""
 
 import json
 import os
@@ -55,8 +38,6 @@ def guardar_partida_json(partida, ruta, encabezado):
 
     e.terminar_lista()
 
-    # Sin espacios ni sangría: la comparación de tamaño es contra el JSON
-    # más chico posible, no contra uno "bonito".
     temporal = ruta + ".tmp"
 
     with open(temporal, "w", encoding="utf-8") as archivo:
@@ -66,9 +47,7 @@ def guardar_partida_json(partida, ruta, encabezado):
 
 
 class ArchivoGuardadoJSON:
-    """La misma forma de uso que ArchivoGuardado (el binario), para poder
-    medir los dos igual. Aquí abrir YA lee y decodifica todo el archivo."""
-
+    
     def __init__(self, ruta):
         try:
             with open(ruta, encoding="utf-8") as archivo:
@@ -99,7 +78,6 @@ class ArchivoGuardadoJSON:
         l.terminar_grupo()
 
     def leer_sala(self, id_sala, fichas):
-        """Hay que buscarla en la lista (y el archivo ya se leyó entero)."""
         l = LectorJSON(self._documento)
 
         for _ in range(l.empezar_lista("salas")):
@@ -138,14 +116,9 @@ class ArchivoGuardadoJSON:
         return armar_partida(self.encabezado, general, salas, fichas)
 
 
-# ======================================================================
-# ESCRITOR Y LECTOR
-# ======================================================================
 
 class EscritorJSON:
-    """Arma el documento: cada grupo es un objeto JSON y cada lista una
-    lista JSON. La Pila guarda dónde se estaba antes de entrar a uno."""
-
+    
     def __init__(self, documento):
         self._actual = documento
         self._pila = Pila()
@@ -208,16 +181,12 @@ class EscritorJSON:
 
 
 class LectorJSON:
-    """Recorre el documento con los mismos pasos que el escritor. Si falta
-    un dato o no es del tipo esperado, ErrorGuardado."""
-
     def __init__(self, documento):
         self._actual = documento
         self._indice = 0               # siguiente elemento, si se está en una lista
         self._pila = Pila()
 
     def ver(self, nombre):
-        """Mira un dato del grupo actual sin avanzar."""
         if not isinstance(self._actual, dict) or nombre not in self._actual:
             raise ErrorGuardado(f"Falta '{nombre}' en la partida guardada")
         return self._actual[nombre]
