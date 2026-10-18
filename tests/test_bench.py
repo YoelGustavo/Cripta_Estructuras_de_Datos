@@ -22,7 +22,7 @@ from crypta.bench.bench_agenda import (
     hacer_turnos,
     llenar,
 )
-from crypta.bench import bench_cache, bench_ciclo, bench_inventario, bench_ordenamiento, bench_red
+from crypta.bench import bench_cache, bench_ciclo, bench_inventario, bench_ordenamiento, bench_rastro, bench_red
 from crypta.bench.medicion import formato_tiempo, medir, tabla
 from crypta.Controlador.GestorContenido import LIMITE_VISITAS_PRECARGA, GestorContenido
 from crypta.estructuras.MonticuloMin import MonticuloMin
@@ -478,6 +478,26 @@ class TestBenchRed(unittest.TestCase):
 
         self.assertIn("BITÁCORA (§4.8)", texto)
         self.assertIn("RED (§4.2 y §5.1)", texto)
+
+
+# ======================================================================
+# Rastro (§4.7)
+# ======================================================================
+
+class TestBenchRastro(unittest.TestCase):
+
+    def test_la_lista_de_huellas_decide_igual_que_el_juego(self):
+        from crypta.Modelo.Rastreador import sala_con_rastro_mas_fresco
+
+        mapa, huellas, reloj, _ = bench_rastro.preparar(25, 7)
+        for id_sala in (1, 2, 3, 6, 7, 25):
+            sala = mapa.obtener_sala(id_sala)
+            for instante in (reloj - 100, reloj + 250, reloj + 1000):
+                self.assertIs(huellas.decidir(sala, instante),
+                              sala_con_rastro_mas_fresco(sala, instante))
+
+    def test_la_seccion_arma_la_tabla(self):
+        self.assertIn("RASTRO (§4.7)", bench_rastro.ejecutar(rapido=True))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 CRIPTA --bench | Python 3.14.7 | Windows AMD64
 
 === Agenda de eventos (§4.1) ===
-AGENDA DE EVENTOS (§4.1): costo de UN turno (sacar el próximo evento y volver a programarlo)
+Costo de UN turno (sacar el próximo evento y volver a programarlo)
   eventos pendientes   montículo (el juego)   vector ordenado   vector sin orden
   10                                 8.0 µs            4.6 µs             6.8 µs
   100                               11.3 µs           18.9 µs            48.3 µs
@@ -9,7 +9,7 @@ AGENDA DE EVENTOS (§4.1): costo de UN turno (sacar el próximo evento y volver 
   5000                              17.1 µs          998.0 µs            2.30 ms
   Montículo: O(log n) por turno. Vector ordenado: O(n) al programar. Vector sin orden: O(n) al sacar.
 
-AGENDA DE EVENTOS (§4.1): costo de cancelar UN evento (muere un enemigo, el antídoto cancela el veneno)
+Costo de cancelar UN evento (muere un enemigo, el antídoto cancela el veneno)
   eventos pendientes   montículo (el juego)   vector ordenado   vector sin orden
   10                                 0.7 µs            2.5 µs             2.2 µs
   100                                0.4 µs           12.1 µs             7.7 µs
@@ -28,13 +28,12 @@ CICLO ENTRE DOS DECISIONES (§5.2: menos de 20 ms). Cripta de 2500 salas toda ca
   500                               632        28.11 ms                29.94 ms   42.17 ms   44.19 ms        47 µs         NO
   p95: el 95 % de las acciones tardó eso o menos (se exige al p95; el máximo depende también del sistema operativo).
 
-PRECARGA (§4.2): buscar salas para pedir, en cada acción
+PRECARGA: buscar salas para pedir, en cada acción
   salas de la cripta   toda cargada   falta el 1 % (lejos)
   1000                       4.6 µs                1.18 ms
   5000                       2.8 µs                1.68 ms
   10000                      2.8 µs                1.22 ms
-  Toda cargada: no busca nada, O(1). Si falta algo: revisa como máximo 100 salas, sin importar el tamaño de la cripta.
-(sección medida en 51.22 s)
+  Toda cargada: no busca nada, O(1).
 
 === Caché de fichas (§4.4) ===
 CACHÉ (§4.4): ¿está esta ficha en memoria? (una búsqueda)
@@ -108,7 +107,7 @@ BITÁCORA (§4.8): agregar UN mensaje con la bitácora llena
   1000                                   1.9 µs                 125.0 µs
   Con 20 casi no se nota; la cola no corre a nadie y su memoria nunca pasa del tope (se revisa en cada medición).
 
-RED (§4.2 y §5.1): solicitudes para recorrer TODA la cripta (contenido + fichas)
+Solicitudes para recorrer TODA la cripta (contenido + fichas)
   salas   ingenuo (1 por sala y por ficha)   el juego, caché vacía   el juego, caché caliente
   25                                    52                       8                          0
   100                                  130                      16                          0

@@ -21,7 +21,7 @@ import tempfile
 import time
 
 from crypta.bench import (bench_agenda, bench_cache, bench_ciclo, bench_inventario,
-                          bench_ordenamiento, bench_red)
+                          bench_ordenamiento, bench_rastro, bench_red)
 from crypta.bench.medicion import formato_tiempo, tabla
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
@@ -240,6 +240,7 @@ SECCIONES = (
     ("ciclo", "Ciclo entre dos decisiones (§5.2)", bench_ciclo.ejecutar),
     ("cache", "Caché de fichas (§4.4)", bench_cache.ejecutar),
     ("inventario", "Inventario e historial (§4.5 y §4.6)", bench_inventario.ejecutar),
+    ("rastro", "Rastro del jugador (§4.7)", bench_rastro.ejecutar),
     ("ordenamiento", "Ordenamiento (§4.9)", bench_ordenamiento.ejecutar),
     ("red", "Bitácora y red (§4.8 y §5.1)", bench_red.ejecutar),
     ("guardado", "Guardado binario contra JSON (§4.10)", ejecutar_guardado),
@@ -276,7 +277,6 @@ def ejecutar(nombres=None, rapido=False, salida=print):
 
 
 def principal(argumentos):
-    """La línea de comandos de este archivo. Devuelve el código de salida."""
     rapido = "--rapido" in argumentos
     ruta = None
     nombres = []
