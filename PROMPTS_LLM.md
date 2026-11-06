@@ -215,3 +215,6 @@ Fecha aproximada: miércoles 14 de octubre de 2026　Herramienta/modelo: ChatGPT
 72. ¿Cómo puedo comprobar que los modos --replay y --bench no dependen de la interfaz interactiva?
 Finalidad: Revisar arquitectura de ejecución.
 Fecha aproximada: miércoles 14 de octubre de 2026　Herramienta/modelo: ChatGPT
+### 5 nov 2026 — Claude Code
+- **Prompt:** "/speckit-constitution Proyecto CRIPTA (EIF-207, II ciclo 2026), segunda parte. … "
+- **Uso:** crear la constitución del proyecto con spec-kit.
