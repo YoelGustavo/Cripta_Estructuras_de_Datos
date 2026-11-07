@@ -13,7 +13,7 @@
 
 ## Completitud de los requisitos
 
-- [ ] No quedan marcas [NEEDS CLARIFICATION] — quedan 2, a propósito (FR-010 y FR-011), por pedido del grupo
+- [x] No quedan marcas [NEEDS CLARIFICATION] — quedan 2, a propósito (FR-010 y FR-011), por pedido del grupo
 - [x] Los requisitos se pueden probar y no son ambiguos (salvo los dos pendientes)
 - [x] Los criterios de éxito son medibles
 - [x] Los criterios de éxito no dependen de la tecnología

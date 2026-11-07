@@ -32,6 +32,32 @@ puede ser más rápido que la ruta con menos salas.
 - **Cálculo desde cero**: la decisión que se obtendría en ese instante usando solo el esqueleto, los
   costos y el estado actual de las puertas, sin ningún resultado de turnos anteriores.
 
+## Aclaraciones
+
+### Sesión 2026-11-07
+
+- P: Si un costo del esqueleto es inválido (menor que 1, no entero) o una misma salida declara
+  costos distintos en cada sentido, ¿qué hace el programa? → R: Rechaza la cripta con un mensaje
+  que indica la salida y el problema, y no inicia la partida. Excepción: si solo un lado de la
+  salida declara costo, ese costo vale en ambos sentidos y no cuenta como asimétrico.
+- P: Si la ficha de un cazador en el catálogo no trae rango, ¿qué hace el programa? → R: Rechaza el
+  catálogo con un mensaje que indica la ficha y no inicia la partida; lo mismo si el rango es
+  negativo o no es entero. El rango 0 es válido. Si la ficha inválida llega con la partida ya
+  empezada (por ejemplo, por la precarga), la partida se detiene de forma controlada con ese mismo
+  mensaje y `partida.log` queda guardado.
+- P: Mientras el profesor no publique la cripta de referencia, ¿con cuántos cazadores activos y qué
+  tamaño de cripta mide `--bench` el límite de 20 ms? → R: 50 cazadores activos en una cripta
+  sintética de 2 000 salas, y además la cripta oficial cuando se publique. Los cazadores se reparten
+  a distintas distancias del jugador, todas dentro de su rango (ninguno empieza en la sala del
+  jugador), para que de verdad calculen rutas. Lo que debe quedar por debajo de 20 ms es el p95 de al
+  menos 60 acciones del jugador, como en la medición de la primera parte.
+- P: Para medir que un cazador de rango pequeño no depende del tamaño total de la cripta, ¿qué
+  tamaños usa `--bench`? → R: Una región de unas 100 salas dentro del rango del cazador, en criptas
+  de 2 000 salas y de 20 000 salas.
+- P: ¿Con qué criterio verifica `--bench` que el trabajo por ciclo crece a lo sumo linealmente con la
+  cantidad de cazadores activos? → R: Se mide con 10, 25, 50 y 100 cazadores; el tiempo por cazador
+  (ciclo ÷ cantidad) con 100 no debe pasar de 2 veces el de 10.
+
 ## Escenarios de usuario y pruebas *(obligatorio)*
 
 ### Historia de usuario 1 — Terreno con costo (Prioridad 1)
@@ -81,6 +107,12 @@ acción y lo que muestra la vista.
     **cuando** se inicia la cripta de la segunda parte, **entonces** la validación de versión
     invalida esa copia sin borrar archivos a mano, se descarga el esqueleto nuevo con sus costos y se
     persiste junto con su versión. *(FR-025)*
+12. **Dado** un esqueleto con una salida de costo 0, otra de costo 2,5, u otra cuyos dos lados
+    declaran costos 200 y 300, **cuando** se carga la cripta, **entonces** se rechaza con un mensaje
+    que indica la salida y el problema, y no se inicia la partida. *(FR-010)*
+13. **Dada** una salida entre las salas 3 y 7 en la que solo el lado de la sala 3 declara costo 250,
+    **cuando** un actor la atraviesa de 7 a 3, **entonces** el movimiento cuesta 250 y la cripta no
+    se rechaza. *(FR-001, FR-010)*
 
 ---
 
@@ -136,6 +168,13 @@ su sala resultante y el instante de su siguiente acción.
     para ese cazador rango 600, **entonces** espera con costo 100; y **cuando** el catálogo trae para
     él rango 800, **entonces** avanza un paso. El rango aplicado es siempre el de su ficha del
     catálogo. *(FR-011)*
+14. **Dado** un catálogo en el que la ficha de un cazador no trae rango, o trae un rango negativo o
+    no entero, **cuando** se carga antes de la partida, **entonces** se rechaza con un mensaje que
+    indica la ficha y no se inicia la partida; y **cuando** esa ficha llega con la partida ya empezada
+    (por ejemplo, por la precarga), **entonces** la partida se detiene de forma controlada con el
+    mismo mensaje y `partida.log` queda guardado. *(FR-011)*
+15. **Dado** un cazador de rango 0 que no comparte sala con el jugador, **cuando** llega su turno,
+    **entonces** espera con costo 100; y si comparte sala, ataca. *(FR-011, FR-013, FR-015)*
 
 ---
 
@@ -209,14 +248,15 @@ genera las mismas criptas, que incluye todos los escenarios pedidos y que no ins
    coinciden con las de recalcular siempre y reporta cualquier diferencia como error. *(FR-033)*
 7. **Cuando** se ejecuta `--bench`, **entonces** no instancia la vista ni hace solicitudes de red.
    *(FR-034)*
-8. **Dada** la cripta de referencia con decenas de cazadores activos, **cuando** `--bench` mide el
-   ciclo de eventos entre dos decisiones del jugador, **entonces** cada ciclo toma menos de 20 ms.
-   *(FR-035)*
-9. **Dado** un cazador de rango pequeño, **cuando** `--bench` multiplica por 10 el tamaño de la
-   cripta sin cambiar la región dentro de su rango, **entonces** el tiempo medio por decisión no
-   llega a duplicarse. *(FR-036)*
-10. **Cuando** `--bench` aumenta la cantidad de cazadores activos, **entonces** el trabajo por ciclo
-    crece a lo sumo linealmente con esa cantidad. *(FR-037)*
+8. **Dada** una cripta sintética de 2 000 salas con 50 cazadores activos repartidos a distintas
+   distancias del jugador, todas dentro de su rango, **cuando** `--bench` mide el ciclo de eventos
+   entre dos decisiones del jugador durante al menos 60 acciones del jugador, **entonces** el p95 de
+   esos ciclos es menor que 20 ms. *(FR-035)*
+9. **Dado** un cazador de rango pequeño, con unas 100 salas dentro de su rango, **cuando**
+   `--bench` pasa de una cripta de 2 000 salas a una de 20 000 sin cambiar esa región, **entonces**
+   el tiempo medio por decisión no llega a duplicarse. *(FR-030, FR-036)*
+10. **Cuando** `--bench` mide el ciclo con 10, 25, 50 y 100 cazadores activos, **entonces** el
+    tiempo por cazador (ciclo ÷ cantidad) con 100 no pasa de 2 veces el de 10. *(FR-037)*
 
 ---
 
@@ -235,8 +275,15 @@ genera las mismas criptas, que incluye todos los escenarios pedidos y que no ins
   fórmula de P1 §2.3 sobre el intervalo derivado del costo (FR-007).
 - **Muchas rutas de igual costo**: el desempate por menor id de vecina se cumple siempre (FR-017).
 - **Cazador derrotado**: deja de actuar y deja de contar para el trabajo por ciclo (P1, FR-019).
-- **Costo inválido o asimétrico en los datos**: pendiente de aclarar (FR-010).
-- **Cazador sin rango en el catálogo**: pendiente de aclarar (FR-011).
+- **Costo inválido o asimétrico en los datos**: se rechaza la cripta con un mensaje y no se inicia
+  la partida (FR-010).
+- **Solo un lado de la salida declara costo**: ese costo vale en ambos sentidos; no es asimetría
+  (FR-001, FR-010).
+- **Cazador sin rango, o con rango negativo o no entero, en el catálogo**: se rechaza el catálogo y
+  no se inicia la partida; si llega con la partida empezada, la partida se detiene de forma
+  controlada con el mismo mensaje y `partida.log` queda guardado (FR-011).
+- **Cazador de rango 0**: es válido; solo ataca si comparte sala con el jugador, y si no, espera
+  (FR-011, FR-013, FR-015).
 
 ## Requisitos *(obligatorio)*
 
@@ -245,7 +292,8 @@ Los identificadores son estables y no se renumeran (constitución, principio IX)
 ### Requisitos funcionales — Terreno
 
 - **FR-001**: Cada salida del esqueleto PUEDE declarar un campo costo, entero mayor o igual que 1. Si
-  no lo declara, su costo DEBE ser 100.
+  ninguno de los dos lados de la salida lo declara, su costo DEBE ser 100. Si solo uno de los dos
+  lados lo declara, ese costo DEBE valer en ambos sentidos.
 - **FR-002**: El costo de una salida DEBE ser el mismo en ambos sentidos.
 - **FR-003**: Moverse por una salida DEBE ser una acción cuyo costo base es el costo de esa salida,
   en lugar del 100 fijo de P1. El intervalo DEBE calcularse como
@@ -264,17 +312,20 @@ Los identificadores son estables y no se renumeran (constitución, principio IX)
 - **FR-008**: Una cripta sin ningún campo costo DEBE jugarse exactamente igual que en la primera
   parte: mismos instantes, mismos eventos, mismas llamadas al generador aleatorio y mismo resultado.
 - **FR-009**: La vista DEBE mostrar el costo de cada salida de la sala actual, esté abierta o cerrada.
-- **FR-010**: Si un costo del esqueleto es menor que 1, no es entero, o una misma salida declara
-  costos distintos en cada sentido, el programa DEBE [NEEDS CLARIFICATION: ¿rechaza la cripta con un
-  mensaje y no inicia la partida, corrige el valor (por ejemplo, usa 100 o el mínimo de ambos
-  sentidos) y lo avisa, o sigue otra regla?].
+- **FR-010**: Si un costo del esqueleto es menor que 1 o no es entero, o si los dos lados de una
+  misma salida declaran costos distintos, el programa DEBE rechazar la cripta con un mensaje que
+  indique la salida y el problema, y NO DEBE iniciar la partida. Que solo un lado declare costo no
+  es asimetría (FR-001).
 
 ### Requisitos funcionales — Cazador
 
 - **FR-011**: DEBE existir un cuarto comportamiento de enemigo, «cazador», cuya ficha de catálogo
-  incluye el campo rango, un entero en unidades de costo. Si la ficha de un cazador no trae rango,
-  el programa DEBE [NEEDS CLARIFICATION: ¿rechaza el catálogo o la cripta, trata al cazador como de
-  rango ilimitado, o como de rango 0 (solo ataca si comparte sala)?].
+  incluye el campo rango, un entero mayor o igual que 0 en unidades de costo (con rango 0 el cazador
+  solo ataca si comparte sala; si no, espera). Si la ficha de un cazador no trae rango, o el rango es
+  negativo o no es entero, el programa DEBE rechazar el catálogo con un mensaje que indique la ficha
+  y NO DEBE iniciar la partida. Si esa ficha llega con la partida ya empezada (por ejemplo, por la
+  precarga), la partida DEBE detenerse de forma controlada con ese mismo mensaje, y `partida.log`
+  DEBE quedar guardado.
 - **FR-012**: Un cazador DEBE activarse como cualquier enemigo (P1 §2.4): dormido hasta que el
   jugador entra a su sala, con su primera acción programada desde el reloj actual con base de costo
   100, y en orden ascendente de id de instancia si se activan varios en el mismo instante.
@@ -325,9 +376,11 @@ Los identificadores son estables y no se renumeran (constitución, principio IX)
 - **FR-028**: `--bench` DEBE usar criptas sintéticas con costos variables, generadas de forma
   determinista por semilla.
 - **FR-029**: `--bench` DEBE medir la decisión de los cazadores con un cazador y con muchos (al menos
-  decenas) persiguiendo al mismo jugador.
+  50) persiguiendo al mismo jugador, repartidos a distintas distancias de él y todos dentro de su
+  rango, sin ninguno en la sala del jugador al empezar.
 - **FR-030**: `--bench` DEBE medir rango pequeño frente a rango grande, y el efecto de aumentar el
-  tamaño de la cripta manteniendo igual la región que queda dentro del rango.
+  tamaño de la cripta manteniendo igual la región que queda dentro del rango. «Rango pequeño» es un
+  rango que deja unas 100 salas dentro de él; el tamaño de la cripta pasa de 2 000 a 20 000 salas.
 - **FR-031**: `--bench` DEBE comparar un cálculo compartido por todos los cazadores frente a un
   cálculo por cazador, e indicar bajo qué condiciones conviene cada uno.
 - **FR-032**: `--bench` DEBE comparar reutilizar cálculos anteriores frente a recalcular siempre, con
@@ -340,12 +393,15 @@ Los identificadores son estables y no se renumeran (constitución, principio IX)
 
 Medidos en el equipo local, sin red ni renderizado (P2 §6.1; constitución, principio VI).
 
-- **FR-035**: El ciclo de eventos entre dos decisiones del jugador DEBE tomar menos de 20 ms en la
-  cripta de referencia con decenas de cazadores activos.
+- **FR-035**: El p95 del ciclo de eventos entre dos decisiones del jugador, medido sobre al menos 60
+  acciones del jugador, DEBE ser menor que 20 ms en una cripta sintética de 2 000 salas con 50
+  cazadores activos (repartidos como en FR-029), y también en la cripta de referencia oficial cuando
+  se publique.
 - **FR-036**: La decisión de un cazador con rango pequeño DEBE costar en proporción a la región de la
   cripta que queda dentro de su rango, no al tamaño total de la cripta.
 - **FR-037**: Con varios cazadores, el trabajo total por ciclo NO DEBE crecer más que linealmente con
-  la cantidad de cazadores activos.
+  la cantidad de cazadores activos. Se verifica con `--bench` midiendo con 10, 25, 50 y 100
+  cazadores: el tiempo por cazador (ciclo ÷ cantidad) con 100 NO DEBE pasar de 2 veces el de 10.
 
 ### Entidades clave
 
@@ -368,15 +424,18 @@ Medidos en el equipo local, sin red ni renderizado (P2 §6.1; constitución, pri
   seguido, el 100 % de las decisiones coinciden con las de un cálculo desde cero.
 - **SC-003**: Todas las pruebas de la primera parte siguen pasando, y una cripta sin costos produce
   el mismo `partida.log` y el mismo resultado que en la primera parte.
-- **SC-004**: El ciclo de eventos entre dos decisiones del jugador se mantiene por debajo de 20 ms
-  con decenas de cazadores activos en la cripta de referencia, según `--bench`.
-- **SC-005**: Para un cazador de rango pequeño, al multiplicar por 10 el tamaño de la cripta sin
-  cambiar la región dentro de su rango, el tiempo medio por decisión no llega a duplicarse, según
-  `--bench`.
+- **SC-004**: El p95 del ciclo de eventos entre dos decisiones del jugador, sobre al menos 60
+  acciones, es menor que 20 ms con 50 cazadores activos en una cripta sintética de 2 000 salas (y en
+  la cripta oficial cuando se publique), según `--bench`.
+- **SC-005**: Para un cazador de rango pequeño (unas 100 salas dentro de su rango), al pasar de una
+  cripta de 2 000 salas a una de 20 000 sin cambiar esa región, el tiempo medio por decisión no llega
+  a duplicarse, según `--bench`.
 - **SC-006**: Dos ejecuciones de `--bench` con la misma semilla generan criptas idénticas y cubren
   los cuatro grupos de medición de FR-029 a FR-032.
 - **SC-007**: En una partida, el jugador puede ver el costo de cada salida de su sala y reconocer qué
   enemigos son cazadores sin consultar nada adicional.
+- **SC-008**: Según `--bench`, con 10, 25, 50 y 100 cazadores activos, el tiempo por cazador
+  (ciclo ÷ cantidad) con 100 no pasa de 2 veces el de 10.
 
 ## Supuestos
 
@@ -391,6 +450,7 @@ Medidos en el equipo local, sin red ni renderizado (P2 §6.1; constitución, pri
 - Un movimiento se aplica al ejecutarse la acción (P1 §2.5): el actor aparece en la sala destino y el
   costo de la salida determina cuándo vuelve a actuar. «Atravesar una salida costosa» significa
   estar a la espera de esa siguiente acción.
-- La cripta de referencia y su número exacto de cazadores los publica el profesor; si se ajusta el
-  límite de 20 ms por enmienda (P2 §2.7) se actualiza FR-035.
+- La cripta de referencia oficial la publica el profesor; mientras tanto se mide con la cripta
+  sintética de FR-035. Si la cripta oficial trae otra cantidad de cazadores, o si se ajusta el
+  límite de 20 ms por enmienda (P2 §2.7), se actualiza FR-035.
 - El umbral de SC-005 («no llega a duplicarse») es una meta del grupo para hacer verificable FR-036.
