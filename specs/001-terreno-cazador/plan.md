@@ -81,16 +81,10 @@ No quedan puntos «NEEDS CLARIFICATION».
 | V. Red y presupuesto | Sí | Sin solicitudes nuevas (D11, FR-027); el cazador no consulta la red. |
 | VI. Rendimiento medido | Sí | Secciones B1–B9 del `--bench`, con las alternativas descartadas medidas (contracts/bench.md). |
 | VII. Reversibilidad | Sí | Los movimientos del cazador usan los `Cambio` existentes; las búsquedas no son estado (D6). |
-| VIII. Primero la especificación | Sí | spec.md con las aclaraciones confirmado en Git (commit `09b61d0`). Este plan no agrega reglas: ver la nota de «Interpretaciones» abajo. |
+| VIII. Primero la especificación | Sí | spec.md con las aclaraciones confirmado en Git (commit `09b61d0`); el ajuste de `costo` null se confirma en un commit propio antes que este plan. Este plan no agrega reglas. |
 | IX. Trazabilidad | Sí | Lista de pruebas por FR abajo; cada escenario tiene prueba. |
 | X. Documentación | Pendiente en tareas | `DECISIONES.md` (secciones §5.1 y §5.2 a partir de research.md), README y `PROMPTS_LLM.md`. |
 | XI. Compatibilidad con P1 | Sí | Formato de guardado 2: un archivo de formato 1 se rechaza con mensaje, nunca en silencio. El ciclo con cazadores deja evidencia para §5.6 (D12). |
-
-**Interpretaciones que el grupo debe confirmar** (no agregan reglas, pero precisan la spec): un
-`costo` o `rango` con valor `null` explícito, o un `float` con valor entero (`250.0`), se tratan
-como «no es entero» y se rechazan (contracts/datos-servicio.md). Si el grupo prefiere que
-`"costo": null` cuente como «no declarado», se corrige la spec primero (principio VIII).
-
 ## Estructura del proyecto
 
 ### Documentación (esta capacidad)
@@ -151,7 +145,10 @@ tests/
 ├── test_persistencia.py             # CAMBIA: costos y cazadores en el guardado; formato 2
 ├── test_controlador.py              # CAMBIA: datos inválidos antes y durante la partida
 ├── test_bench.py                    # CAMBIA: determinismo y secciones nuevas
-└── datos/p1_partida.log             # NUEVO: partida de P1 grabada antes de los cambios (FR-008)
+└── datos/                           # NUEVO: datos fijos de la primera parte para FR-008
+    ├── p1_partida.log               #   partida de P1 grabada antes de los cambios
+    ├── p1_cripta-01.json            #   copia fija de la cripta (esqueleto y contenidos) de P1
+    └── p1_catalogo.json             #   copia fija del catálogo de P1
 ```
 
 **Decisión de estructura**: se mantiene la estructura actual de un solo proyecto; solo se agregan
@@ -225,7 +222,7 @@ escenario n de la historia x.
 | FR-005 | `test_terreno` · atacar, esperar, usar, equipar, recoger, soltar y abrir conservan su costo en una sala con salidas caras | HU1-7 |
 | FR-006 | `test_terreno` · errante y rastreador: mismo destino y mismas llamadas al azar (se compara el estado del `random.Random`) con y sin costos | HU1-6 |
 | FR-007 | `test_terreno` · cambio de velocidad de 100 a 200 en el instante 100 tras salida de costo 300 → instante 200, secuencia nueva | HU1-5 |
-| FR-008 | `test_terreno.TestCompatibilidadP1` · repetir `tests/datos/p1_partida.log`: mismos instantes, eventos, azar y resultado | HU1-8 |
+| FR-008 | `test_terreno.TestCompatibilidadP1` · repetir `tests/datos/p1_partida.log` en modo sin red sobre la copia fija `tests/datos/p1_cripta-01.json` y `p1_catalogo.json` (copiada a una carpeta temporal para el `AlmacenDisco`; nunca usa `cache/`): mismos instantes, eventos, azar y resultado | HU1-8 |
 | FR-009 | `test_controlador` · la vista muestra el costo de salidas abiertas y cerradas | HU1-9 |
 | FR-010 | `test_terreno` · costo 0, 2,5, `true`, texto; lados 200 y 300 → `DatosInvalidos` y no inicia | HU1-12 |
 | FR-011 | `test_cazador` · rango 600 frente a 800; sin rango, negativo, no entero → rechazo antes; `test_controlador` · ficha inválida por precarga → sesión termina y `partida.log` existe; rango 0 | HU2-13, HU2-14, HU2-15 |

@@ -33,16 +33,23 @@ Esperado: ninguna línea. Además, revisar a mano que las estructuras nuevas no 
 
 ## 4. La primera parte sigue igual (FR-008, SC-003)
 
-Repetir un `partida.log` de la primera parte sobre una cripta sin campo `costo`. El archivo
-`tests/datos/p1_partida.log` todavía no existe: una tarea lo graba con el código actual (antes de
-cualquier cambio de esta capacidad) junto con el estado final esperado.
+Repetir un `partida.log` de la primera parte sobre una cripta sin campo `costo`. La prueba usa
+datos fijos guardados en `tests/datos/`, nunca `cache/`: si alguien juega `cripta-01` en línea, la
+copia de `cache/` pasa a la versión nueva y el log de la primera parte dejaría de servir.
+
+- `tests/datos/p1_partida.log`: partida grabada con el código actual, antes de cualquier cambio de
+  esta capacidad, junto con el estado final esperado.
+- `tests/datos/p1_cripta-01.json` y `tests/datos/p1_catalogo.json`: copia fija de la cripta y del
+  catálogo de la primera parte con los que se grabó ese log.
+
+Todavía no existen: una tarea los crea. La prueba los copia a una carpeta temporal, arma un
+`AlmacenDisco` sobre esa carpeta y repite el log sin red.
 
 ```powershell
-python -m crypta.main --offline --replay tests/datos/p1_partida.log
+python -m unittest tests.test_terreno.TestCompatibilidadP1
 ```
 
-Esperado: el mismo resultado y el mismo estado final que en la primera parte (la prueba
-`test_terreno.TestCompatibilidadP1` lo compara automáticamente).
+Esperado: el mismo resultado y el mismo estado final que en la primera parte.
 
 ## 5. Mediciones
 

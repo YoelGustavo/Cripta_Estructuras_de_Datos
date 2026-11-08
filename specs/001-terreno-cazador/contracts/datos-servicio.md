@@ -15,11 +15,11 @@ Referencia exacta del HTTP: Swagger del servicio. Esto fija **cómo los interpre
 
 | Caso | Resultado |
 |---|---|
-| Ningún lado de la salida trae `costo` | costo 100 |
-| Solo un lado trae `costo` = c (entero ≥ 1) | costo c en ambos sentidos |
+| Ningún lado de la salida trae `costo` (o lo trae con valor `null`) | costo 100 |
+| Solo un lado trae `costo` = c (entero ≥ 1); el otro no lo trae o lo trae `null` | costo c en ambos sentidos |
 | Ambos lados traen el mismo c | costo c |
 | Ambos lados traen costos distintos | `DatosInvalidos`: «La salida entre las salas A (dir) y B (dir) declara costos distintos: x y y» |
-| `costo` < 1, `float` (incluso `250.0`), `bool`, texto o `null` explícito | `DatosInvalidos`: «La salida <dir> de la sala A tiene un costo inválido: <valor>» |
+| `costo` < 1, `float` (incluso `250.0`), `bool` o texto | `DatosInvalidos`: «La salida <dir> de la sala A tiene un costo inválido: <valor>» |
 
 Validez: mientras coincida la versión de la cripta; se persiste con el esqueleto.
 
