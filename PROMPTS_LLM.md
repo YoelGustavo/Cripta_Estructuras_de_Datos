@@ -286,3 +286,39 @@ B. Además: los cazadores deben estar repartidos a distintas distancias del juga
 B
 10, 25, 50 y 100 cazadores; el tiempo por cazador (ciclo ÷ cantidad) con 100 no debe pasar de 2 veces el de 10.
  **USO:** preguntas de aclaraciones de (/speckit-clarify)
+
+**Prompt** /speckit-plan Plan para specs/001-terreno-cazador. Responde en español. Contexto técnico: Python 3.11+, sin dependencias nuevas (biblioteca estándar, requests y struct). El código está en crypta/ (Modelo, Vista, Controlador, Adaptadores, estructuras, bench) y las pruebas en tests/ (unittest). El enunciado está en docs/Cripta - Parte II.txt; lee sobre todo §3.1, §3.2, §5.1, §5.2, §6.1 y §6.3. Cumple la constitución: nada de heapq, dict, set, bisect, collections ni bibliotecas de grafos.
+
+Lo que hay que revisar del código actual antes de planear:
+- crypta/Modelo/Partida.py tiene COSTO_MOVER = 100 fijo para el jugador, y _aplicar_comportamiento reprograma a los enemigos con 100 tanto al moverse como al esperar. Los movimientos deben pasar a costar lo que cueste la salida.
+- Las salidas se leen en crypta/Modelo/Sala.py y crean una Puerta (cerrada, llave, cierre_automatico). Las dos puertas de una salida comparten el estado (EstadoPuerta, en Puerta.py).
+- El guardado (crypta/Adaptadores/EstadoPartida.py y GuardadoBinario.py) escribe las puertas de cada sala y tiene una versión de formato.
+- Ya tenemos MonticuloMin (con comparador), Cola, ArbolBusqueda, Vector, el historial de cambios (Cambio, Historial) y el framework de medición (crypta/bench, medicion.py).
+
+Propuesta del grupo, para evaluarla en el plan con alternativas y mediciones (no es una decisión cerrada):
+1. Ruta más barata: búsqueda de costo mínimo con nuestro MonticuloMin, que se detiene al pasar el rango, para que cueste según la región dentro del rango (FR-036).
+2. Cálculo compartido: como el costo es igual en ambos sentidos y las puertas se comparten, dist(v, jugador) = dist(jugador, v). Una sola búsqueda desde la sala del jugador, limitada al mayor rango entre los cazadores activos, da la distancia de todas las salas de esa región. Cada cazador decide mirando solo sus vecinas, con el desempate por menor id de FR-017. Alternativa: una búsqueda por cazador. Medir las dos (FR-031) y decir cuándo conviene cada una.
+3. Reutilización (FR-019, FR-032): la distancia depende solo de la sala del jugador y del estado de las puertas; que otros actores se muevan, mueran o cambien de velocidad no la cambia. Reutilizar el cálculo mientras esas dos cosas no cambien, y analizar si un cambio de puerta fuera de la región calculada se puede ignorar con seguridad. Un pergamino y la carga de una partida guardada invalidan lo calculado. La equivalencia con un cálculo desde cero se comprueba con pruebas (FR-033, SC-002).
+4. Dónde guardar las distancias sin dict: comparar un campo en cada sala con una marca del cálculo vigente, frente a un ArbolBusqueda por id de sala.
+5. Lo calculado para las rutas no es estado del juego: no va en el historial del pergamino ni en el archivo de guardado.
+
+El plan debe incluir:
+- los módulos afectados;
+- las estructuras y la complejidad de las operaciones más frecuentes;
+- las alternativas descartadas y por qué;
+- las mediciones planificadas para FR-028 a FR-037 con los valores fijados en Aclaraciones (50 cazadores repartidos dentro de su rango en 2 000 salas, p95 de al menos 60 acciones; región de unas 100 salas en criptas de 2 000 y 20 000; 10, 25, 50 y 100 cazadores con tiempo por cazador de a lo sumo 2 veces);
+- el impacto en el guardado (si cambia el formato, se sube su versión);
+- la lista de pruebas por FR.
+
+Este plan será el borrador de la sección de DECISIONES.md (P2 §7.1).
+
+**Uso:** crear el plan.md y corregirlo.
+
+**Prompt:** Ajustes de revisión del grupo al plan 001:
+1. Cambio de spec (principio VIII, va primero): un campo costo con valor null cuenta como «no declarado» (vale el costo del otro lado o 100), no como inválido. Un float (aunque sea 250.0), un bool o un texto siguen siendo inválidos. Actualiza FR-001, FR-010 y el caso borde en spec.md. Para el rango del cazador, null sigue siendo inválido.
+2. Refleja ese cambio en plan.md (quita la nota «Interpretaciones que el grupo debe confirmar») y en contracts/datos-servicio.md.
+3. La prueba de FR-008 no puede depender de cache/: si alguien juega cripta-01 en línea, la copia local se actualiza a la versión nueva y el log de la primera parte deja de servir. Guarda en tests/datos/ una copia fija de la cripta y del catálogo de la primera parte junto con p1_partida.log, y haz que la prueba use esa copia. Actualiza plan.md y quickstart.md.
+4. En B7 (contracts/bench.md), el jugador debe moverse en un recorrido fijo y determinista durante las 60 acciones, para que los cazadores sigan calculando rutas y no terminen todos atacando en su sala.
+No cambies nada más.
+
+**USO** ajuste y correcciones + del plan.md
