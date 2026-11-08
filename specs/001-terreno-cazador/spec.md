@@ -278,7 +278,8 @@ genera las mismas criptas, que incluye todos los escenarios pedidos y que no ins
 - **Costo inválido o asimétrico en los datos**: se rechaza la cripta con un mensaje y no se inicia
   la partida (FR-010).
 - **Solo un lado de la salida declara costo**: ese costo vale en ambos sentidos; no es asimetría
-  (FR-001, FR-010).
+  (FR-001, FR-010). Un lado con costo null cuenta como no declarado: vale el costo del otro lado, o
+  100 si tampoco lo declara.
 - **Cazador sin rango, o con rango negativo o no entero, en el catálogo**: se rechaza el catálogo y
   no se inicia la partida; si llega con la partida empezada, la partida se detiene de forma
   controlada con el mismo mensaje y `partida.log` queda guardado (FR-011).
@@ -293,7 +294,8 @@ Los identificadores son estables y no se renumeran (constitución, principio IX)
 
 - **FR-001**: Cada salida del esqueleto PUEDE declarar un campo costo, entero mayor o igual que 1. Si
   ninguno de los dos lados de la salida lo declara, su costo DEBE ser 100. Si solo uno de los dos
-  lados lo declara, ese costo DEBE valer en ambos sentidos.
+  lados lo declara, ese costo DEBE valer en ambos sentidos. Un campo costo con valor null cuenta como
+  no declarado.
 - **FR-002**: El costo de una salida DEBE ser el mismo en ambos sentidos.
 - **FR-003**: Moverse por una salida DEBE ser una acción cuyo costo base es el costo de esa salida,
   en lugar del 100 fijo de P1. El intervalo DEBE calcularse como
@@ -314,8 +316,9 @@ Los identificadores son estables y no se renumeran (constitución, principio IX)
 - **FR-009**: La vista DEBE mostrar el costo de cada salida de la sala actual, esté abierta o cerrada.
 - **FR-010**: Si un costo del esqueleto es menor que 1 o no es entero, o si los dos lados de una
   misma salida declaran costos distintos, el programa DEBE rechazar la cripta con un mensaje que
-  indique la salida y el problema, y NO DEBE iniciar la partida. Que solo un lado declare costo no
-  es asimetría (FR-001).
+  indique la salida y el problema, y NO DEBE iniciar la partida. Un float (aunque tenga valor
+  entero, como 250.0), un bool o un texto no son enteros. Que solo un lado declare costo no es
+  asimetría, y un costo null cuenta como no declarado (FR-001).
 
 ### Requisitos funcionales — Cazador
 
