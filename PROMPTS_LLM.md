@@ -218,3 +218,71 @@ Fecha aproximada: miércoles 14 de octubre de 2026　Herramienta/modelo: ChatGPT
 ### 5 nov 2026 — Claude Code
 - **Prompt:** "/speckit-constitution Proyecto CRIPTA (EIF-207, II ciclo 2026), segunda parte. … "
 - **Uso:** crear la constitución del proyecto con spec-kit.
+
+### 7 nov 2026 — Claude Code
+
+**prompt** /speckit-specify Capacidad 001: Terreno y cazador. Nombre corto para la carpeta: terreno-cazador. Fuente: docs/Cripta - Parte II.pdf, secciones §3.1, §3.2, §4.1, §5.1, §5.2, §6.1, §6.3, §7.3 y los Apéndices A y B (parte «Terreno y cazador»). Las reglas de la primera parte están en docs/Primer Proyecto - Estructuras de Datos II 2026.pdf. Escribe la especificación en español, sin nombrar estructuras de datos, algoritmos concretos, clases ni módulos (constitución, principio VIII). Numera los requisitos FR-001, FR-002... y haz que cada escenario de aceptación cite el FR que verifica.
+
+Por qué (desde el juego): en la primera parte moverse siempre costaba lo mismo y ningún enemigo buscaba rutas; el rastreador solo miraba sus salas vecinas. Ahora el terreno hace que unos caminos tarden más que otros, y aparece un enemigo, el cazador, que persigue al jugador por el camino más barato. El jugador tiene que pensar por dónde se mueve.
+
+Historias de usuario, en orden de prioridad:
+1. Terreno: como jugador, al moverme por una salida tardo según el costo de esa salida, y veo el costo de cada salida de mi sala actual.
+2. Cazador: como jugador, me enfrento a un enemigo que viene hacia mí por la ruta más barata si estoy dentro de su rango, y que espera si no puede llegar.
+3. Decisión siempre correcta: aunque se abran o cierren puertas, yo me mueva, otros actores mueran o cambien de sala, o cambien velocidades, el cazador decide en cada turno lo mismo que decidiría calculando desde cero.
+4. Medición: el grupo puede medir con --bench el costo de las rutas del cazador y de reutilizar cálculos.
+
+Reglas de terreno:
+- Cada salida puede traer un campo costo, entero mayor o igual a 1. Si no lo trae, vale 100. Es el mismo en los dos sentidos.
+- Moverse por una salida cuesta el costo de esa salida, en lugar de 100 fijo. El intervalo sigue siendo max(1, costo_salida * 100 // velocidad).
+- Aplica a todos los actores: jugador, errantes, rastreadores y cazadores. Atacar, esperar y las demás acciones mantienen su costo. Errantes y rastreadores conservan su comportamiento; solo cambia cuánto tarda su movimiento.
+- Si cambia la velocidad de un actor mientras atraviesa una salida costosa, el tiempo restante se reescala como en P1 §2.3.
+- Una cripta sin ningún campo costo se juega exactamente igual que en la primera parte.
+- La vista muestra el costo de cada salida de la sala actual.
+
+Reglas del cazador:
+- Es un cuarto comportamiento de enemigo («cazador») y su ficha del catálogo trae rango, un entero en unidades de costo. Se activa como cualquier enemigo (P1 §2.4).
+- En su turno, en este orden: (1) si comparte sala con el jugador, ataca; (2) si no, calcula el costo mínimo d desde su sala hasta la sala actual del jugador, sumando costos y usando solo salidas abiertas en ese instante; (3) si no hay ruta, o si d > rango, espera con costo 100; (4) si hay, avanza un paso por una ruta de costo d y esa acción cuesta el costo de la salida que atraviesa.
+- Desempate: siendo u la sala del cazador, entre las vecinas v con costo(u, v) + dist(v, jugador) = d, va a la de menor id. Esto vale aunque haya muchas rutas del mismo costo.
+- Conoce el esqueleto completo y el estado actual de todas las puertas. No le afecta la niebla de guerra del jugador, no abre puertas cerradas, y su decisión nunca depende de si el contenido de una sala ya se descargó.
+- Su decisión en cada turno es idéntica a la de un cálculo desde cero en ese instante. Se pueden reutilizar cálculos anteriores, pero nunca si eso cambia la decisión.
+- Sus movimientos se deshacen con el pergamino como cualquier otra acción enemiga, y la misma semilla con los mismos comandos reproduce sus decisiones (--replay).
+- La vista distingue a los cazadores de los demás enemigos.
+
+Datos: el costo llega en el esqueleto y el rango en el catálogo. Se persisten con su versión, y lo guardado por la primera parte se invalida por la validación de versión, no borrando archivos. Guardar y cargar una partida conserva los costos.
+
+Escenarios de aceptación obligatorios (Apéndice B):
+- Un cazador no tiene ruta abierta hacia el jugador: espera con costo 100.
+- La ruta más barata del cazador cuesta más que su rango: espera con costo 100.
+- Existe una ruta de menos salas pero mayor costo y otra de más salas y menor costo: el cazador sigue la de menor costo.
+- Dos vecinas inician rutas de costo mínimo: el cazador va a la de menor id.
+- Una puerta de la ruta del cazador se cierra entre dos de sus turnos: en el turno siguiente decide como si calculara desde cero.
+- Un actor de velocidad alta atraviesa una salida de costo 1: el intervalo es al menos 1.
+- Cambia la velocidad de un actor que atraviesa una salida costosa: el tiempo restante se escala según P1 §2.3.
+Agrega además: el cazador en la misma sala que el jugador ataca; el cazador no usa una puerta cerrada aunque sea el camino más barato; una cripta sin costos se comporta igual que en la primera parte.
+
+Requisitos de rendimiento:
+- El ciclo de eventos entre dos decisiones del jugador toma menos de 20 ms con decenas de cazadores activos en la cripta de referencia.
+- La decisión de un cazador con rango pequeño cuesta según la región que queda dentro de su rango, no según el tamaño de la cripta.
+- --bench mide, con criptas sintéticas deterministas por semilla: un cazador frente a muchos, rango pequeño frente a grande, cálculo compartido frente a uno por cazador, y reutilizar cálculos frente a recalcular siempre, con puertas que casi nunca cambian y con puertas que cambian seguido.
+
+Fuera de alcance de esta especificación: niebla de guerra, «ir a», resolubilidad y línea de tiempo (tienen su propia especificación).
+
+Deja marcado como pendiente de aclarar: qué hace el programa si un costo es inválido (menor que 1 o no entero) o distinto en cada sentido, y si un cazador no trae rango.
+
+**USO;** Ayudar a crear el specify del cazador y el terreno.
+
+**Prompt** Ajusta specs/001-terreno-cazador/spec.md con estos cambios de revisión del grupo, sin tocar nada más:
+1. Las historias dicen "Prioridad: P1..P4" y se confunden con P1/P2 (las partes del proyecto). Cámbialas a "Prioridad 1", "Prioridad 2", "Prioridad 3" y "Prioridad 4".
+2. Los escenarios del cazador deben indicar su rango para que la prueba sea exacta. En la historia 2, escenarios 5, 6, 7, 8, 9 y 11, y en la historia 3, escenarios 1 a 5, agrega "de rango 1000" (o un rango que no limite el caso).
+3. Cada FR debe tener al menos un escenario de aceptación que lo cite, porque en la defensa se escoge un requisito al azar. Agrega escenarios para: FR-011 (el cazador usa el rango de su ficha del catálogo); FR-024 (dos criptas sintéticas iguales salvo los costos dan instantes distintos con el mismo código: nada está quemado); FR-025 (una copia local de la primera parte con otra versión de cripta se invalida y se descarga el esqueleto nuevo con costos); FR-035, FR-036 y FR-037 (medidos con --bench: ciclo menor a 20 ms con decenas de cazadores; tiempo por decisión con rango pequeño al multiplicar la cripta por 10; trabajo por ciclo que crece linealmente con los cazadores activos).
+4. En FR-021 aclara que la decisión del cazador (atacar, esperar o a qué vecina moverse) no usa el generador aleatorio, pero el daño de su ataque sí lo usa, como cualquier ataque (P1 §2.6).
+No cambies la numeración de los FR existentes. Deja las marcas NEEDS CLARIFICATION de FR-010 y FR-011 para /speckit-clarify.
+
+**USO:¨** corregir el specify y ajustarlo.
+
+**Prompt** A, con una excepción: si solo un lado de la salida declara costo, ese costo vale en los dos sentidos y no cuenta como asimétrico. Solo se rechaza si los dos lados declaran costos distintos, o si un costo es menor que 1 o no es entero. A partir de ahora responde en español y registra las preguntas y respuestas del clarify en español.
+D. Además: un rango 0 es válido. Si la ficha inválida llega con la partida ya empezada (por ejemplo, por la precarga), la partida se detiene de forma controlada con ese mismo mensaje y el partida.log queda guardado.
+B. Además: los cazadores deben estar repartidos a distintas distancias del jugador y dentro de su rango, para que de verdad calculen rutas (no que ya estén en su sala atacando). Lo que debe quedar por debajo de 20 ms es el p95 de al menos 60 acciones del jugador, como en la medición de la primera parte.
+B
+10, 25, 50 y 100 cazadores; el tiempo por cazador (ciclo ÷ cantidad) con 100 no debe pasar de 2 veces el de 10.
+ **USO:** preguntas de aclaraciones de (/speckit-clarify)
