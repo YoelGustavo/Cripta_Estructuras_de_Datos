@@ -179,6 +179,10 @@ Enunciados oficiales; las referencias de la forma «P1 §x» y «P2 §x» apunta
 - **P1** — primera parte: `docs/Primer Proyecto - Estructuras de Datos II 2026.pdf`
 - **P2** — segunda parte: `docs/Cripta - Parte II.pdf`
 
+El texto de P2 está en `docs/Cripta - Parte II.txt`, convertido del PDF. El agente DEBE leer ese
+archivo, porque en este equipo no puede leer los PDF. Si hay diferencias, la fuente oficial sigue
+siendo el PDF.
+
 Orden de precedencia ante un conflicto:
 
 1. Enmiendas del profesor (P2 §2.7).
@@ -220,4 +224,4 @@ reglas del juego, restricciones, rendimiento y evaluación.
   Si un plan o una tarea contradice la constitución, el error es del grupo y se corrige el
   artefacto, no la constitución (salvo enmienda formal).
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-05 | **Last Amended**: 2026-11-05
+**Version**: 1.0.1 | **Ratified**: 2026-11-05 | **Last Amended**: 2026-11-07
