@@ -1,0 +1,47 @@
+# CRIPTA registro de partida
+formato 1
+cripta cripta-01
+version_cripta fd58f7743b9e
+version_catalogo be68d322d2f5
+semilla 69
+jugador Prueba
+---
+recoger 0
+usar
+mover N
+recoger 0
+equipar
+atacar e-201
+atacar e-202
+recoger 0
+recoger 0
+mover N
+recoger 0
+recoger 0
+avanzar
+usar
+usar
+avanzar
+equipar
+mover S
+abrir E
+mover E
+recoger 0
+recoger_pergamino
+avanzar
+avanzar
+soltar
+esperar
+pergamino
+mover O
+mover N
+mover N
+recoger 1
+avanzar
+usar
+atacar e-401
+atacar e-401
+atacar e-401
+recoger 0
+abrir E
+mover E

@@ -1,0 +1,166 @@
+{
+  "version": "fd58f7743b9e",
+  "esqueleto": [
+    {
+      "id": 1,
+      "nombre": "Entrada derruida",
+      "salidas": {
+        "N": {
+          "sala": 2
+        }
+      }
+    },
+    {
+      "id": 2,
+      "nombre": "Pasillo de las urnas",
+      "salidas": {
+        "S": {
+          "sala": 1
+        },
+        "N": {
+          "sala": 3
+        },
+        "E": {
+          "sala": 5,
+          "cerrada": true,
+          "llave": "itm_llave_bronce",
+          "cierre_automatico": 500
+        }
+      }
+    },
+    {
+      "id": 3,
+      "nombre": "Cripta baja",
+      "salidas": {
+        "S": {
+          "sala": 2
+        },
+        "N": {
+          "sala": 4
+        }
+      }
+    },
+    {
+      "id": 4,
+      "nombre": "Osario profundo",
+      "salidas": {
+        "S": {
+          "sala": 3
+        },
+        "E": {
+          "sala": 6,
+          "cerrada": true,
+          "llave": "itm_llave_negra"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "nombre": "Nicho sellado",
+      "salidas": {
+        "O": {
+          "sala": 2
+        }
+      }
+    },
+    {
+      "id": 6,
+      "nombre": "Salida",
+      "salidas": {
+        "O": {
+          "sala": 4
+        }
+      }
+    }
+  ],
+  "contenidos": [
+    {
+      "sala": 1,
+      "enemigos": [],
+      "objetos": [
+        "itm_antorcha"
+      ],
+      "trampas": []
+    },
+    {
+      "sala": 2,
+      "enemigos": [
+        {
+          "instancia": "e-201",
+          "tipo": "ent_rata_gigante",
+          "vida": 12
+        },
+        {
+          "instancia": "e-202",
+          "tipo": "ent_rata_gigante",
+          "vida": 12
+        }
+      ],
+      "objetos": [
+        "itm_daga_oxidada"
+      ],
+      "trampas": [
+        {
+          "instancia": "t-17",
+          "tipo": "trp_dardos"
+        }
+      ]
+    },
+    {
+      "sala": 3,
+      "enemigos": [],
+      "objetos": [
+        "itm_llave_bronce",
+        "itm_coraza_cuero"
+      ],
+      "trampas": []
+    },
+    {
+      "sala": 4,
+      "enemigos": [
+        {
+          "instancia": "e-401",
+          "tipo": "ent_guardian_oseo"
+        }
+      ],
+      "objetos": [
+        "itm_llave_negra",
+        "itm_pocion_menor"
+      ],
+      "trampas": []
+    },
+    {
+      "sala": 5,
+      "enemigos": [],
+      "objetos": [
+        "itm_pergamino_retroceso",
+        "itm_antidoto"
+      ],
+      "trampas": []
+    },
+    {
+      "sala": 6,
+      "enemigos": [],
+      "objetos": [],
+      "trampas": []
+    }
+  ],
+  "datos_generales": {
+    "id": "cripta-01",
+    "version": "fd58f7743b9e",
+    "salas_total": 6,
+    "paginas": 1,
+    "salas_por_pagina": 50,
+    "sala_inicial": 1,
+    "sala_salida": 6,
+    "llave_salida": "itm_llave_negra",
+    "presupuesto_solicitudes": 9,
+    "inventario_max": 10,
+    "jugador": {
+      "vida_max": 30,
+      "ataque": 6,
+      "defensa": 2,
+      "velocidad": 100
+    }
+  }
+}
