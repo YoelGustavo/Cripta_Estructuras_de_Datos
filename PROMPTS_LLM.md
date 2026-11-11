@@ -357,3 +357,9 @@ No cambies nada más.
 **Prompt** /speckit-implement Termina la fase 4 de specs/001-terreno-cazador/tasks.md: T033 a T044, T046, T052, T053 y el punto de control T055. Marca las tareas hechas en tasks.md y no hagas commit.
 
 **USO:** Fase 4 de la 001, parte B: el cazador decide atacar, esperar o dar un paso por la ruta más barata.
+
+**Prompt:**/speckit-implement De la fase 5 de specs/001-terreno-cazador/tasks.md haz solo T056 a T063, T065 y T066 (verificador, invalidación selectiva y pergamino). Todavía no toques el guardado. Marca las tareas hechas en tasks.md y no hagas commit.
+
+**USO:** Fase 5 invalidacion y equivalencia
+
+**Promt** 

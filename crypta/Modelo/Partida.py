@@ -433,6 +433,14 @@ class Partida:
 
         resultado = self.estado.usar_pergamino_retroceso()
 
+        # Las búsquedas del cazador no entran al historial (research D6):
+        # después de revertir se invalidan. No haría falta (las puertas
+        # restauradas avisan y la sala del jugador se compara en cada
+        # decisión), pero cuesta una búsqueda y se hace por seguridad
+        # (FR-020).
+        if resultado and self._perseguidor is not None:
+            self._perseguidor.invalidar()
+
         if resultado:
             self._avisar("Usas un pergamino y retrocedes una acción.")
 
