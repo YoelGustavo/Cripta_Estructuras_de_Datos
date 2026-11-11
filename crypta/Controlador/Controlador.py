@@ -6,6 +6,7 @@ from crypta.Controlador.Comandos import (
     ComandoInvalido,
     ejecutar_comando,
 )
+from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.Partida import AccionInvalida
 from crypta.Vista.VistaConsola import VistaConsola
 from crypta.Adaptadores.GuardadoBinario import guardar_partida
@@ -49,6 +50,9 @@ class Controlador:
         self.repositorio_fichas = repositorio_fichas
         self.tabla_puntajes = tabla_puntajes
 
+        # Si la sesión terminó porque llegaron datos inválidos (FR-011).
+        self.error_datos = None
+
         self.fichas_en_uso = (
             FichasEnUso(repositorio_fichas)
             if repositorio_fichas is not None
@@ -60,6 +64,22 @@ class Controlador:
             self.fichas_en_uso.actualizar(self.partida)
     
     def iniciar(self):
+        """Juega la sesión. Si en cualquier momento llegan datos que no
+        cumplen el contrato (una ficha de cazador sin rango válido que trae
+        la precarga, por ejemplo), DatosInvalidos sale de GestorContenido en
+        este hilo: se muestra el mensaje y la sesión termina de forma
+        controlada (FR-011). No es un comando inválido, así que no se atrapa
+        con los ValueError de procesar_comando; partida.log ya tiene los
+        comandos jugados porque RegistroPartida.anotar lo cierra en cada
+        uno."""
+        try:
+            self._jugar()
+        except DatosInvalidos as error:
+            self.error_datos = error
+            self.vista.mostrar_error(f"La cripta no se puede jugar: {error}")
+            self.vista.mostrar_mensaje("Sesión finalizada.")
+
+    def _jugar(self):
         if not self.partida.iniciada:
             self.gestor_contenido.precargar_async(
                 self.partida.id_sala_inicial

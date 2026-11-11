@@ -898,7 +898,8 @@ class TestErrante(unittest.TestCase):
         sale cuando el dado da k, con randint(0, cantidad - 1)."""
         partida = partida_de_dos_salas()
         cruce = partida_cruce().mapa.obtener_sala(2)
-        elegidas = [partida._destino_errante(cruce).id for _ in range(200)]
+        elegidas = [partida._destino_errante(cruce).sala_destino_ref.id
+                    for _ in range(200)]
         azar = random.Random(SEMILLA)
         self.assertEqual(elegidas, [[4, 1, 3, 5][azar.randint(0, 3)] for _ in range(200)])
         self.assertEqual(sorted(set(elegidas)), [1, 3, 4, 5])

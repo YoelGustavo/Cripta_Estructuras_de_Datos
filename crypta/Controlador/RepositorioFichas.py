@@ -1,8 +1,17 @@
 from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
 from crypta.estructuras.CacheLRU import CacheLRU
 from crypta.estructuras.ListaSimple import ListaSimple
+from crypta.Modelo.Enemigo import CAZADOR, rango_de_cazador
 
 MAX_POR_LOTE = 10
+
+
+def validar_ficha(ficha):
+    """Revisa una ficha al entrar al repositorio, venga de la red o del
+    disco. Por ahora solo la de los cazadores: `rango` presente, entero (no
+    bool) y >= 0; si no, DatosInvalidos (FR-011, FR-024)."""
+    if ficha.get("comportamiento") == CAZADOR:
+        rango_de_cazador(ficha)
 
 class RepositorioFichas:
 
@@ -97,15 +106,26 @@ class RepositorioFichas:
         ):
             return None
  
-        return self._almacen.cargar_ficha(
+        ficha = self._almacen.cargar_ficha(
             self._version_catalogo,
             id_tipo
         )
+
+        if ficha is not None:
+            validar_ficha(ficha)
+
+        return ficha
  
     def _guardar_respuesta(self, respuesta):
         recibidas = ListaSimple()
+        entidades = respuesta.get("entidades") or ()
+
+        # Primero se validan todas: una ficha inválida no entra ni a la
+        # caché ni al disco (FR-011).
+        for ficha in entidades:
+            validar_ficha(ficha)
  
-        for ficha in respuesta.get("entidades") or ():
+        for ficha in entidades:
             self._cache.insertar(
                 ficha["id"],
                 ficha

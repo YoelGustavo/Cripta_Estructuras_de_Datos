@@ -5,14 +5,28 @@ VIGENCIA_RASTRO = 400
 
 
 def sala_con_rastro_mas_fresco(sala, reloj_actual):
+    """La sala vecina con el rastro más fresco, o None (P1 §2.9)."""
+    puerta = salida_con_rastro_mas_fresco(sala, reloj_actual)
 
+    if puerta is None:
+        return None
+
+    return puerta.sala_destino_ref
+
+
+def salida_con_rastro_mas_fresco(sala, reloj_actual):
+    """La salida abierta que lleva a la sala vecina con el rastro más
+    fresco, o None. Misma regla y mismo orden que en P1; devuelve la puerta
+    para que el movimiento tarde su costo (FR-004, FR-006)."""
     mejor = None
+    mejor_puerta = None
     mejor_tiempo = None
 
     puertas = sala.puertas(solo_abiertas=True)
 
     for i in range(len(puertas)):
-        vecina = puertas.obtener(i).sala_destino_ref
+        puerta = puertas.obtener(i)
+        vecina = puerta.sala_destino_ref
 
         if vecina is None:
             continue
@@ -31,9 +45,10 @@ def sala_con_rastro_mas_fresco(sala, reloj_actual):
             or (tiempo == mejor_tiempo and vecina.id < mejor.id)
         ):
             mejor = vecina
+            mejor_puerta = puerta
             mejor_tiempo = tiempo
 
-    return mejor
+    return mejor_puerta
 
 
 class Rastreador(Actor):

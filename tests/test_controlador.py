@@ -519,6 +519,67 @@ class TestArranqueConDatosInvalidos(ConCriptaDePrueba):
         self.assertFalse(os.path.exists("partida.log"))
 
 
+class TestFichaInvalidaAMitadDePartida(unittest.TestCase):
+    """FR-011, HU2-14 con la partida empezada (tarea T047): la ficha de un
+    cazador sin rango llega por la precarga a mitad de partida. La sesión
+    termina de forma controlada con el mensaje de DatosInvalidos, no se
+    trata como un comando inválido y partida.log tiene lo ya jugado."""
+
+    def setUp(self):
+        from tests.ayudas_cripta import (
+            FuenteContadora, catalogo, contenido, datos_generales,
+            ficha_cazador, sala, salida, SIN_DECLARAR,
+        )
+
+        # Pasillo 1 — 2 — ... — 12. La primera precarga (desde la sala 1)
+        # trae 10 salas; el cazador está en la 12, que llega con la
+        # precarga que se pide después de moverse a la 2.
+        esqueleto = [
+            sala(n, dict(([("O", salida(n - 1))] if n > 1 else [])
+                         + ([("E", salida(n + 1))] if n < 12 else [])))
+            for n in range(1, 13)
+        ]
+        self.fuente = FuenteContadora(
+            esqueleto,
+            [contenido(n) for n in range(1, 12)]
+            + [contenido(12, enemigos=[("e-9", "ent_cazador")])],
+            catalogo(ficha_cazador(rango=SIN_DECLARAR)),
+            generales=datos_generales(esqueleto),
+        )
+        self._carpeta = tempfile.TemporaryDirectory()
+        self.carpeta = self._carpeta.name
+
+    def tearDown(self):
+        self._carpeta.cleanup()
+
+    def test_fr011_la_sesion_termina_de_forma_controlada(self):
+        from crypta.Adaptadores.RegistroPartida import leer_registro
+        from crypta.Modelo.DatosInvalidos import DatosInvalidos
+        from tests.ayudas_cripta import controlador_sintetico
+
+        controlador = controlador_sintetico(
+            self.fuente, self.carpeta,
+            ["mover E", "esperar", "esperar", "esperar"])
+
+        controlador.iniciar()                     # no lanza nada
+        controlador.gestor_contenido.cerrar()
+
+        mensaje = ("La cripta no se puede jugar: La ficha ent_cazador "
+                   "(cazador) tiene un rango inválido o ausente: (no está)")
+        self.assertIsInstance(controlador.error_datos, DatosInvalidos)
+        controlador.vista.mostrar_error.assert_called_once_with(mensaje)
+
+        # No se pidió ningún comando más ni se registró la partida como
+        # terminada.
+        self.assertEqual(controlador.comandos_sin_leer,
+                         ["esperar", "esperar", "salir"])
+        self.assertTrue(controlador.partida.iniciada)
+        self.assertFalse(controlador.partida.terminada)
+
+        _, comandos = leer_registro(os.path.join(self.carpeta, "partida.log"))
+        self.assertEqual(list(comandos), ["mover E", "esperar"])
+
+
 # ======================================================================
 # CORRECCIÓN 3: el log al guardar y al cargar (§4.10 + §4.11)
 # ======================================================================

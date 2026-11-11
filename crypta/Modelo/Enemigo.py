@@ -1,4 +1,32 @@
+import json
+
 from crypta.Modelo.Actor import Actor
+from crypta.Modelo.DatosInvalidos import DatosInvalidos
+
+
+CAZADOR = "cazador"
+
+
+def rango_de_cazador(ficha):
+    """El rango de la ficha de un cazador (FR-011): debe estar, ser entero
+    (no bool) y >= 0. Si no, DatosInvalidos con el mensaje de
+    contracts/datos-servicio.md. El valor se muestra como en el JSON."""
+    if "rango" not in ficha:
+        valor = "(no está)"
+    else:
+        rango = ficha["rango"]
+
+        if (isinstance(rango, int) and not isinstance(rango, bool)
+                and rango >= 0):
+            return rango
+
+        valor = json.dumps(rango, ensure_ascii=False)
+
+    raise DatosInvalidos(
+        f"La ficha {ficha.get('id')} (cazador) tiene un rango inválido o "
+        f"ausente: {valor}"
+    )
+
 
 class Enemigo(Actor):
     def __init__(self, id_instancia, tipo, vida_inicial=None):
@@ -16,6 +44,10 @@ class Enemigo(Actor):
         self.comportamiento = None
         self.regeneracion = 0
         self.evento_regeneracion = None
+
+        # Solo para cazadores (FR-011): sale de la ficha al activarse; no es
+        # estado del juego ni se guarda.
+        self.rango = None
  
         self.activo = False
         self.sala_actual = None        
@@ -40,6 +72,12 @@ class Enemigo(Actor):
                 f"(clase {ficha.get('clase')!r})"
             )
  
+        # Se valida antes de tocar nada: si el rango es inválido, el enemigo
+        # queda dormido (FR-011; ya se validó al entrar la ficha al
+        # RepositorioFichas, esto es por defensa).
+        rango = (rango_de_cazador(ficha)
+                 if ficha.get("comportamiento") == CAZADOR else None)
+
         self.ficha = ficha
         self.nombre = ficha.get("nombre", self.tipo)
         self.vida_max = ficha["vida_max"]
@@ -48,6 +86,7 @@ class Enemigo(Actor):
         self.velocidad = ficha["velocidad"]
         self.comportamiento = ficha.get("comportamiento")
         self.regeneracion = ficha.get("regeneracion") or 0
+        self.rango = rango
  
         if self.vida_inicial is None:
             self.vida = self.vida_max
@@ -66,6 +105,7 @@ class Enemigo(Actor):
         self.defensa = 0
         self.comportamiento = None
         self.regeneracion = 0
+        self.rango = None
         self.activo = False
         self.evento_siguiente = None
  

@@ -201,6 +201,11 @@ def reproducir(args):
         print(f"Reproducción fallida: {error}")
         return 1
 
+    except DatosInvalidos as error:
+        # Una ficha o una salida inválidas durante el replay (FR-011).
+        print(f"La cripta no se puede jugar: {error}")
+        return 1
+
     except (RuntimeError, ValueError, OSError) as error:
         print(f"Error durante la reproducción: {error}")
         return 1
@@ -313,6 +318,9 @@ def main():
         )
 
         controlador.iniciar()
+
+        if controlador.error_datos is not None:
+            codigo = 1       # el Controlador ya mostró el mensaje (FR-011)
 
     except DatosInvalidos as error:
         # La cripta o el catálogo no cumplen el contrato (FR-010, FR-011):

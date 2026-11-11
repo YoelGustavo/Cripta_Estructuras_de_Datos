@@ -18,6 +18,7 @@ import random
 import tempfile
 import unittest
 
+from crypta.Adaptadores.AlmacenDisco import AlmacenDisco
 from crypta.Adaptadores.EstadoPartida import ErrorGuardado
 from crypta.Adaptadores.GuardadoBinario import (
     ArchivoGuardado, FORMATO_GUARDADO, guardar_partida,
@@ -27,6 +28,7 @@ from crypta.Adaptadores.RegistroPartida import (
     Encabezado, ErrorRegistro, FORMATO_REGISTRO, RegistroPartida, leer_registro,
 )
 from crypta.Controlador.Comandos import ComandoInvalido, ejecutar_comando
+from crypta.Controlador.GestorCripta import GestorCripta
 from crypta.Controlador.Reproductor import (
     Reproductor, ReproduccionFallida, ReproduccionIncompatible,
 )
@@ -45,6 +47,9 @@ from crypta.Modelo.Sala import Sala
 from crypta.estructuras.Vector import Vector
 from crypta.Modelo.TablaPuntajes import (
     DERROTA, ErrorTablaPuntajes, Puntaje, TablaPuntajes, VICTORIA, puntaje_de,
+)
+from tests.ayudas_cripta import (
+    CRIPTA_ID, FuenteContadora, VERSION_CRIPTA, sala, salida,
 )
 from tests.test_partida import (
     CATALOGO, SEMILLA, enemigo, ids_inventario, partida_con_puertas, partida_de_dos_salas,
@@ -1721,6 +1726,69 @@ def vector_de(elementos):
     for elemento in elementos:
         vector.agregar(elemento)
     return vector
+
+
+class TestCopiaLocalDeOtraVersion(ConCarpetaTemporal):
+    """FR-025, FR-027, HU1-11 (tarea T025): una copia local del esqueleto de
+    la primera parte, con otra versión de cripta, se invalida sola; se
+    descarga el esqueleto nuevo con sus costos y se guarda con su versión,
+    sin solicitudes de más."""
+
+    def setUp(self):
+        super().setUp()
+
+        self.cripta_id = CRIPTA_ID
+        self.version = VERSION_CRIPTA
+
+        # Lo que guardó la primera parte: sin costos y con otra versión.
+        self.almacen = AlmacenDisco(self.ruta("cache"))
+        self.almacen.guardar_cripta(
+            CRIPTA_ID, "v-primera-parte",
+            [sala(1, {"E": salida(2)}), sala(2, {"O": salida(1)})], [])
+
+        # Lo que entrega hoy el servicio: la misma cripta con costos.
+        self.fuente = FuenteContadora(
+            [sala(1, {"E": salida(2, costo=250)}),
+             sala(2, {"O": salida(1, costo=250)})])
+
+    def test_fr025_la_copia_vieja_se_reemplaza_por_la_nueva(self):
+        """FR-025: el mapa trae los costos nuevos y queda guardado con la
+        versión nueva, sin borrar archivos a mano."""
+        gestor = GestorCripta(self.fuente, self.almacen)
+
+        datos, mapa, desde_copia = gestor.cargar(self.cripta_id)
+
+        self.assertFalse(desde_copia)
+        self.assertEqual(
+            mapa.obtener_sala(1).obtener_puerta("E").costo, 250)
+
+        gestor.persistir(self.cripta_id, datos, mapa)
+
+        self.assertIsNone(
+            self.almacen.cargar_cripta(self.cripta_id, "v-primera-parte"))
+        guardada = self.almacen.cargar_cripta(self.cripta_id, self.version)
+        self.assertIsNotNone(guardada)
+        self.assertEqual(
+            guardada["esqueleto"][0]["salidas"]["E"]["costo"], 250)
+
+    def test_fr027_sin_solicitudes_nuevas(self):
+        """FR-027: los mismos pedidos que en P1 (datos generales y una
+        página de salas); con la copia nueva, ninguna página más."""
+        gestor = GestorCripta(self.fuente, self.almacen)
+        datos, mapa, _ = gestor.cargar(self.cripta_id)
+        gestor.persistir(self.cripta_id, datos, mapa)
+
+        self.assertEqual(self.fuente.por_operacion,
+                         {"obtener_cripta": 1, "obtener_pagina_salas": 1})
+
+        _, mapa, desde_copia = GestorCripta(
+            self.fuente, self.almacen).cargar(self.cripta_id)
+
+        self.assertTrue(desde_copia)
+        self.assertEqual(
+            mapa.obtener_sala(2).obtener_puerta("O").costo, 250)
+        self.assertEqual(self.fuente.por_operacion,
+                         {"obtener_cripta": 2, "obtener_pagina_salas": 1})
 
 
 if __name__ == "__main__":

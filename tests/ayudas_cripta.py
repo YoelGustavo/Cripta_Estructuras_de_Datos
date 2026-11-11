@@ -12,6 +12,8 @@ cada prueba muestre exactamente la cripta que usa.
   dadas, sin red.
 - `FuenteContadora`: fuente en memoria que cuenta las solicitudes (FR-027).
 - `FuenteQueFalla`: fuente que falla si se la llama (FR-018, FR-034).
+- `controlador_sintetico`: una sesión con el Controlador de verdad sobre una
+  fuente en memoria y una vista falsa (FR-011).
 
 Los `dict` de este archivo son datos de entrada con forma de JSON, igual
 que los que devuelve `json`; no son estructuras del juego (principio I).
@@ -191,6 +193,22 @@ def partida_sintetica(esqueleto, contenidos=None, fichas=None, sala_inicial=1,
     return partida
 
 
+def buscar_enemigo(partida, instancia):
+    """El enemigo con esa instancia, esté en la sala que esté."""
+    salas = partida.mapa.obtener_todas()
+
+    for i in range(len(salas)):
+        sala_mapa = salas.obtener(i)
+
+        for j in range(sala_mapa.cantidad_enemigos()):
+            enemigo = sala_mapa.enemigo_en(j)
+
+            if enemigo.id_instancia == instancia:
+                return enemigo
+
+    raise AssertionError(f"No está el enemigo {instancia}")
+
+
 # ---------------------------------------------------------------------------
 # Fuentes de datos falsas
 # ---------------------------------------------------------------------------
@@ -269,6 +287,59 @@ class FuenteContadora(FuenteDatos):
     def obtener_version_catalogo(self):
         self._contar("obtener_version_catalogo")
         return {"version": self.version_catalogo}
+
+
+def controlador_sintetico(fuente, carpeta, comandos, semilla=SEMILLA):
+    """Una sesión del juego con el Controlador, el GestorContenido y el
+    RepositorioFichas de verdad sobre `fuente`, sin disco de caché, con
+    `partida.log` en `carpeta` y una vista falsa que escribe `comandos` y
+    después "salir".
+
+    Antes de entregar cada comando, la vista espera a que terminen las
+    precargas pedidas, para que la prueba no dependa de cuánto tarde el
+    hilo de la precarga."""
+    from unittest.mock import Mock
+    import os
+
+    from crypta.Adaptadores.RegistroPartida import Encabezado, RegistroPartida
+    from crypta.Controlador.Controlador import Controlador
+    from crypta.Controlador.Fabrica import nueva_partida
+    from crypta.Controlador.GestorContenido import GestorContenido
+    from crypta.Controlador.GestorCripta import GestorCripta
+    from crypta.Controlador.RepositorioFichas import RepositorioFichas
+
+    cripta_id = fuente.generales["id"]
+    datos, mapa, _ = GestorCripta(fuente, _AlmacenVacio()).cargar(cripta_id)
+    repositorio = RepositorioFichas(fuente)
+    partida = nueva_partida(datos, mapa, repositorio.obtener_ficha, semilla,
+                            "Ana")
+    gestor = GestorContenido(fuente, mapa, cripta_id, repositorio)
+    encabezado = Encabezado(cripta_id, datos["version"],
+                            fuente.version_catalogo, semilla, "Ana")
+    registro = RegistroPartida.crear(os.path.join(carpeta, "partida.log"),
+                                     encabezado)
+
+    vista = Mock()
+    controlador = Controlador(partida, gestor, vista, registro, encabezado,
+                              repositorio)
+    pendientes = list(comandos) + ["salir"]
+
+    def leer_comando():
+        for _, _, futuro in controlador.gestor_contenido._pendientes:
+            futuro.exception()          # espera sin lanzar
+
+        return pendientes.pop(0)
+
+    vista.leer_comando.side_effect = leer_comando
+    controlador.comandos_sin_leer = pendientes
+    return controlador
+
+
+class _AlmacenVacio:
+    """Almacén sin nada guardado: obliga a descargar el esqueleto."""
+
+    def cargar_cripta(self, cripta_id, version):
+        return None
 
 
 class FuenteQueFalla(FuenteDatos):

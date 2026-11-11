@@ -5,12 +5,13 @@ from crypta.Modelo.Efecto import ANTORCHA, VELOCIDAD, VENENO, Efecto
 from crypta.Modelo.EstadoJuego import EstadoJuego
 from crypta.Modelo.Historial import RegistroAccion
 from crypta.Modelo.Inventario import CLASE_PERGAMINO, CLASES_EQUIPABLES
-from crypta.Modelo.Rastreador import sala_con_rastro_mas_fresco
+from crypta.Modelo.Enemigo import CAZADOR
+from crypta.Modelo.Perseguidor import ATACAR, MOVER, Perseguidor
+from crypta.Modelo.Rastreador import salida_con_rastro_mas_fresco
 from crypta.estructuras.Vector import Vector
 from crypta.Modelo.Bitacora import Bitacora
 
 
-COSTO_MOVER = 100
 COSTO_ATACAR = 100
 COSTO_ESPERAR = 100
 COSTO_USAR = 50
@@ -88,6 +89,11 @@ class Partida:
         self.antorcha = None
 
         self.bitacora = Bitacora()
+
+        # Las reglas del cazador y su búsqueda compartida (FR-013 a FR-019).
+        # Se crea con el primer turno de un cazador: una partida sin
+        # cazadores no paga nada. No es estado del juego (research D6).
+        self._perseguidor = None
 
     @property
     def id_sala_inicial(self):
@@ -215,7 +221,8 @@ class Partida:
             self.resultado = "victoria"
             self._avisar("¡Escapaste de la cripta!")
 
-        self._terminar_accion(COSTO_MOVER)
+        # Moverse tarda el costo de la salida (FR-003, FR-004).
+        self._terminar_accion(puerta.costo)
 
         return destino
 
@@ -498,23 +505,57 @@ class Partida:
         if not enemigo.esta_vivo():
             return
 
-        if enemigo.sala_actual == self.jugador.sala_actual:
-            danio = self._danio(enemigo.ataque, self.jugador.defensa_total())
-
-            self._avisar(
-                f"{self._nombre(enemigo)} te ataca y causa {danio} de daño."
-            )
-
-            self._herir_jugador(danio)
+        if enemigo.comportamiento == CAZADOR:
+            costo = self._turno_cazador(enemigo)
+        elif enemigo.sala_actual == self.jugador.sala_actual:
+            self._atacar_al_jugador(enemigo)
+            costo = COSTO_ATACAR
         else:
-            # Si no, su comportamiento.
-            self._aplicar_comportamiento(enemigo)
+            # Si no, su comportamiento: si se movió, tarda el costo de la
+            # salida; si no, esperó (FR-003, FR-004, FR-005).
+            puerta = self._aplicar_comportamiento(enemigo)
+            costo = COSTO_ESPERAR if puerta is None else puerta.costo
 
         if self.terminada:
             return                       # el jugador murió: se acabó
 
-        tiempo = self.reloj + enemigo.intervalo(COSTO_ATACAR)
+        tiempo = self.reloj + enemigo.intervalo(costo)
         self._programar(enemigo, tiempo, TURNO_ENEMIGO)
+
+    def _atacar_al_jugador(self, enemigo):
+        danio = self._danio(enemigo.ataque, self.jugador.defensa_total())
+
+        self._avisar(
+            f"{self._nombre(enemigo)} te ataca y causa {danio} de daño."
+        )
+
+        self._herir_jugador(danio)
+
+    def perseguidor(self):
+        """El Perseguidor de esta partida; lo crea la primera vez y lo
+        registra como observador de cada salida."""
+        if self._perseguidor is None:
+            self._perseguidor = Perseguidor(
+                self.mapa, COSTO_ATACAR, COSTO_ESPERAR)
+            self._perseguidor.observar_puertas()
+
+        return self._perseguidor
+
+    def _turno_cazador(self, cazador):
+        """El cazador pide su Decision y la cumple: ataca con el daño de P1
+        (que sí usa el azar), se mueve con los mismos Cambio de siempre
+        (FR-020) o espera. Devuelve el costo de la acción (FR-004, FR-013,
+        FR-016)."""
+        decision = self.perseguidor().decidir(cazador, self.sala_actual())
+
+        if decision.accion == ATACAR:
+            self._atacar_al_jugador(cazador)
+        elif decision.accion == MOVER:
+            origen = self.mapa.obtener_sala(cazador.sala_actual)
+            self._mover_enemigo(cazador, origen,
+                                decision.puerta.sala_destino_ref)
+
+        return decision.costo
 
     def _cerrar_puerta(self, puerta):
         if puerta.esta_cerrada():
@@ -696,27 +737,35 @@ class Partida:
 
 
     def _aplicar_comportamiento(self, enemigo):
+        """Mueve al enemigo según su comportamiento y devuelve la salida que
+        atravesó, o None si se quedó (FR-004, FR-006)."""
         sala = self.mapa.obtener_sala(enemigo.sala_actual)
 
         if enemigo.comportamiento == ERRANTE:
-            destino = self._destino_errante(sala)
+            puerta = self._destino_errante(sala)
         elif enemigo.comportamiento == RASTREADOR:
-            destino = sala_con_rastro_mas_fresco(sala, self.reloj)
+            puerta = salida_con_rastro_mas_fresco(sala, self.reloj)
         else:
-            destino = None
+            puerta = None
 
-        if destino is not None:
-            self._mover_enemigo(enemigo, sala, destino)
+        if puerta is not None:
+            self._mover_enemigo(enemigo, sala, puerta.sala_destino_ref)
+
+        return puerta
 
     def _destino_errante(self, sala):
+        """La salida abierta que elige el errante, al azar entre las que
+        llevan a una sala, o None. Mismas opciones y mismas llamadas al azar
+        que en P1 (FR-006); devuelve la puerta para que el movimiento tarde
+        su costo."""
         posibles = Vector()
         puertas = sala.puertas(solo_abiertas=True)
 
         for i in range(len(puertas)):
-            vecina = puertas.obtener(i).sala_destino_ref
+            puerta = puertas.obtener(i)
 
-            if vecina is not None:
-                posibles.agregar(vecina)
+            if puerta.sala_destino_ref is not None:
+                posibles.agregar(puerta)
 
         if len(posibles) == 0:
             return None
