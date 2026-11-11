@@ -322,3 +322,20 @@ Este plan será el borrador de la sección de DECISIONES.md (P2 §7.1).
 No cambies nada más.
 
 **USO** ajuste y correcciones + del plan.md
+
+**Prompt** /speckit-tasks Genera tasks.md para specs/001-terreno-cazador, en español, a partir de plan.md, research.md, data-model.md y contracts/. Requisitos del grupo:
+- Cada tarea cita los FR que atiende (principio IX). Las tareas de preparación citan el FR que habilitan.
+- Incluye las pruebas: por cada escenario de aceptación, una tarea de prueba que cite su FR, escrita antes de implementar esa historia (primero debe fallar).
+- La primera tarea es grabar tests/datos/p1_partida.log, con la copia fija de la cripta y del catálogo de la primera parte, usando el código actual y antes de cualquier cambio (FR-008).
+- Organiza por fases: preparación; base común (costo en las puertas, DatosInvalidos, índices y entradas del mapa); historia 1 (terreno); historia 2 (cazador); historia 3 (equivalencia); historia 4 (bench); y cierre (vista, secciones §5.1 y §5.2 de DECISIONES.md a partir de research.md, README y revisión de imports prohibidos).
+- Tareas pequeñas, de una o dos horas, cada una con la ruta del archivo que toca, para repartirlas entre los integrantes. Marca con [P] las que se pueden hacer en paralelo sin tocar el mismo archivo.
+- Al final de cada fase, un punto de control: python -m unittest en verde y commit.
+- Entregamos el miércoles 18 de noviembre: ordena para que las historias 1 y 2 queden primero, porque son las que más pesan.
+
+**USO:** crear el tasks
+
+**Prompt** /speckit-analyze
+
+**USO:** Analiza todo lo q se ha hecho y se clasifica el nivel de prioridad de cada tarea y demás.
+
+
