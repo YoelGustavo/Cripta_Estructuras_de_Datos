@@ -350,4 +350,10 @@ No cambies nada más.
 
 **USo:** Fase 3 de la 001: mover cuesta lo que dice la salida, para el jugador y los enemigos; las demás acciones cuestan igual que en P1
 
+**Prompt:** /speckit-implement De la fase 4 de specs/001-terreno-cazador/tasks.md haz solo T032, T045, T047, T048, T049, T050, T051 y T054 (las estructuras DistanciasLimitadas y RutaPorCazador, y la validación del rango). Todavía no hagas Perseguidor ni la rama del cazador en Partida. Marca las tareas hechas en tasks.md y no hagas commit.
 
+**USo:** Fase 4 de la 001, parte A: el Dijkstra con límite desde el jugador, la versión por cazador para comparar y la validación del rango de la ficha.
+
+**Prompt** /speckit-implement Termina la fase 4 de specs/001-terreno-cazador/tasks.md: T033 a T044, T046, T052, T053 y el punto de control T055. Marca las tareas hechas en tasks.md y no hagas commit.
+
+**USO:** Fase 4 de la 001, parte B: el cazador decide atacar, esperar o dar un paso por la ruta más barata.
