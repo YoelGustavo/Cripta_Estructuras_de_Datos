@@ -1,4 +1,5 @@
 
+import copy
 import io
 import os
 import sys
@@ -477,6 +478,45 @@ class TestReplay(ConCriptaDePrueba):
 
         self.assertEqual(codigo, 1)
         self.assertIn("comando 1", salida)
+
+
+class TestArranqueConDatosInvalidos(ConCriptaDePrueba):
+    """FR-010 (tarea T008): una cripta con una salida inválida no se juega.
+    `main` muestra el mensaje de DatosInvalidos y termina sin crear la
+    Partida ni la vista."""
+
+    def setUp(self):
+        super().setUp()
+
+        esqueleto = copy.deepcopy(ESQUELETO_PRUEBA)
+        esqueleto[0]["salidas"]["N"]["costo"] = 0
+
+        self.almacen = AlmacenDisco(os.path.join(self.carpeta, "invalida"))
+        self.almacen.guardar_catalogo("cat-1", FICHAS_PRUEBA)
+        self.almacen.guardar_cripta("c-prueba", "v1", esqueleto,
+                                    CONTENIDOS_PRUEBA,
+                                    datos_generales=DATOS_PRUEBA)
+
+    def test_fr010_costo_cero_no_inicia_la_partida(self):
+        """FR-010: costo 0 → mensaje de DatosInvalidos, código 1, sin
+        Partida, sin vista y sin partida.log."""
+        salida = io.StringIO()
+        argumentos = ["crypta", "--offline", "--cripta", "c-prueba",
+                      "--semilla", "7", "--jugador", "Ana"]
+
+        with patch("crypta.main.AlmacenDisco", return_value=self.almacen), \
+                patch("crypta.main.VistaConsola",
+                      side_effect=AssertionError("se creó la vista")), \
+                patch("crypta.main.nueva_partida",
+                      side_effect=AssertionError("se creó la partida")), \
+                patch.object(sys, "argv", argumentos), \
+                redirect_stdout(salida):
+            codigo = programa.main()
+
+        self.assertEqual(codigo, 1)
+        self.assertIn("La salida N de la sala 1 tiene un costo inválido: 0",
+                      salida.getvalue())
+        self.assertFalse(os.path.exists("partida.log"))
 
 
 # ======================================================================

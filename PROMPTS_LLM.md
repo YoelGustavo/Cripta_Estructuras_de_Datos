@@ -338,4 +338,12 @@ No cambies nada más.
 
 **USO:** Analiza todo lo q se ha hecho y se clasifica el nivel de prioridad de cada tarea y demás.
 
+**Prompt** /speckit-implement Solo la fase 1 (T001 a T005) de specs/001-terreno-cazador/tasks.md. Detente al terminar su punto de control, marca las tareas hechas en tasks.md y no hagas commit: lo hago yo después de revisar.
+
+**USO:** implementacion y creación de la fase 1. Osea lo de la parte del cazador. (primera fase)
+
+**Prompt** /speckit-implement Solo la fase 2 (T006 a T015) de specs/001-terreno-cazador/tasks.md. Detente al terminar su punto de control, marca las tareas hechas en tasks.md y no hagas commit: lo hago yo después de revisar.
+
+**USo** implementacion y creación de la fase 1. Osea lo de la parte del cazador. (segunda fase)
+
 

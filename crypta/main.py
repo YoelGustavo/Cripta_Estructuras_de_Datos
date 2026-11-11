@@ -16,6 +16,7 @@ from crypta.Controlador.GestorContenido import GestorContenido
 from crypta.Controlador.GestorCripta import GestorCripta
 from crypta.Controlador.PreparadorReplay import PreparadorReplay
 from crypta.Controlador.RepositorioFichas import RepositorioFichas
+from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.TablaPuntajes import ErrorTablaPuntajes, TablaPuntajes
 from crypta.Controlador.Reproductor import (
     ReproduccionFallida,
@@ -312,6 +313,13 @@ def main():
         )
 
         controlador.iniciar()
+
+    except DatosInvalidos as error:
+        # La cripta o el catálogo no cumplen el contrato (FR-010, FR-011):
+        # se avisa y no se juega. Si llega antes de crear el controlador,
+        # no hay partida, ni vista, ni partida.log.
+        print(f"\nLa cripta no se puede jugar: {error}")
+        codigo = 1
 
     except (RuntimeError, ValueError, OSError) as error:
         print(f"\nError: {error}")

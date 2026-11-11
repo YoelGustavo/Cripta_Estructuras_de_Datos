@@ -8,6 +8,7 @@ from crypta.estructuras.ordenamiento import ordenar
 class Mapa:
     def __init__(self):
         self._salas = ArbolBusqueda()
+        self._por_indice = Vector()
 
     def cargar_desde_json(self, salas_json):
         salas = Vector()
@@ -48,6 +49,7 @@ class Mapa:
 
         self._compartir_puertas()
         self._enlazar_salas_destino()
+        self._asignar_indices_y_entradas()
 
     def obtener_sala(self, id_sala):
         return self._salas.obtener(id_sala)
@@ -57,6 +59,10 @@ class Mapa:
 
     def cantidad_salas(self):
         return len(self._salas)
+
+    def sala_por_indice(self, indice):
+        """La sala con ese índice denso, 0..V-1 (FR-014, FR-036)."""
+        return self._por_indice.obtener(indice)
 
     def obtener_vecinas(self, id_sala, solo_abiertas=False):
         sala = self.obtener_sala(id_sala)
@@ -145,19 +151,47 @@ class Mapa:
                     puerta.sala_destino
                 )
 
-                if destino is None:
-                    continue
+                if destino is not None:
+                    puertas_destino = destino.puertas()
 
-                puertas_destino = destino.puertas()
+                    for k in range(len(puertas_destino)):
+                        puerta_destino = puertas_destino.obtener(k)
 
-                for k in range(len(puertas_destino)):
-                    puerta_destino = puertas_destino.obtener(k)
+                        if puerta_destino.sala_destino == sala.id:
+                            # Valida y une los costos de los dos lados
+                            # (FR-002, FR-010).
+                            puerta.compartir_estado_con(
+                                puerta_destino, sala, destino
+                            )
+                            break
 
-                    if puerta_destino.sala_destino == sala.id:
-                        puerta.compartir_estado_con(
-                            puerta_destino
-                        )
-                        break
+                # Extremos de la salida (FR-018). Una salida hacia una sala
+                # que no existe queda con (sala, None).
+                if puerta.estado.extremos is None:
+                    puerta.estado.extremos = (sala, destino)
+
+    def _asignar_indices_y_entradas(self):
+        """Índice denso de cada sala según el recorrido en orden y sus
+        entradas (salidas y→x), en O(V + E) (FR-014, FR-036)."""
+        salas = self.obtener_todas()
+        self._por_indice = Vector(max(1, len(salas)))
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
+            sala.indice = i
+            sala.entradas = Vector()
+            self._por_indice.agregar(sala)
+
+        for i in range(len(salas)):
+            origen = salas.obtener(i)
+            puertas = origen.puertas()
+
+            for j in range(len(puertas)):
+                puerta = puertas.obtener(j)
+                destino = puerta.sala_destino_ref
+
+                if destino is not None:
+                    destino.entradas.agregar((puerta, origen))
 
     def _enlazar_salas_destino(self):
         salas = self.obtener_todas()

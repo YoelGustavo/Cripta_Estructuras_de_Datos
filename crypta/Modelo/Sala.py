@@ -1,3 +1,4 @@
+from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.Enemigo import Enemigo
 from crypta.Modelo.Puerta import Puerta
 from crypta.Modelo.Trampa import Trampa
@@ -13,6 +14,24 @@ def indice_direccion(direccion):
         return -1
 
     return DIRECCIONES.find(direccion)
+
+
+def leer_costo(id_sala, direccion, datos):
+    """Costo que declara un lado de una salida, o None si no trae el campo
+    o lo trae con null (FR-001). Solo vale un entero JSON >= 1: se rechazan
+    bool, float (aunque sea 250.0) y texto (FR-010)."""
+    costo = datos.get("costo")
+
+    if costo is None:
+        return None
+
+    if isinstance(costo, bool) or not isinstance(costo, int) or costo < 1:
+        raise DatosInvalidos(
+            f"La salida {direccion} de la sala {id_sala} tiene un costo "
+            f"inválido: {costo}"
+        )
+
+    return costo
 
 
 class Sala:
@@ -45,7 +64,8 @@ class Sala:
                         llave=datos.get("llave"),
                         cierre_automatico=datos.get(
                             "cierre_automatico"
-                        )
+                        ),
+                        costo=leer_costo(id_sala, direccion, datos)
                     )
                 )
 
@@ -59,6 +79,13 @@ class Sala:
         self._pergaminos_apartados = False
 
         self.ultimo_rastro = None
+
+        # Los fija el Mapa al cargar (FR-014, FR-036); no son estado del
+        # juego. `indice`: posición 0..V-1 en el recorrido en orden del
+        # mapa. `entradas`: pares (Puerta, Sala origen) de las salidas y→x
+        # que llegan a esta sala, incluidas las que no tienen vuelta.
+        self.indice = None
+        self.entradas = Vector()
 
     def obtener_puerta(self, direccion):
         indice = indice_direccion(direccion)
