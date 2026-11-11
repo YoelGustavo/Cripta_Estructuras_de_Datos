@@ -340,10 +340,14 @@ No cambies nada más.
 
 **Prompt** /speckit-implement Solo la fase 1 (T001 a T005) de specs/001-terreno-cazador/tasks.md. Detente al terminar su punto de control, marca las tareas hechas en tasks.md y no hagas commit: lo hago yo después de revisar.
 
-**USO:** implementacion y creación de la fase 1. Osea lo de la parte del cazador. (primera fase)
+**USO:** Datos fijos de la primera parte (una partida grabada y su resultado) y ayudas de prueba, para comprobar que P1 sigue igual (FR-008).
 
 **Prompt** /speckit-implement Solo la fase 2 (T006 a T015) de specs/001-terreno-cazador/tasks.md. Detente al terminar su punto de control, marca las tareas hechas en tasks.md y no hagas commit: lo hago yo después de revisar.
 
-**USo** implementacion y creación de la fase 1. Osea lo de la parte del cazador. (segunda fase)
+**USo** Base común: costo de las salidas, error DatosInvalidos, índice de cada sala y entradas del mapa.
+
+**Prompt** /speckit-implement Solo la fase 3 (T016 a T031) de specs/001-terreno-cazador/tasks.md. Detente al terminar su punto de control, marca las tareas hechas en tasks.md y no hagas commit: lo hago yo después de revisar.
+
+**USo:** Fase 3 de la 001: mover cuesta lo que dice la salida, para el jugador y los enemigos; las demás acciones cuestan igual que en P1
 
 
