@@ -1593,7 +1593,7 @@ class TestGuardadoDanado(ConCarpetaTemporal):
             return d["salas"][4]["enemigos"][0]
 
         self.assertEqual(troll(documento)["instancia"], "e-51")
-        self.assertIn("versión", falla(lambda d: d.update(formato=2)))
+        self.assertIn("versión", falla(lambda d: d.update(formato=d["formato"] + 1)))
         # Un enemigo apunta a su turno con otro tiempo, o al de otro enemigo.
         falla(lambda d: troll(d)["turno"].update(tiempo=troll(d)["turno"]["tiempo"] + 1))
         falla(lambda d: troll(d)["turno"].update(secuencia=d["salas"][4]["enemigos"][1]["turno"]["secuencia"]))
@@ -1789,6 +1789,217 @@ class TestCopiaLocalDeOtraVersion(ConCarpetaTemporal):
             mapa.obtener_sala(2).obtener_puerta("O").costo, 250)
         self.assertEqual(self.fuente.por_operacion,
                          {"obtener_cripta": 2, "obtener_pagina_salas": 1})
+
+
+class TestGuardadoConCazadores(ConCarpetaTemporal):
+    """FR-026, HU3-8 (tarea T064): guardar y cargar una partida con costos y
+    cazadores conserva todo lo que importa y la partida sigue igual que sin
+    guardar. El rango no se guarda: sale de la ficha."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.ayudas_cripta import (
+            catalogo, contenido, ficha_cazador, ficha_errante,
+            partida_sintetica, sala, salida,
+        )
+
+        self.fichas = catalogo(ficha_cazador(rango=700, ataque=2),
+                               ficha_errante(ataque=1))
+        esqueleto = [
+            sala(1, {"E": salida(2, costo=250), "S": salida(4)}),
+            sala(2, {"O": salida(1), "E": salida(3, costo=150)}),
+            sala(3, {"O": salida(2), "S": salida(4, costo=100),
+                     "N": salida(5, costo=40)}),       # 3 —N→ 5 sin vuelta
+            sala(4, {"N": salida(3), "O": salida(1, costo=300)}),
+            sala(5),
+        ]
+        self.partida = partida_sintetica(
+            esqueleto,
+            [contenido(3, enemigos=[("c-1", "ent_cazador"),
+                                    ("e-1", "ent_errante")])],
+            self.fichas, sala_inicial=3)
+        self.encabezado = Encabezado("cripta-prueba", "v-prueba", "c-prueba",
+                                     self.partida.semilla, "Héroe")
+
+        # Se juega un poco: el cazador y el errante despiertan en la 3.
+        self.partida.mover("S")
+        self.partida.esperar()
+        self.partida.mover("O")
+        self.partida.esperar()
+
+    def foto(self, partida):
+        """Todo lo que se compara de una partida con cazadores."""
+        jugador = partida.jugador
+        enemigos = []
+        costos = []
+        salas = partida.mapa.obtener_todas()
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
+
+            for direccion in "NSEO":
+                puerta = sala.obtener_puerta(direccion)
+                if puerta is not None:
+                    costos.append((sala.id, direccion, puerta.costo,
+                                   puerta.esta_cerrada()))
+
+            for j in range(sala.cantidad_enemigos()):
+                enemigo = sala.enemigo_en(j)
+                evento = enemigo.evento_siguiente
+                enemigos.append((enemigo.id_instancia, sala.id, enemigo.vida,
+                                 enemigo.rango, enemigo.esta_activo(),
+                                 None if evento is None else evento.tiempo))
+
+        return (partida.reloj, jugador.sala_actual, jugador.vida,
+                partida.terminada, tuple(costos), tuple(enemigos),
+                tuple(partida.bitacora), partida.azar.getstate())
+
+    def continuar(self, partida):
+        for comando in (partida.esperar, lambda: partida.mover("E"),
+                        partida.esperar, partida.esperar,
+                        lambda: partida.mover("E"), partida.esperar):
+            if partida.terminada:
+                break
+            comando()
+
+    def guardar_y_cargar(self, formato):
+        if formato == "binario":
+            guardar_partida(self.partida, self.ruta("p.cripta"),
+                            self.encabezado)
+            return ArchivoGuardado(self.ruta("p.cripta")).cargar_partida(
+                self.fichas.get)
+
+        guardar_partida_json(self.partida, self.ruta("p.json"),
+                             self.encabezado)
+        return ArchivoGuardadoJSON(self.ruta("p.json")).cargar_partida(
+            self.fichas.get)
+
+    def test_fr026_se_conserva_todo_y_sigue_igual(self):
+        """FR-026, HU3-8: costos, sala, vida, rango y próxima acción; y la
+        partida cargada sigue igual que la original (FR-019, FR-021)."""
+        for formato in ("binario", "json"):
+            with self.subTest(formato=formato):
+                cargada = self.guardar_y_cargar(formato)
+
+                self.assertEqual(self.foto(cargada), self.foto(self.partida))
+
+                cazador = next(e for e in self.foto(cargada)[5]
+                               if e[0] == "c-1")
+                self.assertEqual(cazador[3], 700)          # rango de la ficha
+
+        # Las dos siguen igual (la original se juega una sola vez, al final).
+        cargada = self.guardar_y_cargar("binario")
+        self.continuar(cargada)
+        self.continuar(self.partida)
+        self.assertEqual(self.foto(cargada), self.foto(self.partida))
+        self.assertIsNot(cargada.perseguidor(), self.partida.perseguidor())
+
+    def test_fr026_la_partida_cargada_tiene_su_propio_perseguidor(self):
+        """FR-019, FR-026 (T070): la partida cargada crea su perseguidor y lo
+        registra en sus propias puertas, no en las de la original."""
+        original = self.partida.perseguidor()
+        cargada = self.guardar_y_cargar("binario")
+        nuevo = cargada.perseguidor()
+
+        self.assertIsNot(nuevo, original)
+        salas = cargada.mapa.obtener_todas()
+        for i in range(len(salas)):
+            puertas = salas.obtener(i).puertas()
+            for j in range(len(puertas)):
+                self.assertIs(puertas.obtener(j).estado.observador, nuevo)
+
+    def test_fr026_el_formato_1_se_rechaza(self):
+        """FR-026: un archivo con formato 1 no se carga en silencio."""
+        guardar_partida(self.partida, self.ruta("p.cripta"), self.encabezado)
+        with open(self.ruta("p.cripta"), "rb") as archivo:
+            datos = archivo.read()
+
+        with open(self.ruta("viejo.cripta"), "wb") as archivo:
+            archivo.write(datos[:4] + (1).to_bytes(2, "little") + datos[6:])
+
+        with self.assertRaises(ErrorGuardado) as error:
+            ArchivoGuardado(self.ruta("viejo.cripta"))
+
+        self.assertEqual(FORMATO_GUARDADO, 2)
+        self.assertEqual(
+            str(error.exception),
+            "La partida se guardó con la versión 1 del formato y este "
+            "programa lee la versión 2: no se puede cargar")
+
+    def test_fr026_el_formato_json_tambien_subio(self):
+        """FR-026: el JSON del --bench sube de versión y rechaza el 1."""
+        from crypta.Adaptadores.GuardadoJSON import FORMATO_JSON
+        self.assertEqual(FORMATO_JSON, 2)
+
+        guardar_partida_json(self.partida, self.ruta("p.json"),
+                             self.encabezado)
+        with open(self.ruta("p.json"), encoding="utf-8") as archivo:
+            documento = json.load(archivo)
+        documento["formato"] = 1
+        with open(self.ruta("p.json"), "w", encoding="utf-8") as archivo:
+            json.dump(documento, archivo)
+
+        with self.assertRaises(ErrorGuardado):
+            ArchivoGuardadoJSON(self.ruta("p.json"))
+
+    def test_fr026_rango_invalido_es_error_de_guardado(self):
+        """FR-011, FR-026: si al cargar la ficha del cazador trae un rango
+        inválido, es ErrorGuardado (no DatosInvalidos)."""
+        from crypta.Modelo.DatosInvalidos import DatosInvalidos
+        from tests.ayudas_cripta import ficha_cazador
+
+        guardar_partida(self.partida, self.ruta("p.cripta"), self.encabezado)
+        malas = dict(self.fichas)
+        malas["ent_cazador"] = ficha_cazador(rango=-1)
+
+        with self.assertRaises(ErrorGuardado) as error:
+            ArchivoGuardado(self.ruta("p.cripta")).cargar_partida(malas.get)
+
+        self.assertNotIsInstance(error.exception, DatosInvalidos)
+        self.assertIn("rango inválido", str(error.exception))
+
+    def test_fr026_costos_distintos_en_los_dos_lados(self):
+        """FR-010, FR-026: un archivo con los dos lados de una puerta con
+        costos distintos está dañado: ErrorGuardado (no DatosInvalidos)."""
+        from crypta.Modelo.DatosInvalidos import DatosInvalidos
+
+        guardar_partida_json(self.partida, self.ruta("p.json"),
+                             self.encabezado)
+        with open(self.ruta("p.json"), encoding="utf-8") as archivo:
+            documento = json.load(archivo)
+
+        cambiadas = 0
+        for sala in documento["salas"]:
+            for puerta in sala["puertas"]:
+                if sala["id"] == 2 and puerta["direccion"] == "O":
+                    puerta["costo"] = 999
+                    cambiadas += 1
+        self.assertEqual(cambiadas, 1)
+
+        with open(self.ruta("p.json"), "w", encoding="utf-8") as archivo:
+            json.dump(documento, archivo)
+
+        with self.assertRaises(ErrorGuardado) as error:
+            ArchivoGuardadoJSON(self.ruta("p.json")).cargar_partida(
+                self.fichas.get)
+
+        self.assertNotIsInstance(error.exception, DatosInvalidos)
+        self.assertIn("costos distintos", str(error.exception))
+
+    def test_fr026_costo_invalido_en_el_archivo(self):
+        """FR-026: un costo < 1 en el archivo es ErrorGuardado."""
+        guardar_partida_json(self.partida, self.ruta("p.json"),
+                             self.encabezado)
+        with open(self.ruta("p.json"), encoding="utf-8") as archivo:
+            documento = json.load(archivo)
+
+        documento["salas"][0]["puertas"][0]["costo"] = 0
+        with open(self.ruta("p.json"), "w", encoding="utf-8") as archivo:
+            json.dump(documento, archivo)
+
+        with self.assertRaises(ErrorGuardado):
+            ArchivoGuardadoJSON(self.ruta("p.json")).cargar_partida(
+                self.fichas.get)
 
 
 if __name__ == "__main__":

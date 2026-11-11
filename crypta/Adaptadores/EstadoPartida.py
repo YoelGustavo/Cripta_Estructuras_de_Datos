@@ -1,5 +1,6 @@
 
 from crypta.Adaptadores.RegistroPartida import Encabezado
+from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.Efecto import ANTORCHA, VELOCIDAD, VENENO, Efecto
 from crypta.Modelo.Enemigo import Enemigo
 from crypta.Modelo.Evento import Evento
@@ -277,6 +278,9 @@ def escribir_sala(e, sala):
         e.booleano("cerrada", puerta.esta_cerrada())
         e.texto_opcional("llave", puerta.llave)
         e.entero_opcional("cierre_automatico", puerta.cierre_automatico)
+        # Formato 2 (FR-026): el costo de la salida. El rango de los
+        # cazadores NO se escribe: sale de la ficha (contracts/guardado.md).
+        e.entero("costo", puerta.costo)
         e.terminar_grupo()
 
     e.terminar_lista()
@@ -373,11 +377,23 @@ def leer_sala(l, fichas):
     for _ in range(l.empezar_lista("puertas")):
         l.empezar_grupo(None)
         direccion = l.texto("direccion")
+        destino = l.entero("destino")
+        cerrada = l.booleano("cerrada")
+        llave = l.texto_opcional("llave")
+        cierre_automatico = l.entero_opcional("cierre_automatico")
+        costo = l.entero("costo")
+
+        if costo < 1:
+            raise ErrorGuardado(
+                f"Sala {sala.id}: la salida {direccion} tiene un costo "
+                f"inválido ({costo})")
+
         puerta = Puerta(
-            sala_destino=l.entero("destino"),
-            cerrada=l.booleano("cerrada"),
-            llave=l.texto_opcional("llave"),
-            cierre_automatico=l.entero_opcional("cierre_automatico"),
+            sala_destino=destino,
+            cerrada=cerrada,
+            llave=llave,
+            cierre_automatico=cierre_automatico,
+            costo=costo,
         )
         l.terminar_grupo()
 
@@ -427,7 +443,9 @@ def leer_sala(l, fichas):
 
             try:
                 enemigo.activar(ficha)
-            except ValueError as error:
+            except (ValueError, DatosInvalidos) as error:
+                # Una ficha de cazador con rango inválido: para quien carga,
+                # es un guardado que no se puede usar (FR-011, FR-026).
                 raise ErrorGuardado(str(error))
 
             enemigo.vida = l.entero("vida")
@@ -639,6 +657,10 @@ def armar_partida(encabezado, general, salas_leidas, fichas):
     
     try:
         return _armar(encabezado, general, salas_leidas, fichas)
+    except DatosInvalidos as error:
+        # Los dos lados de una puerta con costos distintos: el archivo está
+        # dañado (FR-010, FR-026; contracts/guardado.md).
+        raise ErrorGuardado(f"Datos inválidos en el guardado: {error}") from error
     except ValueError as error:
         # Los modelos rechazan datos imposibles con ValueError (por ejemplo,
         # una posición fuera del inventario): para quien carga, es un

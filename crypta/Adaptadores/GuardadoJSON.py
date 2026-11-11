@@ -11,7 +11,8 @@ from crypta.estructuras.Pila import Pila
 from crypta.estructuras.Vector import Vector
 
 
-FORMATO_JSON = 1
+# 2: cada puerta guarda su costo (capacidad 001, FR-026).
+FORMATO_JSON = 2
 
 
 def guardar_partida_json(partida, ruta, encabezado):

@@ -12,7 +12,8 @@ from crypta.estructuras.ordenamiento import ordenar
 
 
 MAGIA = b"CRPT"
-FORMATO_GUARDADO = 1
+# 2: cada puerta guarda su costo (capacidad 001, FR-026).
+FORMATO_GUARDADO = 2
 
 _INICIO = struct.Struct("<4sH")
 _CABECERA = struct.Struct("<HIIQI")

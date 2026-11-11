@@ -362,4 +362,6 @@ No cambies nada más.
 
 **USO:** Fase 5 invalidacion y equivalencia
 
-**Promt** 
+**Promt** /speckit-implement Termina la fase 5 de specs/001-terreno-cazador/tasks.md: T064, T067 a T070 y el punto de control T071. Marca las tareas hechas en tasks.md y no hagas commit.
+
+**USO;** Fase 5 de guardado.

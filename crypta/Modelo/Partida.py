@@ -93,6 +93,9 @@ class Partida:
         # Las reglas del cazador y su búsqueda compartida (FR-013 a FR-019).
         # Se crea con el primer turno de un cazador: una partida sin
         # cazadores no paga nada. No es estado del juego (research D6).
+        # Una partida cargada de disco es otra Partida, con su propio mapa:
+        # crea su propio Perseguidor y lo registra en las puertas leídas
+        # (FR-026); el rango ya se relee de la ficha en Enemigo.activar.
         self._perseguidor = None
 
     @property
