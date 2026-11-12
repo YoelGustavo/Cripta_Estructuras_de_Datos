@@ -388,7 +388,7 @@ partida.log es el de la última partida: una partida nueva lo reemplaza. Para co
 
 **Problema:**
 - En su turno, el cazador ataca si comparte sala con el jugador; si no, da un paso por una ruta de costo mínimo hasta él, o espera si no hay ruta o si cuesta más que su rango.
-- Los costos de las salidas son enteros ≥ 1 y distintos entre sí: la ruta con menos salas no siempre es la más barata.
+- Los costos de las salidas son enteros ≥ 1 y distintos entre sí: la ruta con menos salas no siempre es la más barata y pueden ser distintos entre sí”, porque los costos también pueden repetirse.
 - Si hay empate, va a la vecina de menor id. La decisión no puede usar el azar.
 - Puede haber 50 cazadores o más persiguiendo al mismo jugador en criptas de 2000 a 20000 salas.
 
@@ -457,7 +457,7 @@ Las tres primeras están en Perseguidor (modos RECALCULAR, TOTAL y SELECTIVA) pa
 
 **Decisión:**
 - Invalidación selectiva.
-- Las distancias dependen solo de la sala del jugador y de qué puertas están abiertas (los costos no cambian). Moverse, morir o cambiar de velocidad no las afecta.
+- Las distancias dependen solo de la sala del jugador y de qué puertas están abiertas (los costos no cambian). Los enemigos se muevan, mueran o cambien de velocidad no las afecta
 - La sala del jugador se compara en cada decisión: cubre moverse, el pergamino y la carga.
 - Cada puerta conoce sus dos salas y avisa a la búsqueda solo cuando cambia de abierta a cerrada o al revés. La búsqueda se descarta si alguna de las dos salas ya está asentada.
 - Si ninguna lo está, la búsqueda sigue valiendo: esa puerta nunca se usó al relajar, y una ruta nueva por ella cuesta más que todo lo asentado (demostración en research D4).

@@ -373,3 +373,7 @@ No cambies nada más.
 **Promt** /speckit-implement De la fase 7 de specs/001-terreno-cazador/tasks.md haz solo T088, T089, T090 y T095. Dentro de T095, en crypta/bench/bench_cazador.py cambia TAMANOS (es un dict, prohibido por §6.2) por una tupla de (salas, ancho, alto) y búscalo con un for. Marca las tareas hechas en tasks.md y no hagas commit.
 
 **USO:** 001 vista: costo de salidas y etiqueta del cazador
+
+**Prompt:** /speckit-implement De la fase 7 de specs/001-terreno-cazador/tasks.md haz T091, T092, T093, T096 y el punto de control T097. No hagas T094 (PROMPTS lo llevo yo). T086 ya la hice: los resultados están en docs/resultados_bench_p2.txt (docs/resultados_bench.txt es el de P1 y no se toca); márcala hecha. Las secciones §5.1 y §5.2 van en DECISIONES.md de la raíz, con el mismo formato que las secciones de P1 de ese archivo: sin introducción, los 6 puntos en negrita (Problema, Alternativas, Decisión, Complejidad, Evidencia, Límites), viñetas cortas y una o dos tablas pequeñas con números de docs/resultados_bench_p2.txt. En Límites de §5.2 incluye: B4/B5 inestables pasan de 20 ms pero son 50 cambios de puerta por acción, algo que el juego no produce; B7 mide el modelo y no el Controlador. En T096 deja la prueba manual del juego para mí. No hagas commit.
+
+**USO:** Documentacion y demás.
