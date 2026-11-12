@@ -5,8 +5,9 @@ import sys
 import tempfile
 import time
 
-from crypta.bench import (bench_agenda, bench_cache, bench_ciclo, bench_inventario,
-                          bench_ordenamiento, bench_rastro, bench_red)
+from crypta.bench import (bench_agenda, bench_cache, bench_cazador, bench_ciclo,
+                          bench_inventario, bench_ordenamiento, bench_rastro,
+                          bench_red)
 from crypta.bench.medicion import formato_tiempo, tabla
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
@@ -209,10 +210,32 @@ SECCIONES = (
     ("ordenamiento", "Ordenamiento (§4.9)", bench_ordenamiento.ejecutar),
     ("red", "Bitácora y red (§4.8 y §5.1)", bench_red.ejecutar),
     ("guardado", "Guardado binario contra JSON (§4.10)", ejecutar_guardado),
+    # Capacidad 001 (specs/001-terreno-cazador/contracts/bench.md).
+    ("cazadores", "B1 Un cazador frente a muchos (FR-029)",
+     bench_cazador.ejecutar_uno_y_muchos),
+    ("rangos", "B2 Rango pequeño frente a grande (FR-030)",
+     bench_cazador.ejecutar_rangos),
+    ("tamano", "B3 Tamaño de la cripta con la misma región (FR-036)",
+     bench_cazador.ejecutar_tamano),
+    ("compartido", "B4 Búsqueda compartida frente a por cazador (FR-031)",
+     bench_cazador.ejecutar_compartido),
+    ("reutilizar", "B5 Reutilizar frente a recalcular (FR-032)",
+     bench_cazador.ejecutar_reutilizar),
+    ("equivalencia", "B6 Equivalencia con el cálculo desde cero (FR-033)",
+     bench_cazador.ejecutar_equivalencia),
+    ("ciclo_cazadores", "B7 Ciclo con cazadores (FR-035)",
+     bench_ciclo.ejecutar_ciclo_cazadores),
+    ("escala", "B8 Escala en cantidad de cazadores (FR-037)",
+     bench_cazador.ejecutar_escala),
+    ("distancias", "B9 Dónde guardar las distancias (research D5)",
+     bench_cazador.ejecutar_distancias),
 )
 
 
 def ejecutar(nombres=None, rapido=False, salida=print):
+    """Corre las secciones pedidas (todas si no se pide ninguna). Una
+    sección devuelve su texto, o (texto, errores) si comprueba algo (B6).
+    Devuelve 0, o 1 si alguna sección reportó errores (FR-033)."""
     
     validos = [nombre for nombre, _, _ in SECCIONES]
 
@@ -226,6 +249,7 @@ def ejecutar(nombres=None, rapido=False, salida=print):
            + (" | modo rápido" if rapido else ""))
 
     inicio_total = time.perf_counter()
+    errores = 0
 
     for nombre, titulo, funcion in SECCIONES:
         if nombres and nombre not in nombres:
@@ -233,10 +257,22 @@ def ejecutar(nombres=None, rapido=False, salida=print):
 
         salida(f"\n=== {titulo} ===")
         inicio = time.perf_counter()
-        salida(funcion(rapido))
+        resultado = funcion(rapido)
+
+        if isinstance(resultado, tuple):
+            resultado, de_la_seccion = resultado
+            errores += de_la_seccion
+
+        salida(resultado)
         salida(f"(sección medida en {formato_tiempo(time.perf_counter() - inicio)})")
 
     salida(f"\n(bench completo en {formato_tiempo(time.perf_counter() - inicio_total)})")
+
+    if errores:
+        salida(f"\nERROR: el --bench encontró {errores} diferencias (ver arriba).")
+        return 1
+
+    return 0
 
 
 def principal(argumentos):
@@ -264,7 +300,7 @@ def principal(argumentos):
         lineas.append(str(texto))
 
     try:
-        ejecutar(nombres or None, rapido, mostrar_y_juntar)
+        codigo = ejecutar(nombres or None, rapido, mostrar_y_juntar)
     except ValueError as error:
         print(error)
         return 1
@@ -277,7 +313,7 @@ def principal(argumentos):
             archivo.write("\n".join(lineas) + "\n")
         print(f"\nResultados guardados en {ruta}")
 
-    return 0
+    return codigo
 
 
 if __name__ == "__main__":

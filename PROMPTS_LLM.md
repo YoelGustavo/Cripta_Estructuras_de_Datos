@@ -365,3 +365,9 @@ No cambies nada más.
 **Promt** /speckit-implement Termina la fase 5 de specs/001-terreno-cazador/tasks.md: T064, T067 a T070 y el punto de control T071. Marca las tareas hechas en tasks.md y no hagas commit.
 
 **USO;** Fase 5 de guardado.
+
+**Promt:** /speckit-implement Haz la fase 6 de specs/001-terreno-cazador/tasks.md: T072 a T085 y el punto de control T087. No hagas T086, el bench completo lo corro yo. Marca las tareas hechas en tasks.md y no hagas commit.
+
+**USo:** pruebas de bench.
+
+

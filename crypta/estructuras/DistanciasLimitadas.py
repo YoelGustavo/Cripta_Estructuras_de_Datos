@@ -44,6 +44,11 @@ class DistanciasLimitadas:
         self.busquedas = 0
         self.asentados = 0
 
+        # Si no es None, se llama con (nodo, distancia) cada vez que se
+        # asienta un nodo, en orden de distancia. Lo usa el generador del
+        # --bench para repartir cazadores sin ordenar nada.
+        self.al_asentar = None
+
     @property
     def cantidad(self):
         return self._cantidad
@@ -101,6 +106,9 @@ class DistanciasLimitadas:
             asentada.asignar(nodo, calculo)
             self._hasta = distancia
             self.asentados += 1
+
+            if self.al_asentar is not None:
+                self.al_asentar(nodo, distancia)
 
             for origen, costo in self._entradas(nodo):
                 nueva = distancia + costo

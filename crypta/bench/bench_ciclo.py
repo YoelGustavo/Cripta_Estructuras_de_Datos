@@ -300,5 +300,166 @@ def ejecutar(rapido=False):
     return ciclo + "\n\n" + precarga
 
 
+# ======================================================================
+# B7: ciclo con cazadores (capacidad 001, FR-035, SC-004)
+# ======================================================================
+
+CAZADORES_CICLO = 50
+ID_CRIPTA_REFERENCIA = "cripta-referencia"   # copia local, si se publicó
+
+
+def _ficha_cazador_bench(rango):
+    return {"id": "ent_cazador_bench", "clase": "enemigo",
+            "nombre": "Sabueso", "vida_max": 10 ** 6, "ataque": 1,
+            "defensa": 1, "velocidad": 100, "comportamiento": "cazador",
+            "rango": rango, "suelta": []}
+
+
+def _activar_salas_con_cazadores(partida):
+    """Activa a los cazadores donde estén, como si el jugador hubiera
+    pasado por sus salas (P1 §2.4): primera acción en reloj + intervalo."""
+    salas = partida.mapa.obtener_todas()
+
+    for i in range(len(salas)):
+        sala = salas.obtener(i)
+
+        if sala.cantidad_enemigos() > 0 and sala.id != partida.jugador.sala_actual:
+            partida._activar_enemigos(sala)
+
+
+def partida_con_cazadores(cantidad, semilla=None):
+    """2000 salas sintéticas con `cantidad` cazadores repartidos dentro de
+    su rango (media cripta), ninguno en la sala del jugador (FR-029). Toda
+    cargada y sin red. Devuelve (partida, recorrido fijo del jugador)."""
+    from crypta.bench.bench_cazador import SEMILLA, CriptaSintetica
+
+    semilla = SEMILLA if semilla is None else semilla
+    cripta = CriptaSintetica(2000, semilla)
+    rango = cripta.rango_mediano()
+    ficha = _ficha_cazador_bench(rango)
+    cripta.mapa.asignar_contenidos(
+        cripta.contenidos(cripta.ubicar_cazadores(cantidad, rango)))
+
+    jugador = Jugador("Bench", vida_max=10 ** 9, ataque=8, defensa=3,
+                      velocidad=100, inventario_max=8)
+    partida = Partida(cripta.mapa, jugador, cripta.sala_jugador.id,
+                      {ficha["id"]: ficha}.get, semilla=semilla)
+    partida.iniciar()
+    _activar_salas_con_cazadores(partida)
+    return partida, cripta
+
+
+def _una_vuelta_cazadores(crear, acciones, calentamiento, semilla):
+    from crypta.bench.bench_cazador import recorrido_desde
+
+    partida = crear()
+    recorrido = recorrido_desde(partida.sala_actual(),
+                                calentamiento + acciones, semilla)
+    tiempos = Vector()
+    eventos = 0
+
+    for numero, direccion in enumerate(recorrido):
+        antes = partida.agenda.siguiente_secuencia
+        transcurrido = cronometrar(lambda: partida.mover(direccion))
+
+        if numero >= calentamiento:
+            tiempos.agregar(transcurrido)
+            eventos += partida.agenda.siguiente_secuencia - antes
+
+    return tiempos, eventos
+
+
+def medir_ciclo_cazadores(cantidad, acciones=ACCIONES,
+                          calentamiento=CALENTAMIENTO, vueltas=3,
+                          semilla=None, crear=None):
+    """Ciclo entre dos decisiones del jugador con `cantidad` cazadores
+    activos (B7, B8). Cada acción, la mejor de `vueltas` vueltas
+    idénticas. El jugador sigue un recorrido fijo: no ataca ni espera, así
+    los cazadores siguen buscando rutas."""
+    from crypta.bench.bench_cazador import SEMILLA
+
+    semilla = SEMILLA if semilla is None else semilla
+    if crear is None:
+        crear = lambda: partida_con_cazadores(cantidad, semilla)[0]
+
+    resultado = Medicion(cantidad)
+    resultado.ciclo, eventos = _mejor_de(vueltas, lambda: _una_vuelta_cazadores(
+        crear, acciones, calentamiento, semilla))
+    resultado.eventos_por_accion = eventos / max(1, len(resultado.ciclo))
+    return resultado
+
+
+def partida_de_referencia(carpeta="cache"):
+    """La cripta oficial de referencia, si hay una copia local en
+    `carpeta` (con el catálogo). None si todavía no se publicó."""
+    import json
+
+    ruta = os.path.join(carpeta, ID_CRIPTA_REFERENCIA + ".json")
+    ruta_catalogo = os.path.join(carpeta, "catalogo.json")
+
+    if not os.path.exists(ruta) or not os.path.exists(ruta_catalogo):
+        return None
+
+    with open(ruta, encoding="utf-8") as archivo:
+        guardada = json.load(archivo)
+    with open(ruta_catalogo, encoding="utf-8") as archivo:
+        fichas = json.load(archivo).get("fichas") or {}
+
+    mapa = Mapa()
+    mapa.cargar_desde_json(guardada["esqueleto"])
+    contenidos = list(guardada.get("contenidos") or ())
+    con_contenido = [datos["sala"] for datos in contenidos]
+    contenidos += [{"sala": datos["id"], "enemigos": [], "objetos": [],
+                    "trampas": []}
+                   for datos in guardada["esqueleto"]
+                   if datos["id"] not in con_contenido]
+    mapa.asignar_contenidos(contenidos)
+
+    generales = guardada.get("datos_generales") or {}
+    sala_inicial = generales.get("sala_inicial") or guardada["esqueleto"][0]["id"]
+    jugador = Jugador("Bench", vida_max=10 ** 9, ataque=8, defensa=3,
+                      velocidad=100, inventario_max=8)
+    partida = Partida(mapa, jugador, sala_inicial, fichas.get, semilla=1)
+    partida.iniciar()
+    _activar_salas_con_cazadores(partida)
+    return partida
+
+
+def ejecutar_ciclo_cazadores(rapido=False, carpeta="cache"):
+    """B7 (FR-035, SC-004): p95 del ciclo con 50 cazadores en 2000 salas,
+    y en la cripta oficial si hay copia local."""
+    acciones = 15 if rapido else ACCIONES
+    calentamiento = 5 if rapido else CALENTAMIENTO
+    vueltas = 1 if rapido else 3
+    filas = []
+
+    casos = [("sintética 2000 salas", CAZADORES_CICLO, None)]
+    if partida_de_referencia(carpeta) is not None:
+        casos.append(("oficial", None,
+                      lambda: partida_de_referencia(carpeta)))
+
+    for nombre, cantidad, crear in casos:
+        m = medir_ciclo_cazadores(cantidad, acciones, calentamiento, vueltas,
+                                  crear=crear)
+        filas.append((nombre, str(cantidad if cantidad else "los suyos"),
+                      formato_tiempo(m.media(m.ciclo)),
+                      formato_tiempo(m.percentil(m.ciclo, 95)),
+                      formato_tiempo(m.maximo(m.ciclo)),
+                      "sí" if m.cumple() else "NO"))
+
+    nota = ("Con la cripta oficial publicada se agrega su fila."
+            if len(casos) == 1 else
+            "La cripta oficial se midió desde la copia local.")
+
+    return tabla(
+        f"B7 CICLO CON CAZADORES (FR-035, SC-004: p95 menor que {LIMITE_MS} "
+        f"ms). {acciones} acciones del jugador (cada una, la mejor de "
+        f"{vueltas} vueltas), con {calentamiento} de calentamiento",
+        ("cripta", "cazadores", "media", "p95", "máximo", "¿cumple?"),
+        filas,
+        "El jugador se mueve por un recorrido fijo, sin atacar ni esperar. "
+        + nota)
+
+
 if __name__ == "__main__":
     print(ejecutar())

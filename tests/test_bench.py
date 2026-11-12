@@ -80,7 +80,7 @@ class TestEjecutarBench(unittest.TestCase):
         self.assertIn("agenda", str(contexto.exception))
 
     def test_main_bench_no_crea_la_vista(self):
-        with patch("crypta.bench.bench.ejecutar") as ejecutar, \
+        with patch("crypta.bench.bench.ejecutar", return_value=0) as ejecutar, \
                 patch("crypta.main.VistaConsola",
                       side_effect=AssertionError("--bench creó la vista")), \
                 patch.object(sys, "argv", ["crypta", "--bench"]), \
@@ -498,6 +498,293 @@ class TestBenchRastro(unittest.TestCase):
 
     def test_la_seccion_arma_la_tabla(self):
         self.assertIn("RASTRO (§4.7)", bench_rastro.ejecutar(rapido=True))
+
+
+# ======================================================================
+# Capacidad 001: secciones de --bench del cazador (B1 a B9 de
+# specs/001-terreno-cazador/contracts/bench.md). Corren en modo rápido; no
+# exigen los límites (eso lo comprueba el --bench completo, T086).
+# ======================================================================
+
+SECCIONES_CAZADOR = ("cazadores", "rangos", "tamano", "compartido",
+                     "reutilizar", "equivalencia", "ciclo_cazadores",
+                     "escala", "distancias")
+
+
+class TestBenchCazador(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        """Corre una sola vez todas las secciones nuevas, en modo rápido,
+        con una red que falla si se la llama y una vista que falla si se
+        crea (FR-034, HU4-7)."""
+        lineas = []
+
+        with patch("crypta.Adaptadores.FuenteHTTP.requests.get",
+                   side_effect=AssertionError("--bench usó la red")), \
+                patch("crypta.Vista.VistaConsola.VistaConsola.__init__",
+                      side_effect=AssertionError("--bench creó la vista")), \
+                patch("crypta.Adaptadores.FuenteOffline.FuenteOffline.__init__",
+                      side_effect=AssertionError("--bench usó una fuente")):
+            cls.codigo = bench.ejecutar(list(SECCIONES_CAZADOR), rapido=True,
+                                        salida=lineas.append)
+
+        cls.texto = "\n".join(str(linea) for linea in lineas)
+
+    def seccion(self, titulo):
+        """El texto de una sección, desde su título hasta la siguiente."""
+        inicio = self.texto.index(f"=== {titulo}")
+        fin = self.texto.find("\n=== ", inicio + 1)
+        return self.texto[inicio:] if fin < 0 else self.texto[inicio:fin]
+
+    # HU4-1 -------------------------------------------------------------
+
+    def test_hu4_1_misma_semilla_misma_cripta(self):
+        """FR-028, SC-006, HU4-1: dos generaciones con la misma semilla dan
+        la misma huella (salas, salidas, costos, puertas y cazadores)."""
+        from crypta.bench.bench_cazador import CriptaSintetica, huella
+
+        def generar(semilla):
+            cripta = CriptaSintetica(2000, semilla)
+            cazadores = cripta.ubicar_cazadores(50, cripta.rango_pequeno())
+            return huella(cripta, cazadores)
+
+        self.assertEqual(generar(11), generar(11))
+        self.assertNotEqual(generar(11), generar(12))
+
+    def test_hu4_1_la_cripta_tiene_costos_variables_y_puertas(self):
+        """FR-028: costos enteros en [1, 500], algunas salidas quitadas y
+        una fracción con puerta."""
+        from crypta.bench.bench_cazador import CriptaSintetica
+
+        cripta = CriptaSintetica(2000, 11)
+        costos = []
+        salidas = 0
+        for sala in cripta.esqueleto:
+            for datos in sala["salidas"].values():
+                salidas += 1
+                if "costo" in datos:
+                    costos.append(datos["costo"])
+
+        self.assertEqual(len(cripta.esqueleto), 2000)
+        self.assertTrue(all(1 <= c <= 500 for c in costos))
+        self.assertGreater(len(set(costos)), 100)
+        self.assertLess(salidas, 4 * 2000 - 2 * (50 + 40))   # hay quitadas
+        self.assertGreater(len(cripta.puertas), 0)
+
+    def test_hu4_1_la_region_del_jugador_es_igual_en_2000_y_20000(self):
+        """FR-030, FR-036: las distancias de las ~100 salas más cercanas
+        al jugador son las mismas en las dos criptas."""
+        from crypta.bench.bench_cazador import _cripta
+
+        chica = _cripta(2000)               # las mismas que usó el --bench
+        grande = _cripta(20000)
+        rango = chica.rango_pequeno()
+
+        def region(cripta):
+            orden = cripta.salas_en_orden(rango)
+            return [(cripta.coordenadas(orden.obtener(i)[0]),
+                     orden.obtener(i)[1]) for i in range(len(orden))]
+
+        self.assertEqual(rango, grande.rango_pequeno())
+        self.assertEqual(region(chica), region(grande))
+        self.assertGreaterEqual(len(region(chica)), 100)
+
+    # HU4-2 y HU4-3 -----------------------------------------------------
+
+    def test_hu4_2_cazadores_repartidos_dentro_de_su_rango(self):
+        """FR-029: ninguno en la sala del jugador y todos dentro de su
+        rango, a distancias distintas."""
+        from crypta.bench.bench_cazador import CriptaSintetica
+
+        cripta = CriptaSintetica(2000, 11)
+        for rango in (cripta.rango_pequeno(), cripta.rango_mediano()):
+            salas = cripta.ubicar_cazadores(50, rango)
+            distancias = [cripta.distancia_al_jugador(salas.obtener(i))
+                          for i in range(len(salas))]
+
+            self.assertEqual(len(salas), 50)
+            self.assertNotIn(0, distancias)
+            self.assertTrue(all(d is not None and d <= rango
+                                for d in distancias))
+            self.assertGreater(len(set(distancias)), 25)
+
+    def test_hu4_2_b1_reporta_uno_y_cincuenta(self):
+        """FR-029, HU4-2: B1 con 1 y 50 cazadores."""
+        texto = self.seccion("B1")
+        self.assertRegex(texto, r"\n\s+1\s")
+        self.assertRegex(texto, r"\n\s+50\s")
+        self.assertIn("por decisión", texto)
+
+    def test_hu4_3_b2_y_b3(self):
+        """FR-030, HU4-3: B2 con rango pequeño y grande; B3 con 2000 y
+        20000 salas."""
+        b2 = self.seccion("B2")
+        self.assertIn("pequeño", b2)
+        self.assertIn("grande", b2)
+        self.assertIn("salas asentadas", b2)
+
+        b3 = self.seccion("B3")
+        self.assertRegex(b3, r"\n\s+2000\s")
+        self.assertRegex(b3, r"\n\s+20000\s")
+
+    # HU4-4 y HU4-5 -----------------------------------------------------
+
+    def test_hu4_4_b4_compartido_frente_a_por_cazador(self):
+        """FR-031, HU4-4: con 1, 10 y 50 cazadores, puertas estables e
+        inestables, y cuál gana."""
+        texto = self.seccion("B4")
+        for cantidad in ("1", "10", "50"):
+            self.assertRegex(texto, rf"\n\s+{cantidad}\s")
+        self.assertIn("estables", texto)
+        self.assertIn("inestables", texto)
+        self.assertIn("gana", texto)
+
+    def test_hu4_5_b5_las_tres_variantes(self):
+        """FR-032, HU4-5: recalcular, invalidación total y selectiva, con
+        puertas casi estables e inestables; tiempo, búsquedas y salas."""
+        texto = self.seccion("B5")
+        for variante in ("recalcular siempre", "invalidación total",
+                         "selectiva"):
+            self.assertIn(variante, texto)
+        for columna in ("casi estables", "inestables", "búsquedas",
+                        "salas asentadas"):
+            self.assertIn(columna, texto)
+
+    # HU4-6 -------------------------------------------------------------
+
+    def test_hu4_6_b6_sin_diferencias(self):
+        """FR-033, HU4-6: todas las decisiones de B4 y B5 coinciden con el
+        cálculo desde cero, y el código de salida es 0."""
+        texto = self.seccion("B6")
+        self.assertIn("0 diferencias", texto)
+        self.assertNotIn("ERROR", self.texto)
+        self.assertEqual(self.codigo, 0)
+
+    def test_hu4_6_una_variante_saboteada_da_error(self):
+        """FR-033, HU4-6: si una variante decide mal, B6 imprime ERROR y el
+        --bench sale con código distinto de 0."""
+        from crypta.bench import bench_cazador
+        from crypta.Modelo.Perseguidor import Perseguidor
+
+        class Saboteado(Perseguidor):
+            def decidir(self, cazador, sala_jugador):
+                decision = super().decidir(cazador, sala_jugador)
+                if self.decisiones % 7 == 0:
+                    decision.costo += 1
+                return decision
+
+        texto, errores = bench_cazador.ejecutar_equivalencia(
+            rapido=True, fabrica=Saboteado)
+        self.assertGreater(errores, 0)
+        self.assertIn("ERROR", texto)
+
+        with patch.object(bench_cazador, "Perseguidor", Saboteado), \
+                redirect_stdout(io.StringIO()):
+            codigo = bench.principal(["equivalencia", "--rapido"])
+        self.assertNotEqual(codigo, 0)
+
+    # HU4-7 -------------------------------------------------------------
+
+    def test_hu4_7_sin_vista_ni_red(self):
+        """FR-034, HU4-7: todas las secciones corrieron con la red, las
+        fuentes y la vista saboteadas (setUpClass)."""
+        for titulo in ("B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9"):
+            self.assertIn(f"=== {titulo}", self.texto)
+
+    # HU4-8, HU4-9 y HU4-10 ---------------------------------------------
+
+    def test_hu4_8_b7_reporta_p95_y_si_cumple(self):
+        """FR-035, HU4-8: media, p95, máximo y ¿cumple? (p95 < 20 ms)."""
+        texto = self.seccion("B7")
+        for columna in ("media", "p95", "máximo", "¿cumple?", "50"):
+            self.assertIn(columna, texto)
+
+    def test_hu4_8_b7_tambien_corre_sobre_la_cripta_oficial(self):
+        """FR-035: si hay copia local de la cripta oficial, B7 la mide
+        también (aquí, una copia falsa armada con el generador)."""
+        import json
+        from crypta.bench import bench_ciclo
+        from crypta.bench.bench_cazador import CriptaSintetica
+
+        cripta = CriptaSintetica(2000, 11)
+        ficha = bench_ciclo._ficha_cazador_bench(cripta.rango_mediano())
+        contenidos = cripta.contenidos(cripta.ubicar_cazadores(
+            20, cripta.rango_mediano()))
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            with open(os.path.join(carpeta, "cripta-referencia.json"), "w",
+                      encoding="utf-8") as archivo:
+                json.dump({"version": "v", "esqueleto": cripta.esqueleto,
+                           "contenidos": contenidos,
+                           "datos_generales": {
+                               "sala_inicial": cripta.sala_jugador.id}},
+                          archivo)
+            with open(os.path.join(carpeta, "catalogo.json"), "w",
+                      encoding="utf-8") as archivo:
+                json.dump({"version": "c", "fichas": {ficha["id"]: ficha}},
+                          archivo)
+
+            partida = bench_ciclo.partida_de_referencia(carpeta)
+            texto = bench_ciclo.ejecutar_ciclo_cazadores(rapido=True,
+                                                         carpeta=carpeta)
+
+        activos = 0
+        salas = partida.mapa.obtener_todas()
+        for i in range(len(salas)):
+            for j in range(salas.obtener(i).cantidad_enemigos()):
+                activos += salas.obtener(i).enemigo_en(j).esta_activo()
+
+        self.assertEqual(activos, 20)
+        self.assertIn("oficial", texto)
+        self.assertIsNone(bench_ciclo.partida_de_referencia(
+            os.path.join(tempfile.gettempdir(), "no-existe-cripta")))
+
+    def test_hu4_9_b3_reporta_el_cociente(self):
+        """FR-036, HU4-9: cociente 20000 / 2000 y ¿cumple? (< 2)."""
+        texto = self.seccion("B3")
+        self.assertIn("cociente", texto)
+        self.assertIn("¿cumple?", texto)
+
+    def test_hu4_10_b8_reporta_el_cociente_por_cazador(self):
+        """FR-037, HU4-10: 10, 25, 50 y 100; cociente 100 / 10 y
+        ¿cumple? (≤ 2)."""
+        texto = self.seccion("B8")
+        for cantidad in ("10", "25", "50", "100"):
+            self.assertRegex(texto, rf"\n\s+{cantidad}\s")
+        self.assertIn("por cazador", texto)
+        self.assertIn("cociente", texto)
+        self.assertIn("¿cumple?", texto)
+
+    def test_b9_vectores_con_marca_frente_a_arbol(self):
+        """research D5: la misma búsqueda guardada en vectores con marca y
+        en ArbolBusqueda da las mismas distancias."""
+        from crypta.bench.bench_cazador import (
+            CriptaSintetica, DistanciasEnArbol, entradas_abiertas,
+        )
+        from crypta.estructuras.DistanciasLimitadas import DistanciasLimitadas
+
+        cripta = CriptaSintetica(2000, 11)
+        origen = cripta.sala_jugador.indice
+        con_vectores = DistanciasLimitadas(2000, entradas_abiertas(cripta.mapa))
+        con_arbol = DistanciasEnArbol(entradas_abiertas(cripta.mapa))
+
+        for busqueda in (con_vectores, con_arbol):
+            busqueda.reiniciar(origen)
+            busqueda.extender_hasta(cripta.rango_mediano())
+
+        self.assertEqual(
+            [con_vectores.distancia(n) for n in range(2000)],
+            [con_arbol.distancia(n) for n in range(2000)])
+        self.assertIn("ArbolBusqueda", self.seccion("B9"))
+
+    def test_main_devuelve_el_codigo_del_bench(self):
+        """FR-033: python -m crypta.main --bench devuelve lo que devuelve
+        el bench."""
+        with patch("crypta.bench.bench.ejecutar", return_value=1), \
+                patch.object(sys, "argv", ["crypta", "--bench"]), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(programa.main(), 1)
 
 
 if __name__ == "__main__":

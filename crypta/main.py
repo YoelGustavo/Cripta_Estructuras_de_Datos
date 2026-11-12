@@ -264,9 +264,12 @@ def listar_criptas(args):
 
 
 def ejecutar_benchmarks():
+    """Devuelve el código del --bench: distinto de 0 si alguna sección
+    encontró un error, por ejemplo una decisión del cazador distinta del
+    cálculo desde cero (FR-033)."""
     from crypta.bench.bench import ejecutar
 
-    ejecutar()
+    return ejecutar()
 
 
 def main():
@@ -286,8 +289,7 @@ def main():
         return listar_criptas(args)
 
     if args.bench:
-        ejecutar_benchmarks()
-        return 0
+        return ejecutar_benchmarks()
 
     print("=" * 45)
     print("              CRIPTA")
