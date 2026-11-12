@@ -36,9 +36,10 @@ from crypta.Modelo.Perseguidor import (
 
 SEMILLA = 2026
 
-# (ancho, alto) de cada tamaño. El jugador está en las mismas coordenadas
-# en todas, lejos de los bordes, así que la región que lo rodea es la misma.
-TAMANOS = {2000: (50, 40), 20000: (200, 100)}
+# (salas, ancho, alto) de cada tamaño. Es una tupla y se busca con un for
+# (§6.2: nada de dict). El jugador está en las mismas coordenadas en todas,
+# lejos de los bordes, así que la región que lo rodea es la misma.
+TAMANOS = ((2000, 50, 40), (20000, 200, 100))
 JUGADOR = (20, 25)                 # (fila, columna)
 
 COSTO_MINIMO = 1
@@ -58,6 +59,16 @@ LIMITE_COCIENTE_CAZADORES = 2      # B8, SC-008: <= 2
 # ======================================================================
 # Generador (T078)
 # ======================================================================
+
+def _dimensiones(salas):
+    """(ancho, alto) de la cuadrícula de `salas` salas, de TAMANOS."""
+    for cantidad, ancho, alto in TAMANOS:
+        if cantidad == salas:
+            return ancho, alto
+
+    disponibles = ", ".join(str(tamano[0]) for tamano in TAMANOS)
+    raise ValueError(f"Tamaños disponibles: {disponibles}")
+
 
 def _azar_de(semilla, fila, columna, direccion):
     """Un random.Random propio de una salida: depende solo de la semilla,
@@ -86,11 +97,8 @@ class CriptaSintetica:
     puerta. Todo determinista por semilla (FR-028)."""
 
     def __init__(self, salas=2000, semilla=SEMILLA):
-        if salas not in TAMANOS:
-            raise ValueError(f"Tamaños disponibles: {tuple(TAMANOS)}")
-
         self.semilla = semilla
-        self.ancho, self.alto = TAMANOS[salas]
+        self.ancho, self.alto = _dimensiones(salas)
         self.esqueleto = self._armar_esqueleto()
 
         self.mapa = Mapa()
@@ -257,7 +265,7 @@ def recorrido_desde(sala, pasos, semilla):
     """Direcciones de un recorrido fijo por salidas abiertas, derivado de
     la semilla. Sin ataques ni esperas: el jugador siempre se mueve."""
     azar = random.Random(semilla)
-    direcciones = []
+    direcciones = Vector(max(1, pasos))
 
     for _ in range(pasos):
         abiertas = sala.puertas(solo_abiertas=True)
@@ -266,7 +274,7 @@ def recorrido_desde(sala, pasos, semilla):
             break
 
         puerta = abiertas.obtener(azar.randrange(len(abiertas)))
-        direcciones.append(sala.direccion_de(puerta))
+        direcciones.agregar(sala.direccion_de(puerta))
         sala = puerta.sala_destino_ref
 
     return direcciones
@@ -374,7 +382,7 @@ class Resultado:
         self.busquedas = 0
         self.asentados = 0
         self.comparadas = 0
-        self.diferencias = []
+        self.diferencias = Vector()
 
     def por_decision(self):
         return self.tiempo / max(1, self.decisiones)
@@ -413,8 +421,9 @@ def simular(cripta, salas_cazadores, rango, pasos, variante,
         decisor.observar_puertas()
         verificador = decisor
 
-    cazadores = [_Cazador(i, salas_cazadores.obtener(i), rango)
-                 for i in range(len(salas_cazadores))]
+    cazadores = Vector(max(1, len(salas_cazadores)))
+    for i in range(len(salas_cazadores)):
+        cazadores.agregar(_Cazador(i, salas_cazadores.obtener(i), rango))
     azar = random.Random(cripta.semilla + 1)
     resultado = Resultado()
     jugador = cripta.sala_jugador
@@ -431,7 +440,8 @@ def simular(cripta, salas_cazadores, rango, pasos, variante,
                     azar.randrange(len(abiertas))).sala_destino_ref
             resultado.ciclos += 1
 
-            for cazador in cazadores:
+            for numero in range(len(cazadores)):
+                cazador = cazadores.obtener(numero)
                 inicio = time.perf_counter()
 
                 pendiente += cambios
@@ -450,7 +460,7 @@ def simular(cripta, salas_cazadores, rango, pasos, variante,
                                                               jugador)
                     resultado.comparadas += 1
                     if _resumen(decision) != _resumen(esperada):
-                        resultado.diferencias.append(
+                        resultado.diferencias.agregar(
                             f"{variante}, ciclo {resultado.ciclos}, "
                             f"{cazador.id_instancia} en la sala "
                             f"{cazador.sala_actual}: decidió "
@@ -543,7 +553,7 @@ def ejecutar_tamano(rapido=False):
     repeticiones = 50 if rapido else 500
     rango = _cripta(2000).rango_pequeno()
     filas = []
-    tiempos = []
+    tiempos = Vector(2)
 
     for salas in (2000, 20000):
         cripta = _cripta(salas)
@@ -566,11 +576,11 @@ def ejecutar_tamano(rapido=False):
             if activo:
                 gc.enable()
 
-        tiempos.append(tiempo)
+        tiempos.agregar(tiempo)
         filas.append((str(salas), formato_tiempo(tiempo),
                       f"{(perseguidor.asentados - asentados_antes) / repeticiones:.0f}"))
 
-    cociente = tiempos[1] / tiempos[0]
+    cociente = tiempos.obtener(1) / tiempos.obtener(0)
     cumple = cociente < LIMITE_COCIENTE_TAMANO
 
     return tabla(
@@ -671,21 +681,26 @@ def ejecutar_equivalencia(rapido=False, fabrica=None):
     cripta = _cripta()
     rango = _rango_b4_b6(cripta, rapido)
     filas = []
-    errores = []
+    errores = Vector()
+    comparadas = 0
 
-    casos = [("B4", cantidad, nombre, cambios, pasos, variante)
-             for cantidad, nombre, cambios, pasos in _casos_compartido(rapido)
-             for variante in (SELECTIVA, "por cazador")]
-    casos += [("B5", 50, nombre, cambios, pasos, modo)
-              for nombre, cambios, modo, pasos in _casos_reutilizar(rapido)]
+    casos = Vector()
+    for cantidad, nombre, cambios, pasos in _casos_compartido(rapido):
+        for variante in (SELECTIVA, "por cazador"):
+            casos.agregar(("B4", cantidad, nombre, cambios, pasos, variante))
+    for nombre, cambios, modo, pasos in _casos_reutilizar(rapido):
+        casos.agregar(("B5", 50, nombre, cambios, pasos, modo))
 
-    for seccion, cantidad, nombre, cambios, pasos, variante in casos:
+    for i in range(len(casos)):
+        seccion, cantidad, nombre, cambios, pasos, variante = casos.obtener(i)
         r = simular(cripta, cripta.ubicar_cazadores(cantidad, rango), rango,
                     pasos, variante, cambios, verificar=True,
                     fabrica=fabrica)
         filas.append((seccion, str(cantidad), nombre, variante,
                       str(r.comparadas), str(len(r.diferencias))))
-        errores.extend(r.diferencias)
+        comparadas += r.comparadas
+        for j in range(len(r.diferencias)):
+            errores.agregar(r.diferencias.obtener(j))
 
     texto = tabla(
         "B6 EQUIVALENCIA (FR-033): cada decisión de B4 y B5 contra un "
@@ -693,11 +708,11 @@ def ejecutar_equivalencia(rapido=False, fabrica=None):
         ("sección", "cazadores", "puertas", "variante", "comparadas",
          "diferencias"),
         filas,
-        f"Total: {sum(int(f[4]) for f in filas)} decisiones comparadas, "
+        f"Total: {comparadas} decisiones comparadas, "
         f"{len(errores)} diferencias.")
 
-    for error in errores[:20]:
-        texto += f"\nERROR: {error}"
+    for i in range(min(20, len(errores))):
+        texto += f"\nERROR: {errores.obtener(i)}"
     if len(errores) > 20:
         texto += f"\nERROR: ... y {len(errores) - 20} diferencias más"
 
@@ -794,18 +809,18 @@ def ejecutar_distancias(rapido=False):
         con_vectores = DistanciasLimitadas(cripta.mapa.cantidad_salas(),
                                            entradas_abiertas(cripta.mapa))
         con_arbol = DistanciasEnArbol(entradas_abiertas(cripta.mapa))
-        tiempos = []
+        tiempos = Vector(2)
 
         for busqueda in (con_vectores, con_arbol):
             inicio = time.perf_counter()
             for _ in range(repeticiones):
                 busqueda.reiniciar(origen)
                 busqueda.extender_hasta(rango)
-            tiempos.append((time.perf_counter() - inicio) / repeticiones)
+            tiempos.agregar((time.perf_counter() - inicio) / repeticiones)
 
-        filas.append((nombre, formato_tiempo(tiempos[0]),
-                      formato_tiempo(tiempos[1]),
-                      f"{tiempos[1] / tiempos[0]:.1f}x"))
+        vectores, arbol = tiempos.obtener(0), tiempos.obtener(1)
+        filas.append((nombre, formato_tiempo(vectores), formato_tiempo(arbol),
+                      f"{arbol / vectores:.1f}x"))
 
     return tabla(
         "B9 DÓNDE GUARDAR LAS DISTANCIAS (research D5): la misma búsqueda, "

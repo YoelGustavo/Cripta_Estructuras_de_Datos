@@ -1305,7 +1305,7 @@ class TestDetallesFinales(ConCriptaDePrueba):
 
         texto = self.pantalla(partida)
 
-        self.assertIn("N: sala 3 (Cerrada, necesita itm_llave)", texto)
+        self.assertIn("N: sala 3 (Cerrada, necesita itm_llave, costo 100)", texto)
         self.assertIn("Vida: 12/12", texto)
 
     def test_ctrl_c_fuera_de_la_lectura_termina_ordenado(self):
@@ -1385,6 +1385,82 @@ class TestListarCriptas(ConCriptaDePrueba):
 
     def test_criptas_guardadas_no_cuenta_el_catalogo(self):
         self.assertEqual(self.almacen.criptas_guardadas(), ["c-prueba"])
+
+
+class TestVistaTerrenoYCazador(unittest.TestCase):
+    """FR-009, FR-022, SC-007 (tareas T088 y T089): la vista muestra el
+    costo de cada salida y marca a los cazadores (contracts/vista.md). Se
+    comprueba que aparezca la información, no la línea completa."""
+
+    def pantalla(self, partida):
+        salida = io.StringIO()
+        with redirect_stdout(salida):
+            VistaConsola().mostrar_estado(partida)
+        return salida.getvalue()
+
+    def lineas_de(self, texto, seccion):
+        """Las líneas de una sección de la pantalla (SALIDAS, ENEMIGOS)."""
+        bloque = texto.split(seccion, 1)[1].split("\n\n", 1)[0]
+        return [linea.strip() for linea in bloque.splitlines() if linea.strip()]
+
+    def test_hu1_9_costo_de_cada_salida_abierta_o_cerrada(self):
+        """FR-009, HU1-9: con salidas abiertas, cerradas y cerradas con
+        llave, cada una muestra su costo; sin costo declarado, 100."""
+        from tests.ayudas_cripta import partida_sintetica, sala, salida
+
+        partida = partida_sintetica([
+            sala(1, {"N": salida(2, costo=250),
+                     "E": salida(3, costo=40, cerrada=True),
+                     "S": salida(4, cerrada=True, llave="itm_llave"),
+                     "O": salida(5)}),
+            sala(2), sala(3), sala(4), sala(5),
+        ])
+
+        salidas = self.lineas_de(self.pantalla(partida), "SALIDAS")
+
+        self.assertEqual(len(salidas), 4)
+        for direccion, costo, estado in (("N", 250, "Abierta"),
+                                         ("S", 100, "Cerrada"),
+                                         ("E", 40, "Cerrada"),
+                                         ("O", 100, "Abierta")):
+            linea = next(l for l in salidas if l.startswith(f"{direccion}:"))
+            self.assertIn(f"costo {costo}", linea)
+            self.assertIn(estado, linea)
+        self.assertIn("itm_llave", next(l for l in salidas
+                                        if l.startswith("S:")))
+
+    def test_hu2_12_solo_el_cazador_lleva_la_etiqueta(self):
+        """FR-022, HU2-12: con un cazador y otros enemigos en la sala,
+        [cazador] aparece solo en el cazador."""
+        from tests.ayudas_cripta import (
+            catalogo, contenido, ficha_cazador, ficha_errante,
+            ficha_rastreador, partida_sintetica, sala, salida,
+        )
+
+        partida = partida_sintetica(
+            [sala(1, {"E": salida(2)}), sala(2, {"O": salida(1)})],
+            [contenido(1, enemigos=[("e-1", "ent_errante"),
+                                    ("e-2", "ent_cazador"),
+                                    ("e-3", "ent_rastreador")])],
+            catalogo(ficha_errante(), ficha_cazador(), ficha_rastreador()))
+
+        enemigos = self.lineas_de(self.pantalla(partida), "ENEMIGOS")
+
+        self.assertEqual(len(enemigos), 3)
+        for linea in enemigos:
+            if "[e-2]" in linea:
+                self.assertIn("[cazador]", linea)
+            else:
+                self.assertNotIn("[cazador]", linea)
+
+    def test_la_ayuda_explica_el_costo_y_la_etiqueta(self):
+        """FR-009, FR-022: la ayuda explica [cazador] y el costo."""
+        salida = io.StringIO()
+        with redirect_stdout(salida):
+            VistaConsola().mostrar_ayuda()
+
+        self.assertIn("[cazador]", salida.getvalue())
+        self.assertIn("costo", salida.getvalue())
 
 
 if __name__ == "__main__":

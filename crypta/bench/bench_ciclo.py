@@ -8,6 +8,7 @@ from crypta.Controlador.Comandos import ComandoInvalido, ejecutar_comando
 from crypta.Controlador.Controlador import Controlador
 from crypta.Controlador.GestorContenido import LIMITE_VISITAS_PRECARGA, GestorContenido
 from crypta.Controlador.RepositorioFichas import RepositorioFichas
+from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
 from crypta.estructuras.ordenamiento import ordenar
 from crypta.estructuras.Vector import Vector
 from crypta.Modelo.Jugador import Jugador
@@ -315,6 +316,17 @@ def _ficha_cazador_bench(rango):
             "rango": rango, "suelta": []}
 
 
+def _fichas_en_arbol(fichas):
+    """Las fichas en un ArbolBusqueda por id: los dict de json solo se
+    leen y se pasan a nuestras estructuras (principio I)."""
+    arbol = ArbolBusqueda()
+
+    for ficha in fichas:
+        arbol.insertar(ficha["id"], ficha)
+
+    return arbol
+
+
 def _activar_salas_con_cazadores(partida):
     """Activa a los cazadores donde estén, como si el jugador hubiera
     pasado por sus salas (P1 §2.4): primera acción en reloj + intervalo."""
@@ -343,7 +355,7 @@ def partida_con_cazadores(cantidad, semilla=None):
     jugador = Jugador("Bench", vida_max=10 ** 9, ataque=8, defensa=3,
                       velocidad=100, inventario_max=8)
     partida = Partida(cripta.mapa, jugador, cripta.sala_jugador.id,
-                      {ficha["id"]: ficha}.get, semilla=semilla)
+                      _fichas_en_arbol((ficha,)).obtener, semilla=semilla)
     partida.iniciar()
     _activar_salas_con_cazadores(partida)
     return partida, cripta
@@ -358,7 +370,8 @@ def _una_vuelta_cazadores(crear, acciones, calentamiento, semilla):
     tiempos = Vector()
     eventos = 0
 
-    for numero, direccion in enumerate(recorrido):
+    for numero in range(len(recorrido)):
+        direccion = recorrido.obtener(numero)
         antes = partida.agenda.siguiente_secuencia
         transcurrido = cronometrar(lambda: partida.mover(direccion))
 
@@ -403,23 +416,26 @@ def partida_de_referencia(carpeta="cache"):
     with open(ruta, encoding="utf-8") as archivo:
         guardada = json.load(archivo)
     with open(ruta_catalogo, encoding="utf-8") as archivo:
-        fichas = json.load(archivo).get("fichas") or {}
+        fichas = _fichas_en_arbol(
+            (json.load(archivo).get("fichas") or {}).values())
 
     mapa = Mapa()
     mapa.cargar_desde_json(guardada["esqueleto"])
-    contenidos = list(guardada.get("contenidos") or ())
-    con_contenido = [datos["sala"] for datos in contenidos]
-    contenidos += [{"sala": datos["id"], "enemigos": [], "objetos": [],
-                    "trampas": []}
-                   for datos in guardada["esqueleto"]
-                   if datos["id"] not in con_contenido]
-    mapa.asignar_contenidos(contenidos)
+    mapa.asignar_contenidos(guardada.get("contenidos") or ())
+
+    # Las salas sin contenido en la copia quedan vacías.
+    salas = mapa.obtener_todas()
+    for i in range(len(salas)):
+        if not salas.obtener(i).contenido_cargado():
+            salas.obtener(i).asignar_contenido(
+                {"sala": salas.obtener(i).id, "enemigos": [], "objetos": [],
+                 "trampas": []})
 
     generales = guardada.get("datos_generales") or {}
     sala_inicial = generales.get("sala_inicial") or guardada["esqueleto"][0]["id"]
     jugador = Jugador("Bench", vida_max=10 ** 9, ataque=8, defensa=3,
                       velocidad=100, inventario_max=8)
-    partida = Partida(mapa, jugador, sala_inicial, fichas.get, semilla=1)
+    partida = Partida(mapa, jugador, sala_inicial, fichas.obtener, semilla=1)
     partida.iniciar()
     _activar_salas_con_cazadores(partida)
     return partida
@@ -433,12 +449,14 @@ def ejecutar_ciclo_cazadores(rapido=False, carpeta="cache"):
     vueltas = 1 if rapido else 3
     filas = []
 
-    casos = [("sintética 2000 salas", CAZADORES_CICLO, None)]
+    casos = Vector(2)
+    casos.agregar(("sintética 2000 salas", CAZADORES_CICLO, None))
     if partida_de_referencia(carpeta) is not None:
-        casos.append(("oficial", None,
-                      lambda: partida_de_referencia(carpeta)))
+        casos.agregar(("oficial", None,
+                       lambda: partida_de_referencia(carpeta)))
 
-    for nombre, cantidad, crear in casos:
+    for i in range(len(casos)):
+        nombre, cantidad, crear = casos.obtener(i)
         m = medir_ciclo_cazadores(cantidad, acciones, calentamiento, vueltas,
                                   crear=crear)
         filas.append((nombre, str(cantidad if cantidad else "los suyos"),

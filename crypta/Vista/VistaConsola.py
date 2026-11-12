@@ -1,4 +1,5 @@
 
+from crypta.Modelo.Enemigo import CAZADOR
 from crypta.Modelo.Sala import DIRECCIONES
 
 
@@ -35,6 +36,9 @@ class VistaConsola:
         print("  estado              Mostrar el estado")
         print("  ayuda               Mostrar esta ayuda")
         print("  salir               Salir del juego")
+        print("\nEn SALIDAS, «costo N» es lo que tarda cruzar esa salida (100 si")
+        print("la cripta no dice otra cosa). En ENEMIGOS, [cazador] marca a los")
+        print("que te persiguen por la ruta más barata.")
 
     def mostrar_estado(self, partida):
         sala = partida.sala_actual()
@@ -76,6 +80,9 @@ class VistaConsola:
             if puerta.esta_cerrada() and puerta.requiere_llave():
                 estado += f", necesita {puerta.llave}"
 
+            # Abierta o cerrada, cada salida muestra su costo (FR-009).
+            estado += f", costo {puerta.costo}"
+
             print(f"  {direccion}: sala {puerta.sala_destino} ({estado})")
 
         if not hay_salidas:
@@ -89,9 +96,12 @@ class VistaConsola:
         else:
             for i in range(len(enemigos)):
                 enemigo = enemigos.obtener(i)
+                # Los cazadores llevan una etiqueta (FR-022).
+                etiqueta = (" [cazador]" if enemigo.comportamiento == CAZADOR
+                            else "")
                 print(
                     f"  {i + 1}. {enemigo.nombre} "
-                    f"[{enemigo.id_instancia}] "
+                    f"[{enemigo.id_instancia}]{etiqueta} "
                     f"- Vida: {enemigo.vida}/{enemigo.vida_max}"
                 )
 
