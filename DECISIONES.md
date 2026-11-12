@@ -383,3 +383,111 @@ Límites:
 Si el servidor ya publicó otra versión y se borró la copia local (cache/), el replay avisa y no se puede repetir la partida.
 Reproducir una partida muy larga cuesta tanto como jugarla otra vez. No se puede saltar a la mitad.
 partida.log es el de la última partida: una partida nueva lo reemplaza. Para conservar uno, hay que copiarlo o usar guardar.
+
+5.1 La ruta más barata del cazador
+
+**Problema:**
+- En su turno, el cazador ataca si comparte sala con el jugador; si no, da un paso por una ruta de costo mínimo hasta él, o espera si no hay ruta o si cuesta más que su rango.
+- Los costos de las salidas son enteros ≥ 1 y distintos entre sí: la ruta con menos salas no siempre es la más barata.
+- Si hay empate, va a la vecina de menor id. La decisión no puede usar el azar.
+- Puede haber 50 cazadores o más persiguiendo al mismo jugador en criptas de 2000 a 20000 salas.
+
+**Alternativas:**
+- Recorrido por anchura (Cola): solo sirve con costos iguales; da la ruta con menos salas. Se descartó.
+- Una búsqueda por cazador desde su sala (RutaPorCazador, Dijkstra con etiqueta (distancia, primer paso)): correcta, pero una búsqueda por cazador en cada turno. La medimos (B4).
+- Todas las parejas (Floyd-Warshall): O(V³) de tiempo, O(V²) de memoria y queda inválida con cada puerta. Se descartó.
+- A*: no hay heurística, porque las salas no tienen coordenadas. Se descartó.
+- Guardar las distancias en un ArbolBusqueda en vez de vectores: la medimos (B9).
+- heapq, networkx, dict y set: prohibidos (§6.2).
+
+**Decisión:**
+- Una sola búsqueda por partida, compartida por todos los cazadores (Perseguidor), desde la sala del jugador.
+- Recorre las entradas de cada sala (las salidas y→x), no las salidas: así da dist(x, jugador) aunque haya salidas sin vuelta. Las entradas se arman una vez al cargar el mapa.
+- Dijkstra perezoso y reanudable (estructuras/DistanciasLimitadas.py) sobre nuestro MonticuloMin, con inserción perezosa. Solo se extiende hasta lo que necesita el cazador que decide: min(rango, distancia de su sala).
+- Cada sala tiene un índice 0..V−1 en orden de id. Las distancias van en 3 Vector de V enteros con una marca de cálculo: empezar de nuevo es sumar 1 a la marca, sin limpiar nada.
+- El cazador mira solo las salidas abiertas de su sala: entre las vecinas v con costo(u, v) + dist(v) = d, la de menor id.
+- Coincide con lo planeado (specs/001-terreno-cazador/plan.md, research D1, D2, D3 y D5); las mediciones lo confirmaron y no hubo cambios. Requisitos: specs/001-terreno-cazador/spec.md, FR-014 a FR-018.
+
+**Complejidad:**
+- Empezar una búsqueda: O(1).
+- Extenderla: O((ΔV + ΔE) log E) por lo que se asienta de nuevo; E ≤ 4V.
+- Decisión de un cazador con la búsqueda ya extendida: O(1) (a lo sumo 4 salidas).
+- Ciclo con H cazadores: O(H) más lo que haya que extender, una sola vez para todos.
+- Memoria: 3 Vector de V enteros y el montículo. Índices y entradas: O(V + E), una vez al cargar.
+
+**Evidencia:**
+Se mide con: python -m crypta.bench.bench cazadores rangos tamano compartido escala distancias
+Criptas sintéticas deterministas por semilla (docs/resultados_bench_p2.txt).
+
+Búsqueda compartida frente a una por cazador (B4), tiempo por ciclo, 2000 salas
+  cazadores   puertas      compartida   por cazador
+  1           estables       188.9 µs      172.5 µs
+  10          estables       11.36 ms      56.49 ms
+  50          estables       14.64 ms     292.84 ms
+  50          inestables    116.34 ms     323.83 ms
+
+Límites del enunciado
+  medición                                        resultado                    límite   ¿cumple?
+  B3: misma región, 2000 frente a 20000 salas     1.62 ms y 1.62 ms (1.00)     < 2      sí
+  B8: tiempo por cazador, 100 frente a 10         63.5 µs y 71.4 µs (0.89)     ≤ 2      sí
+
+- B3: con rango pequeño (~100 salas) se asientan 101 salas en las dos criptas. El costo depende de la región, no del tamaño de la cripta.
+- B2: rango pequeño 119.7 µs y 7 salas por decisión; rango grande 2.15 ms y 124 salas.
+- B9: vectores con marca frente a ArbolBusqueda: 1.72 contra 2.51 ms con rango pequeño, 17.22 contra 39.78 ms con media cripta.
+
+**Límites:**
+- Con un solo cazador gana la búsqueda por cazador, por poco (172.5 contra 188.9 µs): no hay con quién compartir.
+- Con rango grande cada decisión cuesta lo que haya que explorar (B2: 2.15 ms contra 120 µs).
+- Los 3 vectores ocupan memoria proporcional a toda la cripta aunque el rango sea pequeño. Se reservan con el primer turno de un cazador.
+- La cripta oficial no se publicó; todo se midió con criptas sintéticas.
+
+5.2 Rutas que dejan de ser válidas
+
+**Problema:**
+- Entre dos turnos de un cazador se abren y cierran puertas, el jugador se mueve, se usa un pergamino o se carga una partida.
+- La decisión tiene que ser siempre la misma que la de un cálculo desde cero en ese instante (FR-019), pero recalcular en cada turno es caro.
+- Hay que saber cuándo la búsqueda guardada sigue sirviendo.
+
+**Alternativas:**
+- Recalcular siempre en cada turno de cazador: simple y seguro, pero no reutiliza nada.
+- Invalidación total: reutilizar la búsqueda y descartarla ante cualquier cambio de puerta.
+- Invalidación selectiva: descartarla solo si la puerta toca una sala ya asentada.
+- Actualizar las distancias en cada cambio (algoritmos dinámicos): mucho código y difícil de demostrar equivalente. Se descartó.
+Las tres primeras están en Perseguidor (modos RECALCULAR, TOTAL y SELECTIVA) para medirlas.
+
+**Decisión:**
+- Invalidación selectiva.
+- Las distancias dependen solo de la sala del jugador y de qué puertas están abiertas (los costos no cambian). Moverse, morir o cambiar de velocidad no las afecta.
+- La sala del jugador se compara en cada decisión: cubre moverse, el pergamino y la carga.
+- Cada puerta conoce sus dos salas y avisa a la búsqueda solo cuando cambia de abierta a cerrada o al revés. La búsqueda se descarta si alguna de las dos salas ya está asentada.
+- Si ninguna lo está, la búsqueda sigue valiendo: esa puerta nunca se usó al relajar, y una ruta nueva por ella cuesta más que todo lo asentado (demostración en research D4).
+- El pergamino descarta la búsqueda igual, por seguridad. Una partida cargada crea su propia búsqueda.
+- Las búsquedas no son estado del juego: no se guardan ni entran al historial del pergamino.
+- Coincide con lo planeado (specs/001-terreno-cazador/plan.md, research D4 y D6): la selectiva ahorró frente a la total (B5), así que se queda. Requisitos: specs/001-terreno-cazador/spec.md, FR-019, FR-020, FR-032 y FR-033.
+
+**Complejidad:**
+- Aviso de una puerta: O(1) (mirar si alguna de sus dos salas está asentada).
+- Comparar la sala del jugador: O(1).
+- Descartar la búsqueda: O(1) (se suma 1 a la marca).
+
+**Evidencia:**
+Se mide con: python -m crypta.bench.bench reutilizar equivalencia ciclo_cazadores
+
+Reutilizar frente a recalcular (B5), 2000 salas y 50 cazadores
+  puertas         variante             por ciclo   búsquedas   salas asentadas
+  casi estables   recalcular siempre   189.50 ms         750            177740
+  casi estables   invalidación total    19.98 ms          30             17329
+  casi estables   selectiva             16.96 ms          24             14565
+  inestables      recalcular siempre   249.44 ms         750            230250
+  inestables      invalidación total   257.75 ms         750            230250
+  inestables      selectiva            114.81 ms         180            103714
+
+- B6: 8160 decisiones de B4 y B5 comparadas con un cálculo desde cero, 0 diferencias. Si hubiera alguna, el --bench imprime ERROR y termina con código 1.
+- Las pruebas comparan cada turno de cazador con un cálculo desde cero en una partida de más de 1000 turnos, con puertas que cambian, muertes y cambios de velocidad: 100 % iguales (tests/test_equivalencia_cazador.py).
+- B7 (ciclo con 50 cazadores, 2000 salas, 60 acciones): media 3.04 ms, p95 7.60 ms, máximo 12.03 ms. Límite: p95 < 20 ms. Cumple.
+
+**Límites:**
+- B4 y B5 con puertas inestables pasan de 20 ms por ciclo (114.81 ms en B5 con la selectiva), pero ahí cambia una puerta antes de cada decisión: 50 cambios por acción del jugador. El juego no produce eso, porque las puertas solo cambian al abrirlas o por cierre automático.
+- B7 mide el modelo (la acción del jugador y los eventos hasta su siguiente decisión), no el Controlador (vista, registro y precarga).
+- Con puertas inestables la invalidación total no ahorra nada frente a recalcular siempre (750 búsquedas en las dos).
+- La selectiva descarta la búsqueda aunque el cambio no altere la decisión de ningún cazador: basta con que la puerta toque una sala asentada.

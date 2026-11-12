@@ -38,3 +38,12 @@
 - Correspondencia Apéndice B → escenarios: sin ruta → HU2-2; d > rango → HU2-3; menos salas y mayor
   costo → HU2-5; dos vecinas empatadas → HU2-6; puerta que se cierra → HU3-1; costo 1 con velocidad
   alta → HU1-4; cambio de velocidad → HU1-5.
+
+## Validación de punta a punta (quickstart.md, tarea T096)
+
+- [x] 1. `python -m unittest`: 766 pruebas en verde (1 omitida, la de la primera parte) (SC-001, SC-003).
+- [x] 2. Pruebas de la capacidad: 82 en verde.
+- [x] 3. Sin imports prohibidos en `crypta/`; las estructuras nuevas no usan `dict`, `set` ni `sorted` (T095).
+- [x] 4. `TestCompatibilidadP1` en verde: la partida de la primera parte se repite igual (FR-008).
+- [x] 5. Límites según `docs/resultados_bench_p2.txt`: B3 1.00 (< 2), B6 0 diferencias en 8160 decisiones, B7 p95 7.60 ms (< 20 ms), B8 0.89 (≤ 2) (SC-004, SC-005, SC-008). Sin vista ni red (prueba HU4-7). La repetibilidad con la misma semilla la comprueba la prueba HU4-1; el `--bench` todavía no imprime la huella.
+- [ ] 6. Prueba manual en el juego: la hace el grupo (costos en la vista, `[cazador]`, salida cara, guardar y cargar).

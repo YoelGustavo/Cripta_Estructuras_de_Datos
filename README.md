@@ -3,6 +3,14 @@
 
 Juego de exploración de mazmorras desarrollado en Python. Organiza la lógica del juego mediante Modelo, Vista, Controlador y Adaptadores, e incorpora estructuras de datos propias, persistencia, reproducción de partidas y pruebas de rendimiento.
 
+## Segunda parte: terreno y cazador
+
+La segunda parte se desarrolla con especificaciones de spec-kit (v1.3.1) y el agente Claude Code. La especificación, el plan y las tareas de esta capacidad están en `specs/001-terreno-cazador/`; las decisiones, en `DECISIONES.md` (secciones 5.1 y 5.2).
+
+- **Costo de las salidas.** Cada salida tiene un costo de movimiento (100 si la cripta no lo dice). Moverse por ella tarda ese costo, para el jugador y para los enemigos. Una cripta con un costo inválido (0, decimal, texto o distinto en los dos lados) no se juega: el programa muestra la salida y el problema.
+- **Cazadores.** Un enemigo nuevo que persigue al jugador por la ruta más barata si está dentro de su rango (que viene en su ficha del catálogo), y espera si no puede llegar.
+- **En la pantalla**, cada salida muestra su costo, abierta o cerrada (`N: sala 3 (Abierta, costo 250)`), y los cazadores llevan la etiqueta `[cazador]`. El comando `ayuda` lo explica.
+
 ## Requisitos
 
 - Python 3.11 o superior.
@@ -109,6 +117,8 @@ cargar
 
 Ambos archivos deben mantenerse juntos y ser compatibles con la cripta y el catálogo activos.
 
+El archivo usa la versión 2 del formato, que guarda el costo de cada salida. Las partidas guardadas con la primera parte (versión 1) no se cargan: el programa avisa que el formato no coincide.
+
 El guardado se reemplaza al ejecutar `guardar` nuevamente.
 
 ## Registro y reproducción de partidas (--replay)
@@ -180,6 +190,24 @@ python -m crypta.bench.bench --guardar docs/resultados_bench.txt
 - `red`: bitácora y solicitudes de red.
 - `guardado`: comparación entre almacenamiento binario y JSON.
 
+Secciones de la segunda parte (cazador y costos de las salidas):
+
+- `cazadores`: B1, un cazador frente a 50.
+- `rangos`: B2, rango pequeño frente a rango grande.
+- `tamano`: B3, la misma región en criptas de 2000 y 20000 salas.
+- `compartido`: B4, una búsqueda compartida frente a una por cazador.
+- `reutilizar`: B5, reutilizar la búsqueda frente a recalcular siempre.
+- `equivalencia`: B6, compara cada decisión con un cálculo desde cero. Si alguna difiere, imprime `ERROR` y el programa termina con código 1.
+- `ciclo_cazadores`: B7, ciclo con 50 cazadores (p95 menor que 20 ms).
+- `escala`: B8, ciclo con 10, 25, 50 y 100 cazadores.
+- `distancias`: B9, vectores con marca frente a `ArbolBusqueda`.
+
+Las criptas de estas secciones son sintéticas y se generan igual con la misma semilla. Los resultados de la segunda parte están en `docs/resultados_bench_p2.txt`; `docs/resultados_bench.txt` es el de la primera parte.
+
+```powershell
+python -m crypta.bench.bench cazadores rangos tamano compartido reutilizar equivalencia ciclo_cazadores escala distancias --guardar docs/resultados_bench_p2.txt
+```
+
 La sección `guardado` compara los formatos binario y JSON con criptas sintéticas de 100, 1000 y 5000 salas.
 
 Con `--rapido` se utiliza únicamente una cripta de 100 salas.
@@ -199,19 +227,19 @@ Los archivos `partida.bin` y `partida.json` utilizados durante la comparación s
 
 ## Pruebas unitarias
 
-Si las pruebas se encuentran en la carpeta `tests` de la raíz del proyecto:
+Las pruebas están en la carpeta `tests` de la raíz. Para correrlas todas:
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m unittest
 ```
 
-Si se encuentran dentro de `crypta/tests`:
+Solo las de la segunda parte (terreno y cazador):
 
 ```powershell
-python -m unittest discover -s crypta/tests -v
+python -m unittest -v tests.test_terreno tests.test_cazador tests.test_distancias_limitadas tests.test_equivalencia_cazador
 ```
 
-Se debe utilizar el comando correspondiente a la estructura real del repositorio.
+`tests.test_terreno` incluye `TestCompatibilidadP1`, que repite una partida grabada con la primera parte (`tests/datos/p1_partida.log`) y comprueba que una cripta sin costos se juega igual.
 
 ## Archivos generados y persistencia
 
