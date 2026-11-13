@@ -453,3 +453,16 @@ Rendimiento: consultar el estado de una sala o de una puerta recordada es frecue
 Los 6 casos de «Niebla de guerra e ir a» del Apéndice B van como escenarios de aceptación.
 
 **USO:** Specify de caso 002 (niebla + ir a)
+
+**Prompt:** /speckit-clarify Antes de preguntar, aplica estos cambios del grupo a specs/002-niebla-ir-a/spec.md:
+1. FR-234, HU5-4 y SC-204: el p95 de menos de 5 ms se mide sobre todos los pasos de al menos 20 viajes completos (200 pasos o más) entre salas repartidas de forma determinista, con el mapa conocido completo de 2 000 salas. --bench reporta aparte el costo del primer paso de cada viaje (el que calcula la ruta entera); si pasa de 5 ms se documenta como límite en DECISIONES.md. Agrega en Supuestos: una búsqueda completa hasta un destino al azar en 2 000 salas tarda varios ms (medido: media 6,4 ms y p95 11 ms en otra máquina), así que recalcular desde cero en cada paso no cumple; el plan debe reutilizar el cálculo entre pasos mientras el mapa conocido no cambie.
+2. FR-214 y HU2-2: la antorcha no provoca solicitudes; con y sin antorcha se hacen las mismas solicitudes (la precarga sigue siendo infraestructura, FR-209).
+3. FR-216: un id de sala que no existe se rechaza con el mismo mensaje que una sala no explorada, para no revelar qué salas existen.
+4. FR-222: la línea de comentario de ir a va antes de los mover de ese viaje.
+Después sigue con las preguntas normales.
+
+**USO:** Clarifiy de las preguntas de la seccion 002
+
+**Prompt:** B: solo lo detienen las condiciones de §3.4 (y las técnicas que ya están); si el enemigo ataca, el daño lo detiene.
+
+**USO:** Respuesta a una pregunta que me hizo
