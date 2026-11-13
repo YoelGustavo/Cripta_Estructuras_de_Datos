@@ -377,3 +377,59 @@ No cambies nada más.
 **Prompt:** /speckit-implement De la fase 7 de specs/001-terreno-cazador/tasks.md haz T091, T092, T093, T096 y el punto de control T097. No hagas T094 (PROMPTS lo llevo yo). T086 ya la hice: los resultados están en docs/resultados_bench_p2.txt (docs/resultados_bench.txt es el de P1 y no se toca); márcala hecha. Las secciones §5.1 y §5.2 van en DECISIONES.md de la raíz, con el mismo formato que las secciones de P1 de ese archivo: sin introducción, los 6 puntos en negrita (Problema, Alternativas, Decisión, Complejidad, Evidencia, Límites), viñetas cortas y una o dos tablas pequeñas con números de docs/resultados_bench_p2.txt. En Límites de §5.2 incluye: B4/B5 inestables pasan de 20 ms pero son 50 cambios de puerta por acción, algo que el juego no produce; B7 mide el modelo y no el Controlador. En T096 deja la prueba manual del juego para mí. No hagas commit.
 
 **USO:** Documentacion y demás.
+
+**Prompt:** /speckit-specify SPECIFY_FEATURE_DIRECTORY=specs/003-resolubilidad. Capacidad 3 del enunciado (docs/Cripta - Parte II.txt): verificación de resolubilidad (§3.5, §4.2, §4.3, §5.4, §6.1, §6.3, §7.3, Apéndices A y B). Numera los requisitos FR-301, FR-302… y los criterios de éxito SC-301… para que no choquen con la 001. Sin nombres de estructuras, clases ni módulos (eso va en el plan). No hagas commit.
+
+Reglas (las del enunciado más estas decisiones del grupo):
+- Antes de iniciar una partida se verifica con el esqueleto y la ubicación de las llaves (GET /criptas/<id>/llaves), sin pedir el contenido de ninguna sala. La consulta cuenta en el presupuesto de solicitudes y se guarda con la copia local de la cripta; vale mientras coincida la versión.
+- Supuestos de §3.5: se cruza toda salida abierta, toda salida cerrada sin llave y toda salida cerrada cuya llave ya se obtuvo; las llaves no se consumen; todo enemigo se puede derrotar; una llave que suelta un enemigo está en la sala donde ese enemigo inicia; trampas y cierres automáticos no bloquean. Una salida sin vuelta solo se cruza en su sentido.
+- Resoluble: desde sala_inicial se obtiene llave_salida y se llega a sala_salida cruzando una salida cerrada que pide llave_salida. Si la cripta no define sala_salida o llave_salida, no es resoluble (en la primera parte tampoco se puede ganar).
+- Orden de llaves si es resoluble (determinista): primero, por id, las llaves que se obtienen sin ninguna llave; luego, por id, las que se vuelven obtenibles con esas; y así sucesivamente. Incluye todas las llaves obtenibles.
+- Reporte si no es resoluble, todo sacado del mismo recorrido: (1) las llaves que no se pueden obtener; (2) la frontera bloqueada: cada salida cerrada que sale de una sala alcanzable hacia una no alcanzable y pide una llave no obtenible (sala, dirección, sala destino, llave); (3) dónde está cada llave de la frontera (sala, y enemigo si la suelta uno) o que no está en la cripta; (4) los ciclos de dependencia; (5) si llave_salida se obtiene pero ninguna salida que la pide lleva a sala_salida desde la región alcanzable, decirlo.
+- Dependencia para los ciclos: una llave no obtenible depende de la llave de la PRIMERA puerta bloqueada del camino que cruza menos puertas bloqueadas desde la región alcanzable hasta su sala (empate: la de menor id). Si su sala no se alcanza ni abriendo todas las puertas, no depende de ninguna y el reporte lo dice. Un ciclo es una cadena A → B → … → A; cada ciclo se reporta una vez, empezando por su llave de menor id. Ejemplo: llave_salida detrás de la única puerta que ella abre → ciclo llave_salida → llave_salida.
+- Una misma llave puede estar en varias ubicaciones: se obtiene en cualquiera. Una llave ubicada en una sala que no existe → la cripta se rechaza como dato inválido, igual que en la 001.
+- Si no es resoluble, la partida no inicia y se muestra el reporte; con --forzar se muestra el reporte y la partida inicia. Si es resoluble, al iniciar se muestra el orden de llaves.
+- Sin conexión y sin la ubicación de las llaves en la copia local no se puede verificar: se avisa y se trata como no resoluble (solo inicia con --forzar).
+- --verificar <cripta>: solo verifica e imprime el reporte; no crea la vista, ni la partida, ni partida.log. Código de salida 0 si es resoluble, 2 si no lo es, 1 si hubo un error (red, datos inválidos, sin llaves).
+- --replay no verifica: la partida del log ya empezó (pudo ser con --forzar). La verificación no es estado del juego: no se guarda ni la toca el pergamino.
+
+Rendimiento: el costo total crece aproximadamente lineal con salas + salidas + llaves; no se repite el recorrido de la cripta por cada llave obtenida. Máximo 200 ms (equipo local, sin red) con la cripta publicada más grande; mientras no se publique, con una sintética de 20 000 salas y 1 000 llaves encadenadas. --bench: recorrido incremental frente a repetirlo por cada llave, con criptas sintéticas deterministas por semilla con muchas llaves encadenadas.
+
+Los 4 casos de Resolubilidad del Apéndice B van como escenarios de aceptación.
+
+**USO:** Specify del objetivo 003
+
+**Prompt**/speckit-clarify Antes de preguntar, aplica estos cambios del grupo a specs/003-resolubilidad/spec.md:
+1. FR-334, SC-303 y el escenario 4 de la historia 5: la cripta sintética de referencia para los 200 ms es de 2 000 salas (el mismo tamaño de referencia de la 001) con 500 llaves encadenadas, no de 20 000 salas.
+2. FR-335 y SC-304: al duplicar el tamaño, el tiempo no pasa de 3 veces el anterior (lineal da 2; repetir el recorrido por cada llave da cerca de 4).
+3. SC-307: las pruebas de P1 y de la 001 que inician una partida sin conexión necesitan la ubicación de las llaves en sus datos de prueba (FR-324); solo se ajustan esos datos, no lo que comprueban.
+4. Marcador de FR-303: la región alcanzable es todo lo que se alcanza desde sala_inicial y se supone que el jugador puede volver a cualquier sala de la región, como pide el enunciado. Agrega en Supuestos el límite: con salidas sin vuelta, la verificación puede decir "resoluble" en una cripta donde el jugador queda atrapado; modelar dónde está el jugador obligaría a probar órdenes de llaves (en el peor caso crece de forma exponencial) y rompería el costo lineal de §5.4.
+Después sigue con las preguntas normales.
+
+**USO:** aplicación del clarify en el punto 003
+
+**Prompt:** /speckit-specify SPECIFY_FEATURE_DIRECTORY=specs/004-linea-de-tiempo. Capacidad 4 del enunciado (docs/Cripta - Parte II.txt): línea de tiempo (§3.6, §5.5, §6.1, §6.3, §7.3, Apéndice B «Línea de tiempo»). Numera los requisitos FR-401, FR-402… y los criterios SC-401…. Sin nombres de estructuras, clases ni módulos. No hagas commit.
+
+Reglas (las del enunciado más estas decisiones del grupo):
+- Estado en el instante t: el de después de ejecutar todos los eventos con tiempo ≤ t. Si a t le corresponde una decisión del jugador, es el estado justo antes de esa decisión; los eventos del mismo instante que en la agenda vienen después de la decisión no se incluyen.
+- historia <t>: t entero ≥ 0; si t es mayor que el reloj actual, se rechaza. historia #k: estado justo antes de la acción número k del jugador, contando como en P1 (las acciones deshechas no cuentan); k va de 1 a acciones del jugador + 1 (este último es el estado actual); fuera de ese rango se rechaza. Texto mal formado → comando inválido, como en P1. Un rechazo no consume tiempo ni cambia nada.
+- El resumen muestra como mínimo: instante consultado y reloj, número de acción, sala del jugador, vida y estadísticas (ataque, defensa, velocidad), inventario, efectos activos, enemigos de esa sala con su vida, y el mapa conocido en ese momento (el mapa conocido lo define la capacidad 002, que se especifica aparte; aquí solo se exige mostrarlo como era en t). El mismo resumen sirve para historia y para --replay --hasta.
+- La consulta no consume tiempo virtual, no es acción, no se anota en partida.log y no cambia el historial del pergamino ni el estado del azar: una partida con consultas y la misma partida sin consultas terminan idénticas.
+- Pergamino: las acciones revertidas dejan de existir en la línea de tiempo y la línea se recorta sin recorrer toda la historia. Después, historia no las muestra y #k se numera con las acciones que quedaron.
+- Puntos de control: copias completas del estado (incluido el estado del azar si se reconstruye re-simulando), a lo sumo uno cada K acciones del jugador. --checkpoint-cada K, entero ≥ 1; el valor por defecto lo decide el plan con mediciones. Fuera de los puntos de control solo se guarda lo necesario para reconstruir los cambios. Ninguna consulta aplica o deshace cambios de más de K acciones del jugador. La memoria crece con los cambios ocurridos más un punto de control cada K acciones, nunca con acciones × tamaño del estado. Ubicar el punto de control más cercano no recorre todos los puntos de control.
+- Guardar y cargar conserva la línea de tiempo completa y su K. Al cargar se usa el K guardado; si --checkpoint-cada indica otro, se avisa y se usa el guardado. El formato del archivo de partida cambia: un archivo de la primera parte o del formato anterior de la 001 se rechaza con un mensaje de incompatibilidad; nunca se carga en silencio (no se migra).
+- --replay partida.log --hasta t: reproduce hasta t e imprime el resumen sin instanciar la vista. Si t es posterior al final del log, muestra el último estado y dice que la partida terminó antes (o que el log termina antes, si la partida no terminó). --hasta sin --replay es un error de argumentos.
+- historia solo está disponible mientras la partida está en curso; para una partida terminada está --replay --hasta.
+
+Rendimiento: historia en menos de 50 ms con una partida de al menos 5 000 acciones del jugador y K por defecto (equipo local, sin red ni vista). Registrar la línea de tiempo no debe romper el límite de 20 ms por ciclo de la 001. --bench: partidas sintéticas deterministas por semilla de al menos 5 000 acciones; memoria y tiempo de consulta con al menos tres valores de K y con la alternativa sin puntos de control; y la alternativa de reconstrucción descartada (hacia adelante o hacia atrás), para respaldar la decisión.
+
+Los 6 casos de «Línea de tiempo» del Apéndice B van como escenarios de aceptación.
+
+**USO:** Specify del objetivo 004
+
+**Prompt**/speckit-clarify Antes de preguntar, aplica estos dos cambios del grupo a specs/004-linea-de-tiempo/spec.md:
+1. FR-406: el resumen muestra el instante consultado y el reloj de ESE estado, no el reloj actual de la partida, para que historia, --replay --hasta y una carga posterior den exactamente el mismo texto (HU1-1, HU3-1, HU4-1). Si la vista quiere mostrar el reloj actual, va fuera del resumen.
+2. FR-407: una consulta tampoco DEBE hacer solicitudes de red ni gastar presupuesto de solicitudes; agrega un escenario que lo pruebe.
+Después sigue con las preguntas normales.
+
+**USO:** 
