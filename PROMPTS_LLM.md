@@ -432,4 +432,24 @@ Los 6 casos de «Línea de tiempo» del Apéndice B van como escenarios de acept
 2. FR-407: una consulta tampoco DEBE hacer solicitudes de red ni gastar presupuesto de solicitudes; agrega un escenario que lo pruebe.
 Después sigue con las preguntas normales.
 
-**USO:** 
+**USO:** Clarify de preguntas de 004
+
+**Prompt:** /speckit-specify SPECIFY_FEATURE_DIRECTORY=specs/002-niebla-ir-a. Capacidad 2 del enunciado (docs/Cripta - Parte II.txt): niebla de guerra y viaje automático «ir a» (§3.3, §3.4, §5.3, §6.1, §6.3, §7.3, Apéndice B «Niebla de guerra e ir a»). Numera los requisitos FR-201, FR-202… y los criterios SC-201…. Sin nombres de estructuras, clases ni módulos. No hagas commit.
+
+Reglas (las del enunciado más estas decisiones del grupo):
+- Estados de cada sala para el jugador: explorada (entró al menos una vez; la inicial desde el instante 0), avistada (no explorada pero destino de una salida de una explorada) y desconocida. De una explorada conoce nombre, salidas, costo de cada salida y el estado de sus puertas según la última observación; de una avistada solo que existe (se muestra su id, no su nombre).
+- Observación de puertas: al entrar a una sala y antes de cada decisión del jugador, el jugador observa las salidas de la sala donde está. Como los dos lados de una puerta son la misma puerta, observarla desde un lado actualiza lo que recuerda de ella. Una salida sin vuelta que llega a la sala actual desde otra no se observa desde aquí. El mapa recuerda el estado de la última observación aunque después cambie.
+- Antorcha encendida: al entrar a una sala, también quedan exploradas todas las vecinas a las que llevan sus salidas (abiertas o cerradas), y sus salidas cuentan como observadas en ese instante. No se revela su contenido ni se activan sus enemigos o trampas.
+- Todo lo que muestra la vista y lo que usa «ir a» sale solo del conocimiento del jugador. Eso incluye la bitácora: solo muestra lo que pasa en la sala del jugador o le pasa al jugador (no avisa de enemigos que se regeneran o trampas que se rearman en otras salas). El reporte de resolubilidad de la 003 es la excepción ya declarada allí. El esqueleto completo y la precarga siguen siendo infraestructura.
+- El conocimiento es estado del juego: se guarda en el archivo de partida (un archivo de un formato anterior se rechaza como incompatible, igual que en la 004), se revierte con el pergamino y forma parte de la línea de tiempo (el resumen de historia de la 004 muestra el mapa conocido de ese momento).
+- Comando mapa: muestra las salas exploradas (id, nombre y cada salida con dirección, sala destino, costo y estado recordado) y las salas avistadas, ordenadas por id. No consume tiempo ni es acción.
+- ir a <sala>: solo hacia una sala explorada; hacia una no explorada, hacia la sala actual o sin ruta conocida desde el inicio, se rechaza sin consumir tiempo. Texto mal formado → comando inválido, como en P1.
+- La ruta usa solo salas exploradas y salidas que el mapa recuerda abiertas; minimiza la suma de costos y desempata como el cazador de la 001 (primer paso hacia la vecina de menor id). Se recalcula antes de cada paso, después de observar las salidas de la sala actual. No abre puertas aunque el jugador tenga la llave.
+- Cada paso es un movimiento ordinario completo (cuesta según la 001 y entre paso y paso corren los eventos del reloj). El viaje se detiene cuando: llega; entra a una sala con enemigos (activos o dormidos); el jugador recibe daño (ataque, trampa o veneno); deja de existir una ruta conocida (sin consumir tiempo adicional); un paso no se puede hacer (por ejemplo, sin presupuesto o sin conexión para cargar la sala); o la partida termina. La vista dice por qué se detuvo.
+- partida.log: cada paso se anota como un mover individual y la orden ir a como una línea de comentario; la reproducción ignora los comentarios (los logs de P1 se siguen reproduciendo igual). El pergamino revierte solo el último paso y el viaje no se reanuda.
+
+Rendimiento: consultar el estado de una sala o de una puerta recordada es frecuente y no debe depender del tamaño del mapa conocido; explorar cuesta en proporción a las salas reveladas; registrar y deshacer cambios del conocimiento es barato. Un paso de ir a (el cálculo de la ruta) en menos de 5 ms con el mapa conocido completo de la cripta de referencia de la 001 (2 000 salas). --bench: consultas al mapa conocido y cálculo de un paso de ir a, cada uno frente a una alternativa descartada, con criptas sintéticas deterministas por semilla.
+
+Los 6 casos de «Niebla de guerra e ir a» del Apéndice B van como escenarios de aceptación.
+
+**USO:** Specify de caso 002 (niebla + ir a)
