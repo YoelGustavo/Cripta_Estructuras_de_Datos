@@ -7,7 +7,7 @@ import time
 
 from crypta.bench import (bench_agenda, bench_cache, bench_cazador, bench_ciclo,
                           bench_inventario, bench_ordenamiento, bench_rastro,
-                          bench_red)
+                          bench_red, bench_resolubilidad)
 from crypta.bench.medicion import formato_tiempo, tabla
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
@@ -229,6 +229,17 @@ SECCIONES = (
      bench_cazador.ejecutar_escala),
     ("distancias", "B9 Dónde guardar las distancias (research D5)",
      bench_cazador.ejecutar_distancias),
+    # Capacidad 003 (specs/003-resolubilidad/contracts/bench.md).
+    ("resol_ingenua", "R1 Incremental frente a ingenua (FR-331)",
+     bench_resolubilidad.ejecutar_ingenua),
+    ("resol_limite", "R2 Límite de la verificación (FR-334)",
+     bench_resolubilidad.ejecutar_limite),
+    ("resol_crecimiento", "R3 Crecimiento al duplicar el tamaño (FR-335)",
+     bench_resolubilidad.ejecutar_crecimiento),
+    ("resol_igualdad", "R4 Igualdad con la alternativa ingenua (FR-332)",
+     bench_resolubilidad.ejecutar_igualdad),
+    ("resol_numeracion", "R5 Numeración de llaves (research D1)",
+     bench_resolubilidad.ejecutar_numeracion),
 )
 
 

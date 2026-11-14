@@ -787,5 +787,205 @@ class TestBenchCazador(unittest.TestCase):
             self.assertEqual(programa.main(), 1)
 
 
+# ======================================================================
+# Capacidad 003: resolubilidad (specs/003-resolubilidad/contracts/bench.md)
+# ======================================================================
+
+SECCIONES_RESOLUBILIDAD = ("resol_ingenua", "resol_limite", "resol_crecimiento",
+                           "resol_igualdad", "resol_numeracion")
+
+
+class TestGeneradorResolubilidad(unittest.TestCase):
+    """T044 (FR-330; HU5-1)."""
+
+    def test_hu5_1_misma_semilla_misma_cripta_FR_330(self):
+        from crypta.bench.bench_resolubilidad import generar_cripta_llaves, huella
+
+        for resoluble in (True, False):
+            a = generar_cripta_llaves(7, 300, 40, resoluble)
+            b = generar_cripta_llaves(7, 300, 40, resoluble)
+            otra = generar_cripta_llaves(8, 300, 40, resoluble)
+
+            self.assertEqual(huella(*a[:3]), huella(*b[:3]))
+            self.assertEqual(a[3], b[3])               # mismo barajado
+            self.assertNotEqual(huella(*a[:3]), huella(*otra[:3]))
+
+    def verificar(self, generales, esqueleto, llaves):
+        from crypta.Modelo.UbicacionLlaves import leer_ubicaciones
+        from crypta.Modelo.Verificador import verificar
+
+        mapa = Mapa()
+        mapa.cargar_desde_json(esqueleto)
+        return verificar(mapa, generales, leer_ubicaciones(llaves, mapa))
+
+    def test_resoluble_una_ronda_por_llave_encadenada_FR_330(self):
+        from crypta.bench.bench_resolubilidad import generar_cripta_llaves
+
+        generales, esqueleto, ordenadas, barajadas = generar_cripta_llaves(
+            3, 400, 50, resoluble=True)
+        resultado = self.verificar(generales, esqueleto, barajadas)
+
+        self.assertTrue(resultado.resoluble)
+        self.assertEqual(len(resultado.rondas), 51)   # 50 llaves + la de salida
+
+    def test_no_resoluble_con_ciclo_FR_330(self):
+        from crypta.bench.bench_resolubilidad import generar_cripta_llaves
+
+        for semilla in range(6):
+            with self.subTest(semilla=semilla):
+                generales, esqueleto, _, barajadas = generar_cripta_llaves(
+                    semilla, 400, 50, resoluble=False)
+                resultado = self.verificar(generales, esqueleto, barajadas)
+
+                self.assertFalse(resultado.resoluble)
+                self.assertGreaterEqual(len(resultado.reporte.ciclos), 1)
+
+    def test_ids_con_ceros_y_respuesta_ordenada_y_barajada_FR_330(self):
+        from crypta.bench.bench_resolubilidad import generar_cripta_llaves
+
+        _, esqueleto, ordenadas, barajadas = generar_cripta_llaves(5, 2000, 500)
+        ids = [entrada["id"] for entrada in ordenadas["llaves"]]
+
+        self.assertIn("itm_llave_00000", ids)
+        self.assertIn("itm_llave_00499", ids)
+        self.assertEqual(ids, sorted(ids))
+        self.assertNotEqual([e["id"] for e in barajadas["llaves"]], ids)
+        self.assertEqual(sorted(e["id"] for e in barajadas["llaves"]), ids)
+        self.assertLess(abs(len(esqueleto) - 2000), 20)
+
+
+class TestBenchResolubilidad(unittest.TestCase):
+    """T045 (FR-331 a FR-335; HU5-2, HU5-3, HU5-6)."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Corre una vez las secciones R1 a R5 en modo rápido, con una red
+        que falla si se la llama, una vista que falla si se crea y sin
+        copias locales (FR-333, HU5-6)."""
+        from crypta.bench import bench_resolubilidad
+
+        lineas = []
+        cls._carpeta = tempfile.TemporaryDirectory()
+
+        with patch("crypta.Adaptadores.FuenteHTTP.requests.get",
+                   side_effect=AssertionError("--bench usó la red")), \
+                patch("crypta.Vista.VistaConsola.VistaConsola.__init__",
+                      side_effect=AssertionError("--bench creó la vista")), \
+                patch("crypta.Adaptadores.FuenteOffline.FuenteOffline.__init__",
+                      side_effect=AssertionError("--bench usó una fuente")), \
+                patch.object(bench_resolubilidad, "CARPETA_COPIAS",
+                             cls._carpeta.name):
+            cls.codigo = bench.ejecutar(list(SECCIONES_RESOLUBILIDAD),
+                                        rapido=True, salida=lineas.append)
+
+        cls.texto = "\n".join(str(linea) for linea in lineas)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._carpeta.cleanup()
+
+    def seccion(self, titulo):
+        inicio = self.texto.index(f"=== {titulo}")
+        fin = self.texto.find("\n=== ", inicio + 1)
+        return self.texto[inicio:] if fin < 0 else self.texto[inicio:fin]
+
+    def test_hu5_6_corren_todas_sin_vista_ni_red_FR_333(self):
+        for titulo in ("R1", "R2", "R3", "R4", "R5"):
+            self.assertIn(f"=== {titulo}", self.texto)
+
+        self.assertEqual(self.codigo, 0)
+
+    def test_hu5_2_r1_incremental_frente_a_ingenua_FR_331(self):
+        texto = self.seccion("R1")
+        for columna in ("incremental", "ingenua", "resoluble",
+                        "ingenua / incremental"):
+            self.assertIn(columna, texto)
+
+    def test_hu5_4_r2_limite_FR_334(self):
+        texto = self.seccion("R2")
+        for columna in ("media", "p95", "máximo", "cargar esqueleto",
+                        "¿cumple?", "sintética resoluble",
+                        "sintética no resoluble"):
+            self.assertIn(columna, texto)
+        self.assertIn("No hay copia local", texto)
+
+    def test_hu5_4_r2_mide_la_cripta_publicada_mas_grande_FR_334(self):
+        """R2 mide la copia local más grande que tenga llaves (sin su id en
+        el código); las copias sin llaves no cuentan."""
+        import json
+        from crypta.bench import bench_resolubilidad
+        from crypta.bench.bench_resolubilidad import CriptaLlaves
+
+        grande = CriptaLlaves(1, 120, 10)
+        chica = CriptaLlaves(2, 60, 5)
+        sin_llaves = CriptaLlaves(3, 400, 20)
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            for nombre, cripta, llaves in (
+                    ("c-grande", grande, grande.llaves_ordenadas),
+                    ("c-chica", chica, chica.llaves_ordenadas),
+                    ("c-sin-llaves", sin_llaves, None)):
+                datos = {"version": "v", "esqueleto": cripta.esqueleto,
+                         "contenidos": [], "datos_generales": cripta.generales}
+                if llaves is not None:
+                    datos["llaves"] = llaves
+                with open(os.path.join(carpeta, f"{nombre}.json"), "w",
+                          encoding="utf-8") as archivo:
+                    json.dump(datos, archivo)
+
+            self.assertEqual(bench_resolubilidad.copia_mas_grande(carpeta)[0],
+                             "c-grande")
+            texto = bench_resolubilidad.ejecutar_limite(rapido=True,
+                                                        carpeta=carpeta)
+
+        self.assertIn("c-grande (publicada)", texto)
+        self.assertIsNone(bench_resolubilidad.copia_mas_grande(
+            os.path.join(tempfile.gettempdir(), "no-existe-copia")))
+
+    def test_hu5_5_r3_cocientes_FR_335(self):
+        texto = self.seccion("R3")
+        self.assertIn("cociente", texto)
+        self.assertIn("¿cumple?", texto)
+        self.assertIn("ingenua", texto)
+
+    def test_hu5_3_r4_sin_diferencias_FR_332(self):
+        texto = self.seccion("R4")
+        self.assertIn("Total: 0 diferencias", texto)
+        self.assertNotIn("ERROR", texto)
+
+    def test_hu5_3_r4_una_ingenua_saboteada_da_error_FR_332(self):
+        """FR-332, HU5-3: si la ingenua da otro resultado, R4 imprime ERROR
+        y el --bench sale con código distinto de 0."""
+        from crypta.bench import bench_resolubilidad
+        from crypta.Modelo.VerificadorIngenuo import verificar_ingenuo
+
+        def saboteada(mapa, generales, ubicaciones):
+            resultado = verificar_ingenuo(mapa, generales, ubicaciones)
+            if resultado.reporte is not None:
+                resultado.reporte.no_obtenibles.agregar("itm_llave_falsa")
+            else:
+                resultado.rondas.agregar(Vector())
+            return resultado
+
+        texto, errores = bench_resolubilidad.ejecutar_igualdad(
+            rapido=True, ingenuo=saboteada)
+        self.assertGreater(errores, 0)
+        self.assertIn("ERROR", texto)
+
+        with patch.object(bench_resolubilidad.ejecutar_igualdad,
+                          "__defaults__", (False, saboteada)), \
+                redirect_stdout(io.StringIO()):
+            codigo = bench.principal(["resol_igualdad", "--rapido"])
+        self.assertNotEqual(codigo, 0)
+
+    def test_r5_numeracion_y_altura_D1(self):
+        texto = self.seccion("R5")
+        for columna in ("ordenar + desde_ordenados", "insertar", "barajados",
+                        "ordenados", "altura"):
+            self.assertIn(columna, texto)
+        # Con 500 ids ordenados, insertar da altura 500 (P1 §4.4).
+        self.assertRegex(texto, r"500\s+insertar\s+ordenados\s+\S+ \S+\s+500")
+
+
 if __name__ == "__main__":
     unittest.main()
