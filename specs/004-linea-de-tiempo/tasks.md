@@ -256,7 +256,7 @@ que dio `historia` en la partida original.
 
 ### Pruebas de la historia 3 (escribir primero; deben fallar)
 
-- [ ] T029 [P] [HU3] Escribir `tests/test_replay_hasta.py` (FR-413 a FR-416), llamando a `main` con argumentos y una fuente sin conexión en carpeta temporal:
+- [X] T029 [P] [HU3] Escribir `tests/test_replay_hasta.py` (FR-413 a FR-416), llamando a `main` con argumentos y una fuente sin conexión en carpeta temporal:
   - HU3-1: `--hasta 500` imprime exactamente el texto que dio `historia 500` en la partida, con una vista que falla si se instancia;
   - HU3-2: partida terminada antes de t → último estado + «La partida terminó en el instante <r>, antes de <t>.», código 0 (Apéndice B);
   - HU3-3: log que acaba antes de t → «El log termina en el instante <r>, antes de <t>.», código 0; log ilegible → código 1;
@@ -265,14 +265,16 @@ que dio `historia` en la partida original.
 
 ### Implementación de la historia 3
 
-- [ ] T030 [HU3] En `crypta/Controlador/Reproductor.py` (D12; FR-413): `reproducir_registro(…, k=K_POR_DEFECTO)` crea una `LineaDeTiempo(k)`, la inicia después de `partida.iniciar()` y ejecuta cada comando con `ejecutar_y_registrar`. `Reproduccion` agrega el atributo `linea`. Los errores no cambian.
-- [ ] T031 [HU3] En `crypta/main.py` (FR-414 a FR-416; contracts/cli.md):
+- [X] T030 [HU3] En `crypta/Controlador/Reproductor.py` (D12; FR-413): `reproducir_registro(…, k=K_POR_DEFECTO)` crea una `LineaDeTiempo(k)`, la inicia después de `partida.iniciar()` y ejecuta cada comando con `ejecutar_y_registrar`. `Reproduccion` agrega el atributo `linea`. Los errores no cambian.
+- [X] T031 [HU3] En `crypta/main.py` (FR-414 a FR-416; contracts/cli.md):
   - argumento `--hasta t` (entero ≥ 0, con un `type` propio que rechaza negativos y no enteros);
   - `parser.error` si viene sin `--replay`;
   - en `reproducir(args)`, si hay `--hasta`: ubica t en `resultado.linea` (o el último estado con el aviso de FR-415 si t > reloj final), `consultar` y `print(formatear_resumen(...))`, código 0;
   - sin `--hasta`, la salida actual no cambia;
   - nunca se instancia la vista.
-- [ ] T032 [HU3] Punto de control (FR-413 a FR-416): T029 pasa, `python -m unittest` en verde y commit «004 HU3: --replay … --hasta».
+
+  *Hecho.* El resumen va en `mostrar_hasta(resultado, t)`. Con t posterior al final, se resume la partida reproducida con el pedido «instante <t>» y el aviso en la línea «Aviso:» (contracts/resumen.md). `reproducir` lee `hasta` con `getattr` porque las pruebas de P1 arman `args` sin ese campo.
+- [X] T032 [HU3] Punto de control (FR-413 a FR-416): T029 pasa, `python -m unittest` en verde (906 pruebas, 1 omitida que ya existía) y commit «004 HU3: --replay … --hasta» (lo hace el grupo).
 
 ---
 

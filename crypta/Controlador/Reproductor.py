@@ -1,5 +1,6 @@
 from crypta.Adaptadores.RegistroPartida import leer_registro
-from crypta.Controlador.Comandos import ComandoInvalido, ejecutar_comando
+from crypta.Controlador.Comandos import ComandoInvalido, ejecutar_y_registrar
+from crypta.Modelo.LineaDeTiempo import K_POR_DEFECTO, LineaDeTiempo
 from crypta.Modelo.Partida import AccionInvalida
 
 
@@ -21,11 +22,15 @@ class ReproduccionFallida(Exception):
 
 
 class Reproduccion:
-    
-    def __init__(self, encabezado, partida, comandos):
+    """Lo que dejó un `--replay`: la partida reproducida, la cantidad de
+    comandos repetidos y su línea de tiempo (capacidad 004, FR-413), armada
+    igual que jugando."""
+
+    def __init__(self, encabezado, partida, comandos, linea=None):
         self.encabezado = encabezado
         self.partida = partida
         self.comandos = comandos
+        self.linea = linea
 
 
 class Reproductor:
@@ -33,11 +38,12 @@ class Reproductor:
     def __init__(self, preparador):
         self._preparador = preparador
 
-    def reproducir(self, ruta, al_ejecutar=None):
+    def reproducir(self, ruta, al_ejecutar=None, k=K_POR_DEFECTO):
         encabezado, comandos = leer_registro(ruta)
-        return self.reproducir_registro(encabezado, comandos, al_ejecutar)
+        return self.reproducir_registro(encabezado, comandos, al_ejecutar, k)
 
-    def reproducir_registro(self, encabezado, comandos, al_ejecutar=None):
+    def reproducir_registro(self, encabezado, comandos, al_ejecutar=None,
+                            k=K_POR_DEFECTO):
         self._revisar_versiones(encabezado)
 
         partida = self._preparador.crear_partida(encabezado)
@@ -53,6 +59,10 @@ class Reproductor:
 
         partida.iniciar()
 
+        # La misma línea que arma el Controlador al jugar (research D12).
+        linea = LineaDeTiempo(k)
+        linea.iniciar(partida)
+
         numero = 0
 
         while not comandos.esta_vacia():
@@ -63,14 +73,15 @@ class Reproductor:
                 raise ReproduccionFallida(numero, comando, "la partida ya había terminado")
 
             try:
-                ejecutar_comando(partida, comando, self._preparador.garantizar_sala)
+                ejecutar_y_registrar(partida, linea, comando,
+                                     self._preparador.garantizar_sala)
             except (ComandoInvalido, AccionInvalida) as error:
                 raise ReproduccionFallida(numero, comando, error) from error
 
             if al_ejecutar is not None:
                 al_ejecutar(numero, comando, partida)
 
-        return Reproduccion(encabezado, partida, numero)
+        return Reproduccion(encabezado, partida, numero, linea)
 
     def _revisar_versiones(self, encabezado):
         if not self._preparador.cripta_disponible(encabezado.cripta_id,

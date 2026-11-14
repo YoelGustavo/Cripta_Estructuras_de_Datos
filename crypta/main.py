@@ -10,6 +10,7 @@ from crypta.Adaptadores.RegistroPartida import (
     RegistroPartida,
 )
 
+from crypta.Controlador.Comandos import ejecutar_comando
 from crypta.Controlador.Controlador import Controlador
 from crypta.Controlador.Fabrica import nueva_partida
 from crypta.Controlador.GestorContenido import GestorContenido
@@ -19,6 +20,8 @@ from crypta.Controlador.RepositorioFichas import RepositorioFichas
 from crypta.Controlador.Verificacion import (RESOLUBLE, codigo_de,
                                              preparar_verificacion, texto_de)
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
+from crypta.Modelo.Reconstruccion import consultar
+from crypta.Modelo.Resumen import armar_resumen, pedido_instante
 from crypta.Modelo.TablaPuntajes import ErrorTablaPuntajes, TablaPuntajes
 from crypta.Controlador.Reproductor import (
     ReproduccionFallida,
@@ -26,12 +29,23 @@ from crypta.Controlador.Reproductor import (
     Reproductor,
 )
 
+from crypta.Vista.FormatoResumen import formatear_resumen
 from crypta.Vista.VistaConsola import VistaConsola
 
 
 RUTA_PUNTAJES = "puntajes.txt"
 
 RUTA_REGISTRO = "partida.log"
+
+
+def entero_no_negativo(texto):
+    """`type` de `--hasta` (FR-416): solo dígitos ASCII, así se rechazan el
+    signo, los decimales y cualquier otro texto."""
+    if not texto or any(caracter not in "0123456789" for caracter in texto):
+        raise argparse.ArgumentTypeError(
+            f"debe ser un entero mayor o igual que 0: {texto!r}")
+
+    return int(texto)
 
 
 def crear_argumentos():
@@ -104,7 +118,20 @@ def crear_argumentos():
         help="Capacidad de la caché de fichas (predeterminado: 25)"
     )
 
-    return parser.parse_args()
+    parser.add_argument(
+        "--hasta",
+        metavar="T",
+        type=entero_no_negativo,
+        default=None,
+        help="Con --replay: mostrar el estado de la partida en el instante T"
+    )
+
+    args = parser.parse_args()
+
+    if args.hasta is not None and args.replay is None:
+        parser.error("--hasta solo se puede usar con --replay")
+
+    return args
 
 
 
@@ -258,6 +285,11 @@ def reproducir(args):
     finally:
         preparador.cerrar()
 
+    hasta = getattr(args, "hasta", None)
+
+    if hasta is not None:
+        return mostrar_hasta(resultado, hasta)
+
     partida = resultado.partida
     jugador = partida.jugador
 
@@ -275,6 +307,29 @@ def reproducir(args):
         else "Resultado: la partida no había terminado"
     )
 
+    return 0
+
+
+def mostrar_hasta(resultado, t):
+    """`--replay … --hasta t` (FR-413 a FR-415): el resumen del estado en el
+    instante t, el mismo texto que `historia t` en la partida, sin vista. Si
+    t es posterior al final del log, el último estado con su aviso. Código
+    0 siempre que se muestra un resumen."""
+    partida = resultado.partida
+    linea = resultado.linea
+
+    if t > partida.reloj:
+        if partida.terminada:
+            aviso = f"La partida terminó en el instante {partida.reloj}, antes de {t}."
+        else:
+            aviso = f"El log termina en el instante {partida.reloj}, antes de {t}."
+
+        resumen = armar_resumen(partida, pedido_instante(t), aviso=aviso)
+    else:
+        objetivo = linea.ubicar_instante(t, partida.reloj)
+        resumen = consultar(linea, objetivo, partida, ejecutar_comando)
+
+    print(formatear_resumen(resumen), end="")
     return 0
 
 
