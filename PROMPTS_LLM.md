@@ -466,3 +466,21 @@ Después sigue con las preguntas normales.
 **Prompt:** B: solo lo detienen las condiciones de §3.4 (y las técnicas que ya están); si el enemigo ataca, el daño lo detiene.
 
 **USO:** Respuesta a una pregunta que me hizo
+
+
+**Prompt** /speckit-plan SPECIFY_FEATURE_DIRECTORY=specs/003-resolubilidad (actualiza .specify/feature.json para que apunte ahí). Plan de la capacidad 003 según su spec y la constitución. Indicaciones del grupo:
+- Solo TDA del curso (sin dict, set, heapq, bisect ni collections). Reutiliza lo de P1 y la 001: índices densos de las salas, Cola para el recorrido, Vector para marcas y ordenar para los ids.
+- Para pasar del id de una llave a un número, compara como alternativas una tabla hash hecha a mano, ArbolBusqueda con inserciones, y ordenar los ids + ArbolBusqueda.desde_ordenados (balanceado). Ojo: un ArbolBusqueda llenado con ids en orden se degenera en una lista (límite documentado en P1 §4.4).
+- Un solo recorrido por oleadas: las puertas cerradas cuya llave todavía no se tiene se "estacionan" por llave y se liberan cuando la llave se obtiene. Si la cripta no es resoluble, el MISMO recorrido continúa por capas más allá de la frontera para sacar las dependencias (FR-314) y de ahí los ciclos; nunca un recorrido por llave.
+- La alternativa ingenua del bench: repetir el recorrido completo cada vez que se obtiene una llave.
+- No implementes nada todavía. No hagas commit.
+
+**USO:** specificacion del plan de los puntos 003
+
+**Prompt:** Ajustes del grupo a specs/003-resolubilidad (no implementes nada, no hagas commit):
+1. D1: no se implementa TablaHash ni NumeracionHash. La tabla hash queda como alternativa analizada en research.md, sin medir, y R5 mide solo ArbolBusqueda con insertar (ids barajados y ids ordenados, con su altura) frente a ordenar + desde_ordenados. Quita TablaHash.py y test_tabla_hash.py de plan.md, data-model.md, contracts/bench.md y quickstart.md.
+2. contracts/bench.md, R4: compara con la ingenua solo las criptas de los tamaños de R1 y las 50 pequeñas (con 4 000 y 8 000 salas la ingenua tardaría minutos). En R1, la ingenua del tamaño mayor se mide con una sola repetición.
+3. D6: en FR-311 de spec.md agrega: "dentro de la misma sala, primero la ubicación sin enemigo y después las que tienen enemigo, por id de enemigo", y en research.md y plan.md quita lo de "se propone llevarlo a la spec".
+
+**USO:** Ajuste del resultado anterior entregado.
+
