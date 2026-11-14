@@ -1,9 +1,10 @@
+import copy
 import random
 
 from crypta.Modelo.Cambio import Cambio
 from crypta.Modelo.Efecto import ANTORCHA, VELOCIDAD, VENENO, Efecto
 from crypta.Modelo.EstadoJuego import EstadoJuego
-from crypta.Modelo.Historial import RegistroAccion
+from crypta.Modelo.Historial import Historial, RegistroAccion
 from crypta.Modelo.Inventario import CLASE_PERGAMINO, CLASES_EQUIPABLES
 from crypta.Modelo.Enemigo import CAZADOR
 from crypta.Modelo.Perseguidor import ATACAR, MOVER, Perseguidor
@@ -43,6 +44,11 @@ class AccionInvalida(Exception):
     puerta está cerrada...). Se lanza ANTES de abrir la acción: no se
     gasta tiempo ni se anota nada. El controlador muestra el mensaje y le
     vuelve a pedir una decisión."""
+
+
+# Atributos que `Partida.__deepcopy__` no copia: el mapa (va primero) y los
+# que la copia recibe fijos (research D3).
+_NO_SE_COPIAN = ("mapa", "_fichas", "_perseguidor", "al_ejecutar_evento")
 
 
 class _EnemigoQuitado:
@@ -97,6 +103,51 @@ class Partida:
         # crea su propio Perseguidor y lo registra en las puertas leídas
         # (FR-026); el rango ya se relee de la ficha en Enemigo.activar.
         self._perseguidor = None
+
+        # Línea de tiempo (capacidad 004). No son estado del juego y por
+        # omisión no cambian nada (FR-426):
+        # - `tope_tiempo`: si no es None, el ciclo de eventos se detiene
+        #   antes del primer evento posterior (research D9). Lo usa la
+        #   consulta para reconstruir un instante entre dos decisiones.
+        # - `al_ejecutar_evento(partida, evento)`: se llama después de cada
+        #   evento ejecutado que no es el turno del jugador. Lo usa solo el
+        #   oráculo de las pruebas y del bench (crypta/bench/oraculo_linea.py).
+        self.tope_tiempo = None
+        self.al_ejecutar_evento = None
+
+    def __deepcopy__(self, memo):
+        """Copia para un punto de control (research D3; FR-422).
+
+        Comparte las fichas (son un método del repositorio, que tiene la
+        fuente de red) y deja nuevos lo que no es estado del juego: sin
+        búsqueda del cazador (la copia crea la suya en el primer turno de un
+        cazador), sin callback, una bitácora vacía propia y un historial
+        vacío **sin límite**, para deshacer lo que re-ejecute una consulta.
+        Los reemplazos van en el `memo` que entrega `copy`, así toda
+        referencia a esos objetos desde otra parte de la partida recibe lo
+        mismo. El mapa se copia primero (en dos pasadas, `Mapa.__deepcopy__`)
+        para no pasar el límite de recursión."""
+        memo[id(self._fichas)] = self._fichas
+        memo[id(self.bitacora)] = Bitacora()
+        memo[id(self.estado.historial)] = Historial(limite=None)
+
+        if self._perseguidor is not None:
+            memo[id(self._perseguidor)] = None
+
+        copia = Partida.__new__(Partida)
+        memo[id(self)] = copia
+        copia.mapa = copy.deepcopy(self.mapa, memo)
+
+        for nombre, valor in vars(self).items():
+            if nombre not in _NO_SE_COPIAN:
+                setattr(copia, nombre, copy.deepcopy(valor, memo))
+
+        # Las funciones no pasan por el `memo` (copy las trata como
+        # atómicas): se fijan aquí.
+        copia._fichas = self._fichas
+        copia._perseguidor = None
+        copia.al_ejecutar_evento = None
+        return copia
 
     @property
     def id_sala_inicial(self):
@@ -476,10 +527,18 @@ class Partida:
 
     def _correr_hasta_el_jugador(self):
         while not self.terminada:
-            evento = self.agenda.siguiente()
+            if self.tope_tiempo is None:
+                evento = self.agenda.siguiente()
 
-            if evento is None:
-                raise RuntimeError("La agenda se quedó sin eventos")
+                if evento is None:
+                    raise RuntimeError("La agenda se quedó sin eventos")
+            else:
+                # Consulta de un instante entre dos decisiones (research D9):
+                # nada posterior al tope se ejecuta.
+                evento = self.agenda.siguiente_si_corresponde(self.tope_tiempo)
+
+                if evento is None:
+                    return
 
             self._anotar(Cambio.de_operacion(
                 "agenda", self.agenda, "restaurar_evento", evento
@@ -491,6 +550,9 @@ class Partida:
                 return
 
             self._ejecutar(evento)
+
+            if self.al_ejecutar_evento is not None:
+                self.al_ejecutar_evento(self, evento)
 
     def _ejecutar(self, evento):
         tipo = evento.tipo

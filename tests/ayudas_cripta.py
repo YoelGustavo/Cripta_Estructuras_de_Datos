@@ -423,3 +423,190 @@ class FuenteQueFalla(FuenteDatos):
 
     def obtener_llaves(self, cripta_id):
         self._fallar("obtener_llaves")
+
+
+# ---------------------------------------------------------------------------
+# Línea de tiempo (capacidad 004, T003)
+# ---------------------------------------------------------------------------
+#
+# El oráculo (`jugar_con_oraculo`) y `serializar_estado` viven en
+# `crypta/bench/oraculo_linea.py`, porque los usa también el bench (FR-430);
+# las pruebas los importan de ahí. Aquí solo se arma la partida y se eligen
+# los comandos.
+
+FICHAS_LINEA = (
+    {"id": "itm_daga", "clase": "arma", "nombre": "Daga", "peso": 1,
+     "valor": 1, "ataque_bonus": 2},
+    {"id": "itm_cota", "clase": "armadura", "nombre": "Cota", "peso": 3,
+     "valor": 2, "defensa_bonus": 1},
+    {"id": "itm_pocion", "clase": "pocion", "nombre": "Poción", "peso": 1,
+     "valor": 1, "cura": 5},
+    {"id": "itm_pocion_rapida", "clase": "pocion", "nombre": "Poción rápida",
+     "peso": 1, "valor": 1, "cura": 2, "modificador_velocidad": 50,
+     "duracion": 300},
+    {"id": "itm_antorcha", "clase": "antorcha", "nombre": "Antorcha",
+     "peso": 1, "valor": 1, "duracion": 400},
+    {"id": "itm_pergamino", "clase": "pergamino_retroceso",
+     "nombre": "Pergamino", "peso": 0, "valor": 1},
+    {"id": "trp_veneno", "clase": "trampa", "nombre": "Aguja", "daño": 1,
+     "veneno": 1, "rearme": 250},
+    ficha_errante("ent_errante", velocidad=90, vida_max=14,
+                  suelta=("itm_pergamino",)),
+    ficha_rastreador("ent_rastreador", velocidad=120, vida_max=10),
+)
+
+
+def esqueleto_linea():
+    """Cuadrícula de 3 × 3 (salas 1 a 9) con costos distintos y una puerta
+    cerrada sin llave con cierre automático entre 1 y 4."""
+    def vecinas(i):
+        fila, columna = (i - 1) // 3, (i - 1) % 3
+        salidas = {}
+
+        if columna < 2:
+            salidas["E"] = salida(i + 1, costo=50 + 25 * columna)
+        if columna > 0:
+            salidas["O"] = salida(i - 1, costo=50 + 25 * (columna - 1))
+        if fila < 2:
+            salidas["S"] = salida(i + 3, costo=100)
+        if fila > 0:
+            salidas["N"] = salida(i - 3, costo=100)
+
+        return salidas
+
+    esqueleto = [sala(i, vecinas(i)) for i in range(1, 10)]
+    esqueleto[0]["salidas"]["S"] = salida(4, costo=100, cerrada=True,
+                                          cierre_automatico=150)
+    esqueleto[3]["salidas"]["N"] = salida(1, costo=100, cerrada=True,
+                                          cierre_automatico=150)
+    return esqueleto
+
+
+def contenidos_linea():
+    return [
+        contenido(1, objetos=("itm_daga", "itm_cota", "itm_pocion",
+                              "itm_pergamino", "itm_pergamino",
+                              "itm_antorcha")),
+        contenido(2, enemigos=(("e-1", "ent_errante"),)),
+        contenido(3, enemigos=(("r-1", "ent_rastreador"),),
+                  objetos=("itm_pocion_rapida",)),
+        contenido(4),
+        contenido(5, trampas=(("t-5", "trp_veneno"),)),
+        contenido(6, objetos=("itm_pergamino", "itm_pocion")),
+        contenido(7),
+        contenido(8, enemigos=(("e-2", "ent_errante"),)),
+        contenido(9, objetos=("itm_cota",)),
+    ]
+
+
+class CriptaConPergaminos:
+    """Una partida pequeña para la línea de tiempo (T003).
+
+    - `partida`: iniciada en la sala 1; solo la sala 1 tiene su contenido,
+      las demás se cargan al entrar con `garantizar` (salas aún sin
+      contenido, HU1-12).
+    - `fuente`: `FuenteContadora` (cuenta las solicitudes).
+    - `gestor`: `GestorContenido` de verdad sobre esa fuente.
+    - `garantizar`: `gestor.garantizar_sala`, para `ejecutar_comando`.
+
+    Hay objetos de todas las clases que usa la línea (arma, armadura,
+    pociones, antorcha), pergaminos en el suelo y que suelta un enemigo, un
+    errante, un rastreador, una trampa con veneno y una puerta con cierre
+    automático. El jugador tiene vida de sobra. Llamar a `cerrar()` al
+    final."""
+
+    def __init__(self, semilla=SEMILLA):
+        from crypta.Controlador.GestorContenido import GestorContenido
+
+        esqueleto = esqueleto_linea()
+        contenidos = contenidos_linea()
+        fichas = catalogo(*FICHAS_LINEA)
+
+        self.fuente = FuenteContadora(esqueleto, contenidos, fichas)
+        mapa = Mapa()
+        mapa.cargar_desde_json(esqueleto)
+        mapa.asignar_contenidos([datos for datos in contenidos
+                                 if datos["sala"] == 1])
+
+        jugador = nuevo_jugador(vida_max=500, ataque=7, defensa=2,
+                                inventario_max=10)
+        self.partida = Partida(mapa, jugador, 1, fichas.get, semilla=semilla)
+        self.gestor = GestorContenido(self.fuente, mapa, CRIPTA_ID)
+        self.garantizar = self.gestor.garantizar_sala
+        self.partida.iniciar()
+
+    def cerrar(self):
+        self.gestor.cerrar()
+
+
+def partida_con_pergaminos(semilla=SEMILLA):
+    """Ver `CriptaConPergaminos`."""
+    return CriptaConPergaminos(semilla)
+
+
+def comando_al_azar(partida, azar):
+    """Un comando probable de ser válido en el estado actual de `partida`.
+    El juego puede rechazarlo (por ejemplo, mover contra una puerta que se
+    cerró): el que juega lo salta."""
+    sala_actual = partida.sala_actual()
+    inventario = partida.jugador.inventario
+    presentes = partida.enemigos_presentes()
+    r = azar.random()
+
+    if len(presentes) > 0 and r < 0.30:
+        return f"atacar {presentes.obtener(0).id_instancia}"
+
+    if sala_actual.cantidad_objetos() > 0 and r < 0.40:
+        return f"recoger {azar.randrange(sala_actual.cantidad_objetos())}"
+
+    actual = inventario.actual()
+
+    if actual is not None and r < 0.50:
+        if actual.get("clase") in ("arma", "armadura"):
+            return "equipar"
+        return "usar"
+
+    if r < 0.56:
+        return azar.choice(("avanzar", "retroceder"))
+
+    if sala_actual.cantidad_pergaminos() > 0 and r < 0.62:
+        return "recoger_pergamino"
+
+    if (inventario.tiene_pergamino() and partida.estado.historial.puede_deshacer()
+            and r < 0.68):
+        return "pergamino"
+
+    if r < 0.70:
+        return "soltar"
+
+    if r < 0.74:
+        for direccion in "NSEO":
+            puerta = sala_actual.obtener_puerta(direccion)
+
+            if puerta is not None and puerta.esta_cerrada():
+                return f"abrir {direccion}"
+
+    if r < 0.78:
+        return "esperar"
+
+    abiertas = [direccion for direccion in "NSEO"
+                if sala_actual.obtener_puerta(direccion) is not None
+                and not sala_actual.obtener_puerta(direccion).esta_cerrada()]
+
+    if not abiertas:
+        return "esperar"
+
+    return "mover " + azar.choice(abiertas)
+
+
+def comandos_al_azar(partida, azar, cantidad):
+    """Generador de `cantidad` comandos que mezclan mover, atacar, recoger,
+    usar, equipar, soltar, abrir, esperar, avanzar, retroceder,
+    recoger_pergamino y pergamino. Cada comando se elige **cuando se pide**,
+    mirando el estado de ese momento, así sirve directamente como
+    `comandos` de `jugar_con_oraculo`."""
+    for _ in range(cantidad):
+        if partida.terminada:
+            return
+
+        yield comando_al_azar(partida, azar)

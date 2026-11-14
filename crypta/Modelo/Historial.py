@@ -30,7 +30,11 @@ class RegistroAccion:
 
 class Historial:
     def __init__(self, limite=5):
-        if limite < 1:
+        """`limite`: cuántas acciones se recuerdan (5 en P1, §2.11). Con
+        `None` no hay límite: lo usan los puntos de control de la línea de
+        tiempo, que deshacen hasta K acciones re-ejecutadas (capacidad 004,
+        research D2; FR-423)."""
+        if limite is not None and limite < 1:
             raise ValueError(
                 "El límite del historial debe ser mayor que 0"
             )
@@ -53,7 +57,7 @@ class Historial:
             accion
         )
 
-        if len(self._acciones) > self._limite:
+        if self._limite is not None and len(self._acciones) > self._limite:
             mas_antigua = self._acciones.primero()
 
             if mas_antigua is not None:

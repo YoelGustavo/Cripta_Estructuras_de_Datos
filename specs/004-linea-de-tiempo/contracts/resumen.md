@@ -9,7 +9,7 @@ HISTORIA <pedido>
 Reloj: <reloj del estado>   Próxima acción: #<k>
 Sala: <id> <nombre>
 Vida: <vida>/<vida_max>   Ataque: <ataque>   Defensa: <defensa>   Velocidad: <velocidad>
-Efectos: <ninguno | veneno hasta <t>, antorcha hasta <t>, velocidad <valor> hasta <t>>
+Efectos: <ninguno | veneno hasta <t>, antorcha hasta <t>, velocidad <cambio con signo, p. ej. +30> hasta <t>>
 Inventario (<ocupados>/<capacidad>):
   <i>. <nombre> (<id>)[ [arma equipada]| [armadura equipada]][ <- actual]
   ...

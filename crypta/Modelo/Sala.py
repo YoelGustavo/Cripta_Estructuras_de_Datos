@@ -1,3 +1,5 @@
+import copy
+
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.Enemigo import Enemigo
 from crypta.Modelo.Puerta import Puerta
@@ -86,6 +88,28 @@ class Sala:
         # que llegan a esta sala, incluidas las que no tienen vuelta.
         self.indice = None
         self.entradas = Vector()
+
+    def __deepcopy__(self, memo):
+        """Copia para un punto de control (capacidad 004, research D3)."""
+        copia = self.copia_vacia()
+        memo[id(self)] = copia
+        self.llenar_copia(copia, memo)
+        return copia
+
+    def copia_vacia(self):
+        """Una Sala sin atributos, para que `Mapa.__deepcopy__` la registre en
+        el `memo` antes de copiar ninguna sala (dos pasadas)."""
+        return Sala.__new__(Sala)
+
+    def llenar_copia(self, copia, memo):
+        """Copia los atributos en `copia`. El contenido original (el JSON
+        leído) se **comparte**: nunca se modifica después de
+        `asignar_contenido` (research D3)."""
+        for nombre, valor in vars(self).items():
+            if nombre == "contenido":
+                copia.contenido = valor
+            else:
+                setattr(copia, nombre, copy.deepcopy(valor, memo))
 
     def obtener_puerta(self, direccion):
         indice = indice_direccion(direccion)

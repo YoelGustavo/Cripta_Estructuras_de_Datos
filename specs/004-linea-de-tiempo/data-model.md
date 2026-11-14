@@ -112,6 +112,7 @@ mientras no exista, `None`). Más un aviso opcional para el caso de FR-415. El t
 | `Partida` | atributo `tope_tiempo` (`None`); `_correr_hasta_el_jugador` usa `siguiente_si_corresponde(tope)` cuando hay tope. Callback opcional `al_ejecutar_evento(partida, evento)` (`None` por omisión): si existe, `_correr_hasta_el_jugador` lo llama después de ejecutar cada evento que no es el turno del jugador. Solo lo usa el oráculo (`crypta/bench/oraculo_linea.py`) y la copia no lo hereda (`None`). `__deepcopy__` comparte `_fichas` y deja nuevos el `Perseguidor` (`None`), la bitácora y el historial | igual (FR-426) |
 | `Sala` | `__deepcopy__` comparte `contenido` | igual |
 | `EstadoPuerta` (`crypta/Modelo/Puerta.py`) | `__deepcopy__` deja `observador = None` | igual |
+| `Mapa` | `__deepcopy__` en dos pasadas: registra una copia vacía de cada sala en el `memo` y después las llena (`Sala.copia_vacia`, `Sala.llenar_copia`), para no pasar el límite de recursión (T010) | igual |
 
 ## Persistencia (formato 3), decisión D11
 

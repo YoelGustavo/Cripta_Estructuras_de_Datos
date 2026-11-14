@@ -1,3 +1,5 @@
+import copy
+
 from crypta.Modelo.Sala import Sala
 from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
 from crypta.estructuras.Vector import Vector
@@ -9,6 +11,34 @@ class Mapa:
     def __init__(self):
         self._salas = ArbolBusqueda()
         self._por_indice = Vector()
+
+    def __deepcopy__(self, memo):
+        """Copia en dos pasadas (capacidad 004, research D3; FR-422).
+
+        Las salas se apuntan entre sí (puertas compartidas, `sala_destino_ref`,
+        `entradas`). Un `deepcopy` directo bajaría por esa cadena sala tras
+        sala y pasaría el límite de recursión con unos cientos de salas.
+        Primero se registra en el `memo` una copia vacía de cada sala; después
+        se llena cada una: toda referencia a otra sala ya está en el `memo`."""
+        copia = Mapa.__new__(Mapa)
+        memo[id(self)] = copia
+
+        salas = self.obtener_todas()
+        copias = Vector(max(1, len(salas)))
+
+        for i in range(len(salas)):
+            sala = salas.obtener(i)
+            vacia = sala.copia_vacia()
+            memo[id(sala)] = vacia
+            copias.agregar(vacia)
+
+        for i in range(len(salas)):
+            salas.obtener(i).llenar_copia(copias.obtener(i), memo)
+
+        for nombre, valor in vars(self).items():
+            setattr(copia, nombre, copy.deepcopy(valor, memo))
+
+        return copia
 
     def cargar_desde_json(self, salas_json):
         salas = Vector()

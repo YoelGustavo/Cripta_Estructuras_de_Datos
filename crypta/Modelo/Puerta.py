@@ -1,3 +1,5 @@
+import copy
+
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
 
 
@@ -31,6 +33,21 @@ class EstadoPuerta:
         self.costo_declarado = costo
         self.extremos = None
         self.observador = None
+
+    def __deepcopy__(self, memo):
+        """La copia de un punto de control (capacidad 004, research D3) no
+        lleva la búsqueda vigente: `observador` no es estado del juego, y si
+        se copiara, la copia avisaría a la búsqueda de la partida viva."""
+        copia = EstadoPuerta.__new__(EstadoPuerta)
+        memo[id(self)] = copia
+
+        for nombre, valor in vars(self).items():
+            if nombre == "observador":
+                copia.observador = None
+            else:
+                setattr(copia, nombre, copy.deepcopy(valor, memo))
+
+        return copia
 
     @property
     def cerrada(self):

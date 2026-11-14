@@ -45,9 +45,9 @@ partidas armadas.
 
 **⚠️ T001 se hace antes de cualquier commit de código de la 004.**
 
-- [ ] T001 Confirmar en Git, en un commit de spec propio y antes de `tasks.md` y del código, la corrección de FR-427 en `specs/004-linea-de-tiempo/spec.md`: (a) al menos 5 000 acciones; (b) la partida de escala de 2 000 salas con 50 cazadores, al menos 1 000 acciones y solo el K por defecto, porque con 5 000 los puntos ocuparían ≈ 2,2 GB. HU5-7 y SC-404 ya dicen lo mismo; FR-432 remite a FR-427 b. También «Estado: Confirmada». El texto ya está escrito; falta el commit, que hace el grupo (principio VIII; FR-427, FR-432). **Bloquea T050.**
-- [ ] T002 Confirmar en Git `specs/004-linea-de-tiempo/tasks.md` y los anexos del plan corregidos en un commit propio, después de T001 (principio VIII; FR-401 a FR-434).
-- [ ] T003 Extender `tests/ayudas_cripta.py` y crear `crypta/bench/oraculo_linea.py` (habilita las pruebas de FR-401 a FR-426 y L3 de FR-430). Todos los imports nuevos van dentro de las funciones, para no romper las pruebas mientras no existen los módulos. El bench no importa nada de `tests/`; las pruebas reutilizan el módulo del bench. En `tests/ayudas_cripta.py`:
+- [X] T001 Confirmar en Git, en un commit de spec propio y antes de `tasks.md` y del código, la corrección de FR-427 en `specs/004-linea-de-tiempo/spec.md`: (a) al menos 5 000 acciones; (b) la partida de escala de 2 000 salas con 50 cazadores, al menos 1 000 acciones y solo el K por defecto, porque con 5 000 los puntos ocuparían ≈ 2,2 GB. HU5-7 y SC-404 ya dicen lo mismo; FR-432 remite a FR-427 b. También «Estado: Confirmada». El texto ya está escrito; falta el commit, que hace el grupo (principio VIII; FR-427, FR-432). **Bloquea T050.**
+- [X] T002 Confirmar en Git `specs/004-linea-de-tiempo/tasks.md` y los anexos del plan corregidos en un commit propio, después de T001 (principio VIII; FR-401 a FR-434).
+- [X] T003 Extender `tests/ayudas_cripta.py` y crear `crypta/bench/oraculo_linea.py` (habilita las pruebas de FR-401 a FR-426 y L3 de FR-430). Todos los imports nuevos van dentro de las funciones, para no romper las pruebas mientras no existen los módulos. El bench no importa nada de `tests/`; las pruebas reutilizan el módulo del bench. En `tests/ayudas_cripta.py`:
   - `partida_con_pergaminos(semilla)`: una partida sintética pequeña, sin red, con salas aún sin contenido, objetos (arma, armadura, poción), pergaminos de retroceso en el suelo, un enemigo errante, una puerta con cierre automático y veneno. Devuelve también la fuente contadora y el gestor de contenido.
   - `comandos_al_azar(partida, azar, cantidad)`: genera comandos válidos que mezclan `mover`, `atacar`, `recoger`, `usar`, `equipar`, `avanzar`, `retroceder`, `recoger_pergamino` y `pergamino`.
 
@@ -68,14 +68,14 @@ tiempo, copia de la partida para los puntos, y el resumen con su texto.
 
 ### Pruebas de la base (escribir primero; deben fallar)
 
-- [ ] T004 [P] Escribir `tests/test_busqueda_binaria.py` (D5; habilita FR-403). `primera_no_menor(vector, valor, clave)`:
+- [X] T004 [P] Escribir `tests/test_busqueda_binaria.py` (D5; habilita FR-403). `primera_no_menor(vector, valor, clave)`:
   - con un `Vector` vacío → 0;
   - con un elemento;
   - con empates → la **primera** posición con clave ≥ valor;
   - con un valor mayor que todos → `len(vector)`;
   - con un valor menor que todos → 0;
   - cuenta de comparaciones ≤ ⌈log₂(n + 1)⌉ + 1 con n = 1 000.
-- [ ] T005 [P] Escribir `TestBaseLinea` en `tests/test_linea_tiempo.py` (D3, D9; FR-407, FR-426):
+- [X] T005 [P] Escribir `TestBaseLinea` en `tests/test_linea_tiempo.py` (D3, D9; FR-407, FR-426):
   - `Historial(limite=None)` registra 1 000 acciones sin descartar ninguna y las deshace todas; `Historial()` sigue con límite 5, y `Historial(0)` sigue lanzando `ValueError`.
   - `Partida.tope_tiempo` es `None` por omisión, y una partida jugada con y sin el atributo tocado da la misma serialización (`serializar_estado`).
   - `Partida.al_ejecutar_evento` es `None` por omisión; con un callback, se llama una vez por cada evento ejecutado que no es el turno del jugador, y la partida jugada con y sin callback da la misma serialización (FR-426).
@@ -85,7 +85,7 @@ tiempo, copia de la partida para los puntos, y el resumen con su texto.
     - da `_perseguidor is None`, `al_ejecutar_evento is None`, `observador is None` en el `EstadoPuerta` de cada puerta, una bitácora vacía distinta y un `Historial` vacío sin límite;
     - la copia serializa igual que el original;
     - jugar 20 comandos sobre la copia no cambia la serialización ni la bitácora del original.
-- [ ] T006 [P] Escribir `tests/test_resumen.py` (FR-406; contracts/resumen.md):
+- [X] T006 [P] Escribir `tests/test_resumen.py` (FR-406; contracts/resumen.md):
   - texto completo exacto de una partida armada a mano, con veneno, antorcha y velocidad (orden fijo veneno, antorcha, velocidad), inventario en orden real con arma y armadura equipadas y «<- actual», pergaminos, dos enemigos activos y vivos más uno dormido y uno muerto (que no salen), y la línea fija «Mapa conocido: no disponible (capacidad 002)»;
   - el texto no contiene el reloj actual cuando el estado es otro;
   - la línea de aviso solo aparece si se pasa un aviso;
@@ -93,22 +93,26 @@ tiempo, copia de la partida para los puntos, y el resumen con su texto.
 
 ### Implementación de la base
 
-- [ ] T007 [P] Crear `crypta/estructuras/BusquedaBinaria.py` (D5; FR-403): función `primera_no_menor(vector, valor, clave)` sobre un `Vector` ordenado por `clave`, en O(log n), sin `bisect`. Hace pasar T004.
-- [ ] T008 Cambiar `crypta/Modelo/Historial.py` (D2; FR-423): `Historial(limite=5)` acepta `limite=None` = «sin límite» y en `registrar` no descarta cuando `limite is None`; el resto, igual. Parte de T005.
-- [ ] T009 Cambiar `crypta/Modelo/Partida.py` (D9; FR-401, FR-426):
+- [X] T007 [P] Crear `crypta/estructuras/BusquedaBinaria.py` (D5; FR-403): función `primera_no_menor(vector, valor, clave)` sobre un `Vector` ordenado por `clave`, en O(log n), sin `bisect`. Hace pasar T004.
+- [X] T008 Cambiar `crypta/Modelo/Historial.py` (D2; FR-423): `Historial(limite=5)` acepta `limite=None` = «sin límite» y en `registrar` no descarta cuando `limite is None`; el resto, igual. Parte de T005.
+- [X] T009 Cambiar `crypta/Modelo/Partida.py` (D9; FR-401, FR-426):
   - atributo `tope_tiempo = None`. En `_correr_hasta_el_jugador`, si `tope_tiempo` no es `None`, usa `self.agenda.siguiente_si_corresponde(self.tope_tiempo)` en lugar de `siguiente()` y, si devuelve `None`, retorna sin lanzar «La agenda se quedó sin eventos»;
   - callback opcional `al_ejecutar_evento = None` (data-model.md): si no es `None`, se llama con `(partida, evento)` después de `_ejecutar(evento)`.
 
   Sin tope ni callback, el código actual no cambia. Parte de T005.
-- [ ] T010 Agregar `__deepcopy__` (D3; FR-422):
+- [X] T010 Agregar `__deepcopy__` (D3; FR-422):
   - en `crypta/Modelo/Sala.py`: comparte `contenido`;
   - en `EstadoPuerta` de `crypta/Modelo/Puerta.py`: copia sin `observador`;
   - en `crypta/Modelo/Partida.py`: comparte `_fichas`; `_perseguidor = None`; `al_ejecutar_evento = None`; `bitacora = Bitacora()` nueva; `estado.historial = Historial(limite=None)`; el resto se copia con el `memo` recibido.
   
   Usar solo el `memo` que entrega `copy`: ningún `dict` propio como índice (principio I). Hace pasar T005.
-- [ ] T011 [P] Crear `crypta/Modelo/Resumen.py` (D10; FR-406): clase `Resumen` con `pedido`, `reloj`, `proxima_accion`, `sala` (id, nombre), `vida`, `vida_max`, `ataque`, `defensa`, `velocidad`, `inventario` (`Vector` en `Inventario.orden_real`, con equipados y actual), `pergaminos`, `efectos`, `enemigos` (`Vector` de (id de instancia, nombre, vida) de los activos y vivos de la sala, en el orden del `Vector`), `mapa_conocido = None` mientras no exista la 002, y `aviso = None`. La función `armar_resumen(partida, pedido, aviso=None)` solo lee la partida.
-- [ ] T012 [P] Crear `crypta/Vista/FormatoResumen.py` (FR-406): función pura `formatear_resumen(resumen) -> str` con el texto exacto de `contracts/resumen.md`. Hace pasar T006 junto con T011.
-- [ ] T013 Punto de control (D3, D5, D9, D10; FR-406, FR-422, FR-426): `python -m unittest` en verde (T004–T006 pasan; P1, 001 y 003 siguen verdes) y commit «004 base: búsqueda binaria, historial sin límite, tope, copia y resumen».
+
+  *Hecho, con dos ajustes encontrados al implementar*:
+  - `Mapa.__deepcopy__` copia en dos pasadas: primero registra en el `memo` una sala vacía por cada sala y después las llena (`Sala.copia_vacia`, `Sala.llenar_copia`). Con un `deepcopy` directo, la recursión baja por la cadena de salas vecinas y da `RecursionError` con el límite normal de Python ya con 300 salas (medido).
+  - En Python 3.14, `copy` trata las funciones como atómicas y no consulta el `memo`, así que `Partida.__deepcopy__` fija `_fichas`, `_perseguidor = None` y `al_ejecutar_evento = None` después de copiar.
+- [X] T011 [P] Crear `crypta/Modelo/Resumen.py` (D10; FR-406): clase `Resumen` con `pedido`, `reloj`, `proxima_accion`, `sala` (id, nombre), `vida`, `vida_max`, `ataque`, `defensa`, `velocidad`, `inventario` (`Vector` en `Inventario.orden_real`, con equipados y actual), `pergaminos`, `efectos`, `enemigos` (`Vector` de (id de instancia, nombre, vida) de los activos y vivos de la sala, en el orden del `Vector`), `mapa_conocido = None` mientras no exista la 002, y `aviso = None`. La función `armar_resumen(partida, pedido, aviso=None)` solo lee la partida.
+- [X] T012 [P] Crear `crypta/Vista/FormatoResumen.py` (FR-406): función pura `formatear_resumen(resumen) -> str` con el texto exacto de `contracts/resumen.md`. Hace pasar T006 junto con T011.
+- [X] T013 Punto de control (D3, D5, D9, D10; FR-406, FR-422, FR-426): `python -m unittest` en verde (T004–T006 pasan; P1, 001 y 003 siguen verdes) y commit «004 base: búsqueda binaria, historial sin límite, tope, copia y resumen».
 
 **Punto de control**: una partida se puede copiar sin arrastrar red ni búsqueda, re-ejecutar hasta
 un instante y resumir.
@@ -175,7 +179,7 @@ el oráculo.
   - la última acción corre con `tope_tiempo = t` si el objetivo lo pide;
   - arma el resumen;
   - deshace con `historial.deshacer_ultima` tantas veces como acciones re-ejecutó;
-  - restaura el sello (`Agenda.restaurar_secuencia` incluido) y `tope_tiempo = None`;
+  - restaura el sello y `tope_tiempo = None`. **Ojo**: `Agenda.restaurar_secuencia` solo acepta una agenda nueva (lanza `ValueError` si no), así que el sello necesita un método nuevo de `Agenda`, por ejemplo `rebobinar_secuencia(n)` con n ≤ la actual. Encontrado en T005, donde la prueba restaura el número de secuencia a mano;
   - **no** descarga ni deshace la carga de contenido de las salas cargadas (decisión del grupo, D7);
   - contador de acciones re-ejecutadas para FR-423.
   

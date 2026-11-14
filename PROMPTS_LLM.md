@@ -585,3 +585,8 @@ Plan, contratos y tareas:
 - T050: corre solo las secciones L1 a L8, no el bench completo, y la salida va a docs/resultados_bench_004.txt. Esa tarea la hago yo, igual que T054 (PROMPTS).
 
 **USO:** correciones y pequeños arreglos de las task y analize.
+
+**Prompt:** /speckit-implement Solo las fases 1 y 2 (T001 a T013) de specs/004-linea-de-tiempo/tasks.md. T001 y T002 ya están hechos (yo hice los commits): márcalos. Detente en el punto de control de la fase 2, marca las tareas hechas y no hagas commit.
+
+**USO:** Implementción de la fase 1 y 2 de la parte 004
+

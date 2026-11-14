@@ -298,7 +298,8 @@ Antes de re-ejecutar, la consulta toma un **sello** de C_j:
 - largo de la bitácora;
 - número de secuencia de la agenda (`agenda.siguiente_secuencia`), que el pergamino de P1 no
   rebobina: sin restaurarlo, los eventos programados en la consulta siguiente tendrían otros
-  números y la serialización cambiaría; se restaura con `Agenda.restaurar_secuencia`;
+  números y la serialización cambiaría. `Agenda.restaurar_secuencia` no sirve, porque solo acepta
+  una agenda nueva: hace falta un método que la rebobine (T019);
 - (sala, pergaminos) de la sala del jugador cada vez que la re-simulación entra en una: a lo sumo
   K + 1 salas, en un `Vector`.
 
