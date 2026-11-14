@@ -220,8 +220,10 @@ hay ninguna K que cumpla las dos, se documenta en `DECISIONES.md` antes de cambi
 - **`historia #k`**: fila k, en O(1).
 - **`historia t`**: búsqueda binaria propia de la primera fila con d_k ≥ t, en O(log n)
   (`crypta/estructuras/BusquedaBinaria.py`). Si d_k = t, el objetivo es «antes de la acción #k». Si
-  d_k > t, es «después de los eventos ≤ t que siguen a la acción #(k − 1)», con tope t (D9). Si hay
-  empate de d_k, gana la primera fila.
+  d_k > t, es «después de los eventos ≤ t que siguen a la acción #(k − 1)», con tope t (D9). **Dos
+  decisiones nunca caen en el mismo reloj**: toda acción avanza el reloj al menos 1, porque
+  `Actor.intervalo` devuelve `max(1, costo * 100 // velocidad)`. Así d_k es estrictamente
+  creciente y la búsqueda devuelve una sola fila.
 - **Punto de control**: hay uno por cada múltiplo de K (anclas 0, K, 2K…), en un `Vector` indexado
   por j. El índice es j = ⌊m/K⌋, con m las acciones completas que preceden al objetivo: **se
   calcula, no se busca** (FR-425). La consulta examina un solo punto de control, y el bench lo
@@ -349,6 +351,13 @@ recibe las fichas del repositorio, un historial sin límite y una bitácora vac�
   incompatible», sin cambiar la partida en curso (FR-419). Las pruebas se actualizan al formato 3
   (SC-408).
 - K se guarda. Si `--checkpoint-cada` pide otro, se avisa y se usa el guardado (FR-418).
+- Las firmas no cambian (contracts/guardado.md): `guardar_partida(…, linea=None)` y
+  `cargar_partida` devuelve solo la partida; la línea queda en el objeto lector.
+
+**Límites**: el archivo guardado de una partida con consultas **no es igual byte por byte** al de
+la misma partida sin consultas: los puntos de control conservan cargadas las salas que cargó una
+consulta (D7) y se guardan así. El estado, el log y el resultado sí son iguales (FR-408, SC-403), y
+las consultas después de cargar dan lo mismo (FR-417).
 
 **Alternativa**: guardar solo el estado inicial y las entradas, y reconstruir los puntos al cargar
 re-simulando todo. El archivo es pequeño, pero cargar cuesta n a + (n/K) c ≈ 6 s + 13 s con 300

@@ -22,13 +22,24 @@ linea
     salas: lista con escribir_sala(e, sala) de cada sala del mapa del punto
 ```
 
+Firmas (no cambian; las llamadas existentes siguen igual):
+
+- `guardar_partida(partida, ruta, encabezado, linea=None)` y `guardar_partida_json(…, linea=None)`.
+  Sin línea se escribe un bloque `linea` **vacío**: solo `k`, con las listas `entradas` y `puntos`
+  vacías.
+- `ArchivoGuardado(ruta).cargar_partida(fichas)` y `ArchivoGuardadoJSON(ruta).cargar_partida(fichas)`
+  siguen devolviendo **solo la partida**. La línea leída queda en el atributo `linea` del objeto
+  lector (no de la `Partida`, research D12); si el bloque estaba vacío, `linea` es `None`.
+- El `Controlador` toma `archivo.linea`. Si es `None`, crea una línea nueva con el punto inicial en
+  el estado cargado (ancla a₀ = acciones del estado cargado, data-model.md).
+
 Al cargar:
 
 - Cada punto se arma con `armar_partida`, con las fichas del repositorio, un historial sin límite y
   una bitácora vacía (research D3).
 - `decisiones` se reconstruye recorriendo las entradas una vez, en O(n).
-- Se valida que las anclas sean 0, K, 2K… sin huecos hasta ⌊n/K⌋·K, que las posiciones sean
-  crecientes y que los relojes no bajen. Si algo falla, `ErrorGuardado`.
+- Se valida que las anclas sean a₀, a₀ + K, a₀ + 2K… sin huecos, que las posiciones sean
+  crecientes y que los relojes suban estrictamente. Si algo falla, `ErrorGuardado`.
 
 Rechazos (FR-419):
 

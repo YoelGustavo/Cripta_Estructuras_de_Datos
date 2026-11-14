@@ -561,3 +561,27 @@ Lo que el plan debe resolver con números:
 
 **USO:** Ajuste del plan del punto 004
 
+**Prompt:** /speckit-tasks y /speckit-analize
+
+**USO:** generar el tasks.md y analizar lo que esta faltante y su prioridad.
+
+**Prompt:** Arreglos del grupo al análisis de la 004 (no implementes nada; no hagas commit):
+
+Spec (specs/004-linea-de-tiempo/spec.md), que commiteo aparte:
+- C1: haz T001 (FR-427: (a) al menos 5 000 acciones; (b) la de escala, al menos 1 000 acciones y solo el K por defecto) y revisa que FR-432, SC-404 y HU5-7 sigan coherentes.
+- L4: «Estado: Confirmada».
+
+Plan, contratos y tareas:
+- L2: actualiza en plan.md la cita de commits de la spec (agrega db1f6de y el de T001).
+- C2: agrega los FR a las 15 tareas que no citan ninguno, como propone el análisis.
+- C3: agrega una tarea [HU1] con la prueba de HU1-11 (mapa conocido en el instante consultado), marcada "bloqueada por la 002": se hace al implementar la 002, y el plan de la 002 la debe incluir. Anótalo también en Notas.
+- H1: no cambies las firmas existentes. guardar_partida(..., linea=None): sin línea se escribe un bloque linea vacío (solo K, sin entradas ni puntos). cargar_partida sigue devolviendo solo la partida, y la línea leída queda en un atributo del objeto que lee el archivo (no de la Partida, por D12); igual en JSON. El Controlador toma la línea de ahí; si el bloque viene vacío, crea una línea nueva con el punto 0 en el estado cargado. Así las llamadas existentes no cambian.
+- H2: en contracts/bench.md, T045 y T048, el tiempo se mide sin tracemalloc y la memoria en una corrida aparte.
+- M1: define en data-model.md un callback opcional de Partida, al_ejecutar_evento (None por omisión, FR-426), y pon el oráculo en un módulo del bench que las pruebas reutilicen (el bench no importa nada de tests/).
+- M2: anota en los Límites (research D11 y T052) que el archivo guardado de una partida con consultas no es igual byte por byte al de la misma partida sin consultas, por las salas que carga una consulta.
+- M3: fija en contracts/bench.md las cantidades de la partida sintética (20 enemigos activos; un pergamino de retroceso cada 50 acciones) y que la huella las incluya.
+- M4: en T010 y data-model.md, la clase es EstadoPuerta.
+- L1: en research D5, anota que dos decisiones no pueden caer en el mismo reloj, porque toda acción avanza el reloj al menos 1 (Actor.intervalo).
+- T050: corre solo las secciones L1 a L8, no el bench completo, y la salida va a docs/resultados_bench_004.txt. Esa tarea la hago yo, igual que T054 (PROMPTS).
+
+**USO:** correciones y pequeños arreglos de las task y analize.

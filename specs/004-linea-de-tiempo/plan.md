@@ -4,7 +4,9 @@
 2026-11-14 | **Spec**: [spec.md](spec.md)
 
 **Entrada**: especificación `specs/004-linea-de-tiempo/spec.md`, confirmada en los commits
-`1785648` y `2fecb64` (este último: historia se mide con la cripta de referencia), y las
+`1785648`, `2fecb64` (historia se mide con la cripta de referencia), `db1f6de` (HU2-3 salvo los
+pergaminos gastados) y el de T001 de tasks.md (FR-427: la partida de escala con 1 000 acciones;
+pendiente), y las
 indicaciones del grupo en `/speckit-plan`, con sus mediciones.
 
 **Artefactos**: [research.md](research.md) (decisiones D1–D13 y alternativas) ·
@@ -99,7 +101,7 @@ de la 002 para el mapa conocido, y los límites de la escala.
 | V. Red y presupuesto | Sí | Las consultas nunca piden nada: el contenido sale del mapa vivo (D7). La prueba HU1-12 usa una fuente que falla y compara solicitudes y presupuesto. |
 | VI. Rendimiento medido | Sí | Secciones L1–L8 de `--bench`, con los cinco K, la alternativa sin puntos de control, hacia atrás (FR-429) y las variantes de copia. |
 | VII. Reversibilidad | Sí | Copias completas solo en los puntos de control, a lo sumo uno cada K acciones, con el estado del generador. Fuera de ellos, comandos. La consulta no consume tiempo, no va al log y no toca el historial vivo. |
-| VIII. Primero la especificación | Sí | spec.md confirmada (`1785648`, `2fecb64`). Este plan no agrega reglas. La excepción de HU2-3 (pergaminos y posición del objeto actual, D6) va en spec.md en un commit propio antes de implementar. |
+| VIII. Primero la especificación | Sí | spec.md confirmada (`1785648`, `2fecb64`, `db1f6de` y el commit de T001, pendiente). Este plan no agrega reglas. La excepción de HU2-3 (pergaminos y posición del objeto actual, D6) va en spec.md en un commit propio antes de implementar. |
 | IX. Trazabilidad | Sí | Lista de pruebas por FR abajo. Los seis casos del Apéndice B («Línea de tiempo») son HU1-2, HU1-3, HU1-8, HU2-1, HU3-2 y HU4-3. |
 | X. Documentación | Pendiente en tareas | `DECISIONES.md` §5.5 desde research.md con la evidencia del bench; README con `--checkpoint-cada`, `--replay … --hasta`, `historia` y el K por defecto; `PROMPTS_LLM.md` con esta invocación. |
 | XI. Compatibilidad con P1 | Sí | Los formatos 1 y 2 se rechazan (no se migran). El historial de retroceso de P1 se vuelve a medir con la carga nueva: deshacer cuesta 0,40 ms por acción con 300 salas, y L1 y L2 lo reportan. La agenda no cambia; L4 vuelve a medir el ciclo de la 001. |
@@ -135,9 +137,9 @@ crypta/
 │   ├── Reconstruccion.py      # NUEVO: consulta hacia adelante + deshacer; Sello (D2, D7, D8)
 │   ├── Resumen.py             # NUEVO: datos de FR-406 desde una Partida (D10)
 │   ├── Historial.py           # CAMBIA: limite=None = sin límite
-│   ├── Partida.py             # CAMBIA: tope_tiempo (D9); __deepcopy__ (D3)
+│   ├── Partida.py             # CAMBIA: tope_tiempo (D9); al_ejecutar_evento (oráculo); __deepcopy__ (D3)
 │   ├── Sala.py                # CAMBIA: __deepcopy__ comparte el contenido original (D3)
-│   └── Puerta.py              # CAMBIA: la copia del estado deja observador = None (D3)
+│   └── Puerta.py              # CAMBIA: EstadoPuerta.__deepcopy__ deja observador = None (D3)
 ├── Vista/
 │   ├── FormatoResumen.py      # NUEVO: texto puro del resumen (contracts/resumen.md)
 │   └── VistaConsola.py        # CAMBIA: mostrar_resumen; ayuda con historia
@@ -147,10 +149,12 @@ crypta/
 │   └── Reproductor.py         # CAMBIA: construye la línea al reproducir; Reproduccion.linea
 ├── Adaptadores/
 │   ├── EstadoPartida.py       # CAMBIA: escribir_linea / leer_linea con el recorrido existente (D11)
-│   ├── GuardadoBinario.py     # CAMBIA: formato 3, bloque linea
-│   └── GuardadoJSON.py        # CAMBIA: formato 3, bloque linea
+│   ├── GuardadoBinario.py     # CAMBIA: formato 3, bloque linea; guardar_partida(…, linea=None);
+│                              #         ArchivoGuardado.linea tras cargar (firmas sin cambiar)
+│   └── GuardadoJSON.py        # CAMBIA: lo mismo en JSON
 ├── bench/
 │   ├── bench_linea.py         # NUEVO: partidas sintéticas y secciones L1–L8
+│   ├── oraculo_linea.py       # NUEVO: oráculo de resúmenes y serializar_estado; lo reutilizan las pruebas
 │   └── bench.py               # CAMBIA: llama a las secciones nuevas; código ≠ 0 si L3 falla
 └── main.py                    # CAMBIA: --checkpoint-cada, --hasta, flujo de --replay … --hasta
 
@@ -208,7 +212,7 @@ Detalle en [contracts/bench.md](contracts/bench.md).
 | FR | Sección | Configuración | Criterio |
 |---|---|---|---|
 | FR-427, HU5-5 | generador | semilla fija, dos ejecuciones | huella idéntica |
-| FR-428, FR-432, SC-404, SC-406, HU5-6, HU5-7 | L1 | (a) cripta del tamaño de la de referencia (cripta-06 si tiene contenidos; si no, sintética de 300 salas con unos 20 enemigos), ≥ 5 000 acciones, K = 10, 16, 22, 32, 64 y sin puntos de control, liberando la línea de cada K antes de armar la siguiente; (b) 2 000 salas con 50 cazadores, **1 000 acciones** y solo el K por defecto (con 5 000 serían ~2,2 GB de puntos) | (a) con el K por defecto: p95 < 50 ms (principio VI); (b) se reporta y, si pasa de 50 ms, va a Límites |
+| FR-428, FR-432, SC-404, SC-406, HU5-6, HU5-7 | L1 | (a) cripta del tamaño de la de referencia (cripta-06 si tiene contenidos; si no, sintética de 300 salas con 20 enemigos activos), ≥ 5 000 acciones, K = 10, 16, 22, 32, 64 y sin puntos de control, liberando la línea de cada K antes de armar la siguiente; (b) 2 000 salas con 50 cazadores, **1 000 acciones** y solo el K por defecto (con 5 000 serían ~2,2 GB de puntos) | (a) con el K por defecto: p95 < 50 ms (principio VI); (b) se reporta y, si pasa de 50 ms, va a Límites |
 | FR-429 | L2 | (a), K por defecto | se reporta adelante frente a atrás: consulta, creación y memoria |
 | FR-430 | L3 | todas las variantes contra el oráculo tomado de la partida viva | 0 diferencias; si no, ERROR y código ≠ 0 |
 | FR-433, SC-405, HU5-8 | L4 | B7 de la 001 con la línea y el K por defecto, ≥ 500 acciones | p95 < 20 ms (principio VI) |
@@ -221,7 +225,14 @@ Detalle en [contracts/bench.md](contracts/bench.md).
 ## Impacto en el guardado, el log y la copia local
 
 - **Archivo de partida**: pasa al formato 3 con el bloque `linea` (contracts/guardado.md). Los
-  formatos 1 y 2 se rechazan sin migrar (FR-419).
+  formatos 1 y 2 se rechazan sin migrar (FR-419). Las firmas no cambian: `guardar_partida(…,
+  linea=None)` escribe un bloque `linea` vacío si no recibe línea, y `cargar_partida` sigue
+  devolviendo solo la partida; la línea leída queda en el objeto que lee el archivo
+  (`ArchivoGuardado.linea`, `ArchivoGuardadoJSON.linea`). Así las llamadas existentes de las pruebas y
+  del bench de P1 no cambian.
+- **Igualdad de archivos**: el archivo guardado de una partida con consultas no es igual byte por
+  byte al de la misma sin consultas, porque los puntos de control conservan las salas que cargó una
+  consulta (research D7, D11). FR-408 y SC-403 no lo exigen; el log sí es igual.
 - **`partida.log`**: sin cambios. `historia` nunca se anota, así que una partida con consultas y la
   misma sin ellas dan el mismo log, byte por byte (SC-403).
 - **Copia local de la cripta**: sin cambios.

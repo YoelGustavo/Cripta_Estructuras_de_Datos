@@ -22,13 +22,16 @@ Un paso de la secuencia neta.
 
 | Campo | Tipo | Regla |
 |---|---|---|
-| `ancla` | `int` | j·K: acciones netas completas en ese estado (estado antes de la acción jK + 1) |
+| `ancla` | `int` | a₀ + j·K: acciones netas completas en ese estado (estado antes de la acción siguiente). a₀ = acciones de la partida al iniciar la línea: 0 en una partida nueva; las del estado cargado si el archivo traía un bloque `linea` vacío |
 | `posicion` | `int` | índice de la primera entrada que va después del punto |
 | `partida` | `Partida` | copia independiente (D3), con historial sin límite, bitácora propia, sin `Perseguidor`, compartiendo fichas y contenidos originales |
 
 Invariantes:
 
-- Hay a lo sumo un punto por múltiplo de K (FR-422).
+- Hay a lo sumo un punto por cada a₀ + j·K (FR-422).
+- Con a₀ > 0, `ubicar_*` rechaza lo anterior al estado cargado con el mensaje de rango de
+  contracts/cli.md: la línea solo conoce la historia desde ahí. No ocurre con archivos guardados
+  por el juego, que siempre traen la línea completa.
 - El punto j está en la posición j del `Vector` de puntos.
 - Todo punto con `ancla` mayor que el total neto de acciones se quita (FR-410).
 
@@ -106,12 +109,30 @@ mientras no exista, `None`). Más un aviso opcional para el caso de FR-415. El t
 | Clase | Cambio | Comportamiento sin línea de tiempo |
 |---|---|---|
 | `Historial` | `limite=None` = sin límite | igual: el valor por omisión sigue siendo 5 |
-| `Partida` | atributo `tope_tiempo` (`None`); `_correr_hasta_el_jugador` usa `siguiente_si_corresponde(tope)` cuando hay tope. `__deepcopy__` comparte `_fichas` y deja nuevos el `Perseguidor` (`None`), la bitácora y el historial | igual (FR-426) |
+| `Partida` | atributo `tope_tiempo` (`None`); `_correr_hasta_el_jugador` usa `siguiente_si_corresponde(tope)` cuando hay tope. Callback opcional `al_ejecutar_evento(partida, evento)` (`None` por omisión): si existe, `_correr_hasta_el_jugador` lo llama después de ejecutar cada evento que no es el turno del jugador. Solo lo usa el oráculo (`crypta/bench/oraculo_linea.py`) y la copia no lo hereda (`None`). `__deepcopy__` comparte `_fichas` y deja nuevos el `Perseguidor` (`None`), la bitácora y el historial | igual (FR-426) |
 | `Sala` | `__deepcopy__` comparte `contenido` | igual |
-| Estado de `Puerta` | `__deepcopy__` deja `observador = None` | igual |
+| `EstadoPuerta` (`crypta/Modelo/Puerta.py`) | `__deepcopy__` deja `observador = None` | igual |
 
 ## Persistencia (formato 3), decisión D11
 
 Detalle en [contracts/guardado.md](contracts/guardado.md). Los bloques existentes se mantienen y se
 agrega un bloque `linea` con K, las entradas y, por cada punto, su ancla, su posición, su bloque
 general y sus salas, escritos con el recorrido de `EstadoPartida`.
+
+- `guardar_partida(partida, ruta, encabezado, linea=None)`: sin línea se escribe un bloque `linea`
+  **vacío** (solo K, sin entradas ni puntos).
+- `cargar_partida(fichas)` sigue devolviendo **solo la partida**. La línea leída queda en el
+  atributo `linea` del objeto que lee el archivo (`ArchivoGuardado`, `ArchivoGuardadoJSON`), no en
+  la `Partida` (D12). Si el bloque venía vacío, `linea` es `None`.
+- El `Controlador` toma la línea del lector. Si es `None`, crea una `LineaDeTiempo(k)` nueva con el
+  punto a₀ en el estado cargado.
+
+## Oráculo (`crypta/bench/oraculo_linea.py`)
+
+Lo usa la sección L3 del bench y lo reutilizan las pruebas; el bench no importa nada de `tests/`.
+
+- `jugar_con_oraculo(partida, linea, comandos, garantizar)`: juega con `ejecutar_y_registrar`.
+  Antes de cada comando guarda el texto del resumen `#k`; con `al_ejecutar_evento` guarda el resumen
+  en el instante de cada evento. Devuelve un `Vector` de (pedido, texto).
+- `serializar_estado(partida, omitir_salas=None)`: bytes de `escribir_general` y `escribir_sala`
+  con `EscritorBinario`; omite el contenido de las salas cuyos ids estén en `omitir_salas` (D8).
