@@ -491,3 +491,75 @@ Reutilizar frente a recalcular (B5), 2000 salas y 50 cazadores
 - B7 mide el modelo (la acción del jugador y los eventos hasta su siguiente decisión), no el Controlador (vista, registro y precarga).
 - Con puertas inestables la invalidación total no ahorra nada frente a recalcular siempre (750 búsquedas en las dos).
 - La selectiva descarta la búsqueda aunque el cambio no altere la decisión de ningún cazador: basta con que la puerta toque una sala asentada.
+
+5.4 Resolubilidad
+
+**Problema:**
+- Antes de jugar hay que decir si la cripta se puede ganar usando solo el esqueleto y la ubicación de las llaves (P2 §3.5). Si se puede, un orden de llaves por rondas; si no, las llaves que faltan, la frontera bloqueada, dónde están esas llaves, de qué llave depende cada una y los ciclos.
+- Obtener una llave puede abrir una región entera. Repetir el recorrido por cada llave no cumple: el costo tiene que crecer más o menos lineal con salas, salidas y llaves (§5.4).
+- La frontera, las dependencias y los ciclos tienen que salir del mismo recorrido, y todo el resultado tiene que ser determinista.
+- Límite: 200 ms con la cripta publicada más grande.
+
+**Alternativas:**
+- Repetir el recorrido completo desde la sala inicial cada vez que aparecen llaves nuevas (VerificadorIngenuo): O(R · (V + E)). Con llaves encadenadas R ≈ K. La medimos (R1, R3).
+- Un recorrido por llave para sacar las dependencias: lo prohíbe FR-313. Está en la ingenua solo para comparar (R4).
+- Para pasar del id de una llave a un número:
+  - Tabla hash propia: O(1) por búsqueda, pero el número no sirve para ordenar y era una estructura nueva solo para esto. Se analizó y no se implementó.
+  - ArbolBusqueda con insertar: con ids que llegan ordenados se degenera en una lista (P1 §4.4). La medimos (R5).
+  - Ordenar los ids y armar el árbol con desde_ordenados.
+- Dependencias con Dijkstra (MonticuloMin) sobre (capa, llave de origen): correcto, pero más caro que el recorrido 0-1 por capas. Se descartó.
+- dict, set, heapq y collections: prohibidos (§6.2).
+
+**Decisión:**
+- Un solo recorrido por oleadas (Modelo/Verificador.py) con una Cola y Vector de marcas por índice denso de sala (el de la 001, en orden de id).
+- Una puerta cerrada cuya llave todavía no se tiene se estaciona bajo esa llave (un Vector de K listas). Al cerrar la ronda, sus llaves nuevas se ordenan, empiezan a abrir y se liberan sus puertas estacionadas: sus destinos son las semillas de la ronda siguiente. Una llave no abre nada en la misma ronda en que se obtiene, y así salen las rondas de FR-308.
+- Pregunta del enunciado («Una llave abre una región con otras tres llaves. ¿Qué hace su verificación con las puertas que encontró cerradas antes de tener esa llave?»): esas puertas quedaron estacionadas bajo esa llave. Al obtenerla se recorren solo ellas y se sigue desde sus destinos; la región ya recorrida no se vuelve a mirar. Las tres llaves de la región nueva forman la ronda siguiente.
+- Si no es resoluble, el mismo recorrido sigue por capas más allá de la frontera:
+  - La capa 1 empieza en las puertas que quedaron estacionadas, que son la frontera.
+  - Cada capa cruza una puerta bloqueada más. Dentro de una capa se avanza por grupos, de la llave de origen menor a la mayor, y el origen se hereda.
+  - La primera marca de cada sala da la dependencia: el camino con menos puertas bloqueadas y, si hay empate, la llave de menor id.
+- Ciclos: cada llave depende de a lo sumo una; se recorren con marcas de 3 estados y cada ciclo se gira para que empiece en su llave de menor id.
+- Numeración (estructuras/NumeracionLlaves.py): ordenar los ids y armar el árbol con desde_ordenados. El número es la posición en el orden por id, así que ordenar llaves es ordenar enteros, y recorrer 0..K-1 ya da el orden por id que piden todas las partes del reporte.
+- Coincide con lo planeado (specs/003-resolubilidad/plan.md, research D1 y D3 a D6). La tabla hash quedó sin medir por decisión del grupo. Requisitos: specs/003-resolubilidad/spec.md, FR-301 a FR-336.
+
+**Complejidad:**
+- Recorrido por oleadas: O(V + E + L), más O(K log K) para ordenar las rondas.
+- Numeración: O((E + L) log K) búsquedas, con altura ⌈log₂(K + 1)⌉ garantizada.
+- Frontera: O(V + E), sin ordenar.
+- Capas: O(V + E + L + E log E), por ordenar las semillas de cada capa.
+- Ciclos: O(K log K).
+- Total: más o menos lineal. La ingenua: O(R · (V + E)).
+
+**Evidencia:**
+Se mide con: python -m crypta.bench.bench resol_ingenua resol_limite resol_crecimiento resol_igualdad resol_numeracion
+Criptas sintéticas deterministas por semilla, con llaves encadenadas: una ronda por llave (docs/resultados_bench_003.txt).
+
+Crecimiento al duplicar el tamaño (R3), criptas resolubles
+  salas   llaves   incremental   cociente     ingenua   cociente
+  505        125      13.54 ms          —   240.01 ms          —
+  1005       250      30.39 ms       2.24   968.88 ms       4.04
+  2005       500      62.04 ms       2.04      3.81 s       3.93
+  4005      1000     130.04 ms       2.10           —          —
+  8005      2000     274.20 ms       2.11           —          —
+
+Límite de 200 ms (R2), desde el esqueleto cargado hasta el texto
+  cripta                   salas   llaves      media         p95      máximo   ¿cumple?
+  sintética resoluble       2005      500   76.24 ms    84.49 ms    86.60 ms         sí
+  sintética no resoluble    2006      500   86.40 ms   101.05 ms   123.00 ms         sí
+  cripta-06 (publicada)      300        4    3.60 ms     4.34 ms     4.40 ms         sí
+
+- R1: con 2000 salas y 500 llaves, la ingenua es 66.9 veces más lenta (4.49 s contra 67.05 ms).
+- R3: la incremental crece 2.04 a 2.24 veces al duplicar (límite 3); la ingenua, 3.93 a 4.04.
+- R4: el texto completo es igual al de la ingenua en las 6 criptas de R1 y en 50 pequeñas, con la ubicación ordenada y barajada: 0 diferencias. Las pruebas comparan además 480 criptas por semilla (tests/test_equivalencia_resolubilidad.py).
+- R5: con 2000 ids que llegan ordenados, insertar da altura 2000 y tarda 1.09 s; ordenar + desde_ordenados, altura 11 y 14.70 ms. Con 8000 ids: 63.22 ms y altura 13.
+- Criptas reales, con --verificar en línea: cripta-02, 03, 04 y 06 son resolubles (código 0).
+  - cripta-05 (24 salas) no es resoluble (código 2): itm_llave_hierro y itm_llave_negra dependen una de la otra. El reporte muestra el ciclo itm_llave_hierro -> itm_llave_negra -> itm_llave_hierro.
+  - cripta-06 es la de referencia (300 salas, 4 llaves en 4 rondas): máximo 4.40 ms en R2.
+
+**Límites:**
+- Salidas sin vuelta: la verificación supone que el jugador puede volver a cualquier sala de la región. Puede decir «resoluble» en una cripta donde el jugador queda atrapado. Modelar dónde está el jugador obliga a probar órdenes de llaves, que crece de forma exponencial.
+- Cargar el esqueleto (armar el Mapa) no entra en los 200 ms: con 2000 salas tarda unos 100 a 110 ms (100.56 y 110.82 ms en R2). Es de P1 y de la 001, y se reporta aparte.
+- La ingenua solo se mide hasta 2000 salas: con 4000 y 8000 tardaría minutos. Por eso R4 tampoco compara esas criptas.
+- R1 y R3 reportan el mejor de 3 mediciones; la ingenua de 2000 salas, una sola.
+- Se confía en la ubicación de las llaves del servicio: no se comprueba que el enemigo que suelta una llave exista ni que inicie en esa sala, porque eso exigiría pedir contenido (FR-321).
+Se hace una vez por partida, antes de crear partida.log, y con --verificar.

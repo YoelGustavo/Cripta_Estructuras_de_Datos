@@ -1,0 +1,63 @@
+CRIPTA --bench | Python 3.14.7 | Windows AMD64
+
+=== R1 Incremental frente a ingenua (FR-331) ===
+R1 RESOLUBILIDAD (FR-331): recorrido incremental frente a repetir el recorrido por llave
+  salas   llaves   resoluble   incremental     ingenua   ingenua / incremental
+  505        125          sí      14.52 ms   278.10 ms                    19.2
+  508        125          no      20.53 ms   161.05 ms                     7.8
+  1005       250          sí      31.54 ms      1.01 s                    32.2
+  1006       250          no      36.73 ms   537.60 ms                    14.6
+  2005       500          sí      67.05 ms      4.49 s                    66.9
+  2006       500          no      83.20 ms      2.33 s                    28.1
+  Mejor de 3 (la ingenua del tamaño mayor, una sola vez). Llaves encadenadas: una ronda por llave.
+(sección medida en 14.43 s)
+
+=== R2 Límite de la verificación (FR-334) ===
+R2 RESOLUBILIDAD (FR-334): límite de 200 ms
+  cripta                   salas   llaves      media         p95      máximo   cargar esqueleto   ¿cumple?
+  sintética resoluble       2005      500   76.24 ms    84.49 ms    86.60 ms          100.56 ms         sí
+  sintética no resoluble    2006      500   86.40 ms   101.05 ms   123.00 ms          110.82 ms         sí
+  cripta-06 (publicada)      300        4    3.60 ms     4.34 ms     4.40 ms           14.34 ms         sí
+  La medición empieza con el esqueleto cargado y las llaves en memoria (FR-334); la carga del esqueleto se reporta aparte, sin límite. ¿cumple? mira el máximo.
+(sección medida en 8.68 s)
+
+=== R3 Crecimiento al duplicar el tamaño (FR-335) ===
+R3 RESOLUBILIDAD (FR-335): crecimiento al duplicar el tamaño
+  salas   llaves   incremental   cociente     ingenua   cociente
+  505        125      13.54 ms          —   240.01 ms          —
+  1005       250      30.39 ms       2.24   968.88 ms       4.04
+  2005       500      62.04 ms       2.04      3.81 s       3.93
+  4005      1000     130.04 ms       2.10           —          —
+  8005      2000     274.20 ms       2.11           —          —
+  ¿cumple? (cociente de la incremental ≤ 3 en cada duplicación): sí. Lo lineal da cerca de 2; repetir el recorrido por llave, cerca de 4. La ingenua solo hasta 2000 salas.
+(sección medida en 10.10 s)
+
+=== R4 Igualdad con la alternativa ingenua (FR-332) ===
+R4 RESOLUBILIDAD (FR-332): mismo resultado que la alternativa ingenua
+  criptas           resoluble   comparaciones
+  500 salas                sí               2
+  500 salas                no               2
+  1000 salas               sí               2
+  1000 salas               no               2
+  2000 salas               sí               2
+  2000 salas               no               2
+  50 pequeñas   mitad y mitad             100
+  Total: 0 diferencias (texto completo: orden o reporte, con la ubicación ordenada y barajada).
+(sección medida en 17.55 s)
+
+=== R5 Numeración de llaves (research D1) ===
+R5 RESOLUBILIDAD (research D1): id de llave → número
+  K                   construcción         ids   construir + 2K búsquedas   altura
+  500    ordenar + desde_ordenados   ordenados                    3.20 ms        9
+  500                     insertar   barajados                    3.82 ms       20
+  500                     insertar   ordenados                   66.39 ms      500
+  2000   ordenar + desde_ordenados   ordenados                   14.70 ms       11
+  2000                    insertar   barajados                   18.50 ms       27
+  2000                    insertar   ordenados                     1.09 s     2000
+  8000   ordenar + desde_ordenados   ordenados                   63.22 ms       13
+  8000                    insertar   barajados                   93.90 ms       30
+  8000                    insertar   ordenados                          —        —
+  Con ids que llegan ordenados, insertar degenera en una lista (P1 §4.4): O(K²); no se mide con más de 2000 ids. La tabla hash queda como alternativa analizada, sin medir (research D1).
+(sección medida en 4.17 s)
+
+(bench completo en 54.93 s)

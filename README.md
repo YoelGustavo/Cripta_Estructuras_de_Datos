@@ -11,6 +11,35 @@ La segunda parte se desarrolla con especificaciones de spec-kit (v1.3.1) y el ag
 - **Cazadores.** Un enemigo nuevo que persigue al jugador por la ruta más barata si está dentro de su rango (que viene en su ficha del catálogo), y espera si no puede llegar.
 - **En la pantalla**, cada salida muestra su costo, abierta o cerrada (`N: sala 3 (Abierta, costo 250)`), y los cazadores llevan la etiqueta `[cazador]`. El comando `ayuda` lo explica.
 
+## Segunda parte: verificación de resolubilidad
+
+La especificación, el plan y las tareas están en `specs/003-resolubilidad/`; las decisiones, en `DECISIONES.md` (sección 5.4).
+
+- **Al iniciar una partida** el programa verifica si la cripta se puede ganar, con el esqueleto y la ubicación de las llaves. Si se puede, muestra el orden de llaves por rondas y la partida empieza. Si no, muestra el reporte (llaves que faltan, puertas que bloquean, dónde están esas llaves, dependencias y ciclos) y la partida **no inicia**: el programa termina con código 2, sin crear `partida.log`.
+- **`--forzar`** inicia la partida aunque la cripta no sea resoluble o no se haya podido verificar. Con una ubicación de llaves inválida la partida no inicia nunca (código 1).
+- **`--verificar <cripta>`** solo verifica e imprime el resultado, sin abrir la vista ni crear una partida:
+
+```powershell
+python -m crypta.main --verificar cripta-06
+python -m crypta.main --offline --verificar cripta-06
+```
+
+| Código de salida | Significado |
+|---|---|
+| 0 | La cripta es resoluble. |
+| 2 | La cripta no es resoluble (se imprime el reporte). |
+| 1 | No se pudo verificar: sin conexión y sin las llaves en la copia local, falla de red, presupuesto agotado o datos inválidos. |
+
+`--verificar` no se puede usar junto con `--replay` ni con `--bench` (código 1). `--forzar` no tiene efecto con `--verificar` ni con `--replay`; `--replay` y cargar una partida guardada no verifican.
+
+La ubicación de las llaves se pide una vez al servicio (`/criptas/<id>/llaves`, cuenta en el presupuesto de solicitudes) y se guarda en la copia local de la cripta junto con su versión; mientras la versión coincida no se vuelve a pedir.
+
+**`cripta-01` ya no está en el servidor**, y su copia local de la primera parte no trae la ubicación de las llaves: sin conexión no se puede verificar, así que solo se juega con `--forzar`:
+
+```powershell
+python -m crypta.main --offline --cripta cripta-01 --forzar
+```
+
 ## Requisitos
 
 - Python 3.11 o superior.
@@ -87,6 +116,8 @@ python -m crypta.main --offline --cripta cripta-01
 Utiliza exclusivamente datos almacenados en disco, sin consultar el servicio HTTP.
 
 Para funcionar necesita que los datos de esa cripta y del catálogo ya estén disponibles localmente. Se recomienda iniciar primero una partida online para descargar los datos necesarios.
+
+Sin conexión, la verificación de resolubilidad usa la ubicación de las llaves guardada en la copia local. Si la copia no la tiene (por ejemplo, la de `cripta-01` de la primera parte), avisa que no pudo verificar y la partida solo inicia con `--forzar`.
 
 El almacenamiento local utiliza la carpeta `cache/`, creada automáticamente en el directorio de trabajo.
 
@@ -208,6 +239,18 @@ Las criptas de estas secciones son sintéticas y se generan igual con la misma s
 python -m crypta.bench.bench cazadores rangos tamano compartido reutilizar equivalencia ciclo_cazadores escala distancias --guardar docs/resultados_bench_p2.txt
 ```
 
+Secciones de la verificación de resolubilidad (criptas sintéticas con llaves encadenadas):
+
+- `resol_ingenua`: R1, el recorrido incremental frente a repetir el recorrido por cada llave.
+- `resol_limite`: R2, límite de 200 ms con 2000 salas y 500 llaves, y con la cripta publicada más grande que esté en `cache/` con sus llaves.
+- `resol_crecimiento`: R3, el tiempo al duplicar el tamaño (cociente ≤ 3).
+- `resol_igualdad`: R4, compara el resultado con la alternativa ingenua. Si alguno difiere, imprime `ERROR` y el programa termina con código 1.
+- `resol_numeracion`: R5, cómo pasar del id de una llave a un número.
+
+```powershell
+python -m crypta.bench.bench resol_ingenua resol_limite resol_crecimiento resol_igualdad resol_numeracion --guardar docs/resultados_bench_003.txt
+```
+
 La sección `guardado` compara los formatos binario y JSON con criptas sintéticas de 100, 1000 y 5000 salas.
 
 Con `--rapido` se utiliza únicamente una cripta de 100 salas.
@@ -241,6 +284,12 @@ python -m unittest -v tests.test_terreno tests.test_cazador tests.test_distancia
 
 `tests.test_terreno` incluye `TestCompatibilidadP1`, que repite una partida grabada con la primera parte (`tests/datos/p1_partida.log`) y comprueba que una cripta sin costos se juega igual.
 
+Solo las de la verificación de resolubilidad:
+
+```powershell
+python -m unittest -v tests.test_resolubilidad tests.test_equivalencia_resolubilidad tests.test_numeracion_llaves tests.test_verificacion_inicio
+```
+
 ## Archivos generados y persistencia
 
 | Archivo o dato | Ubicación y descripción |
@@ -248,7 +297,7 @@ python -m unittest -v tests.test_terreno tests.test_cazador tests.test_distancia
 | Registro de la última partida | `partida.log`. Se crea en el directorio de trabajo y se reemplaza al iniciar otra partida. |
 | Tabla de puntajes | `puntajes.txt`. Almacena los puntajes registrados. |
 | Fichas del catálogo | `cache/catalogo.json`. Contiene la versión del catálogo y las fichas descargadas. |
-| Copias locales de criptas | `cache/<id-de-cripta>.json`, por ejemplo, `cache/cripta-01.json`. Contiene la versión, el esqueleto, los contenidos y los datos generales disponibles. |
+| Copias locales de criptas | `cache/<id-de-cripta>.json`, por ejemplo, `cache/cripta-01.json`. Contiene la versión, el esqueleto, los contenidos, los datos generales disponibles y, desde la verificación de resolubilidad, la ubicación de las llaves. |
 | Partida guardada | `partida.cripta`. Archivo binario generado mediante el comando `guardar`. |
 | Registro asociado al guardado | `partida.cripta.log`. Copia del registro correspondiente al momento de guardar. |
 | Guardado JSON alternativo | Archivo `.json` cuya ruta se indica al invocar el adaptador `GuardadoJSON.py`. |

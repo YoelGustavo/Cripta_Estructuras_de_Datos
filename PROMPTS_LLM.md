@@ -524,3 +524,14 @@ Tareas (tasks.md y, donde aplique, plan.md y contracts/):
 
 **USO:** Implementacion de la fase 6 del punto 003
 
+**Prompt:** /speckit-implement Solo la fase 7 (T044 a T051) de specs/003-resolubilidad/tasks.md. La cripta publicada más grande es cripta-06 (300 salas, «Cripta de referencia») y ya está en cache/ con sus llaves: R2 debe medirla. En T050 no corras el bench, lo corro yo. Detente en el punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Immplementacion de la fase 7 del punto 003, pruebas de bench.
+
+**Prompt:** /speckit-implement Haz la fase 8 de specs/003-resolubilidad/tasks.md (T052, T053, T055, T056, T057). No hagas T054 (PROMPTS lo llevo yo).
+- T052: la sección §5.4 va en DECISIONES.md con el mismo formato que las otras: sin introducción, los 6 puntos en negrita (Problema, Alternativas, Decisión, Complejidad, Evidencia, Límites), viñetas cortas y una o dos tablas pequeñas con números de docs/resultados_bench_003.txt. Incluye la respuesta a la pregunta del enunciado sobre las puertas cerradas antes de tener la llave, y en Evidencia las criptas reales: cripta-05 no resoluble (ciclo hierro -> negra) y cripta-06, la de referencia (300 salas), con un máximo de 3,9 ms. En Límites: las salidas sin vuelta (falso resoluble), que cargar el esqueleto (95 ms) no entra en el límite, y que la ingenua solo se mide hasta 2 000 salas.
+- T053: en el README agrega también que cripta-01 ya no está en el servidor y que su copia local de P1 no trae llaves, así que sin conexión solo se juega con --forzar.
+- T056: los pasos manuales ya los hice: --verificar en línea con las 5 criptas publicadas (02, 03, 04 y 06 dan código 0; la 05 da código 2) y --offline --verificar. Marca el checklist con eso.
+Marca las tareas hechas y no hagas commit.
+
+**USO:** Implementacio nde fase 8 del punto 003, ayuda con las decisiones del programa.
