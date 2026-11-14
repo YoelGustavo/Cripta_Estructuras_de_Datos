@@ -14,12 +14,15 @@ cada prueba muestre exactamente la cripta que usa.
 - `FuenteQueFalla`: fuente que falla si se la llama (FR-018, FR-034).
 - `controlador_sintetico`: una sesión con el Controlador de verdad sobre una
   fuente en memoria y una vista falsa (FR-011).
+- Capacidad 003: `ubicacion` y `respuesta_llaves` arman la ubicación de las
+  llaves; `verificar_cripta` verifica una cripta escrita a mano;
+  `FuenteContadora` acepta `llaves` y cuenta `obtener_llaves`.
 
 Los `dict` de este archivo son datos de entrada con forma de JSON, igual
 que los que devuelve `json`; no son estructuras del juego (principio I).
 """
 
-from crypta.Adaptadores.FuenteDatos import FuenteDatos
+from crypta.Adaptadores.FuenteDatos import FuenteDatos, LlavesNoDisponibles
 from crypta.Modelo.Jugador import Jugador
 from crypta.Modelo.Mapa import Mapa
 from crypta.Modelo.Partida import Partida
@@ -210,12 +213,47 @@ def buscar_enemigo(partida, instancia):
 
 
 # ---------------------------------------------------------------------------
+# Ubicación de las llaves (capacidad 003, P2 §4.2)
+# ---------------------------------------------------------------------------
+
+def ubicacion(id_llave, sala_llave, enemigo=None):
+    """Una entrada de la ubicación de las llaves, con el formato de
+    GET /criptas/<id>/llaves (contracts/datos-servicio.md de la 003)."""
+    datos = {"id": id_llave, "sala": sala_llave}
+
+    if enemigo is not None:
+        datos["enemigo"] = enemigo
+
+    return datos
+
+
+def respuesta_llaves(*ubicaciones):
+    """La respuesta completa del servicio: {"llaves": [...]}."""
+    return {"llaves": list(ubicaciones)}
+
+
+def verificar_cripta(esqueleto, generales, llaves):
+    """Verifica una cripta escrita a mano, sin red (FR-301): arma el Mapa,
+    lee y valida la ubicación de las llaves (`llaves` es la respuesta del
+    servicio) y llama al verificador. Devuelve el ResultadoVerificacion.
+
+    Los imports van aquí dentro para que las demás pruebas no se rompan
+    mientras el verificador no existe (tareas de la 003)."""
+    from crypta.Modelo.UbicacionLlaves import leer_ubicaciones
+    from crypta.Modelo.Verificador import verificar
+
+    mapa = mapa_de(esqueleto)
+    ubicaciones = leer_ubicaciones(llaves, mapa)
+    return verificar(mapa, generales, ubicaciones)
+
+
+# ---------------------------------------------------------------------------
 # Fuentes de datos falsas
 # ---------------------------------------------------------------------------
 
 def datos_generales(esqueleto, sala_inicial=1, sala_salida=None,
                     presupuesto=100, version=VERSION_CRIPTA,
-                    cripta_id=CRIPTA_ID):
+                    cripta_id=CRIPTA_ID, llave_salida=None):
     return {
         "id": cripta_id,
         "version": version,
@@ -224,7 +262,7 @@ def datos_generales(esqueleto, sala_inicial=1, sala_salida=None,
         "salas_por_pagina": max(1, len(esqueleto)),
         "sala_inicial": sala_inicial,
         "sala_salida": sala_salida,
-        "llave_salida": None,
+        "llave_salida": llave_salida,
         "presupuesto_solicitudes": presupuesto,
         "inventario_max": 10,
         "jugador": {"vida_max": 30, "ataque": 6, "defensa": 2,
@@ -238,8 +276,10 @@ class FuenteContadora(FuenteDatos):
     solicitudes nuevas (FR-027)."""
 
     def __init__(self, esqueleto, contenidos=None, fichas=None,
-                 generales=None, version_catalogo=VERSION_CATALOGO):
+                 generales=None, version_catalogo=VERSION_CATALOGO,
+                 llaves=None):
         self.esqueleto = list(esqueleto)
+        self.llaves = llaves
         self.contenidos = list(contenidos if contenidos is not None
                                else contenidos_vacios(esqueleto))
         self.fichas = dict(fichas or {})
@@ -287,6 +327,17 @@ class FuenteContadora(FuenteDatos):
     def obtener_version_catalogo(self):
         self._contar("obtener_version_catalogo")
         return {"version": self.version_catalogo}
+
+    def obtener_llaves(self, cripta_id):
+        """La ubicación de las llaves (capacidad 003). Sin `llaves`, se
+        comporta como una fuente que no las tiene (FR-324)."""
+        self._contar("obtener_llaves")
+
+        if self.llaves is None:
+            raise LlavesNoDisponibles(
+                f"la cripta {cripta_id} no tiene ubicación de llaves")
+
+        return self.llaves
 
 
 def controlador_sintetico(fuente, carpeta, comandos, semilla=SEMILLA):
@@ -369,3 +420,6 @@ class FuenteQueFalla(FuenteDatos):
 
     def obtener_version_catalogo(self):
         self._fallar("obtener_version_catalogo")
+
+    def obtener_llaves(self, cripta_id):
+        self._fallar("obtener_llaves")
