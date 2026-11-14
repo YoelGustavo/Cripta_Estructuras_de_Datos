@@ -49,7 +49,7 @@ Operaciones:
 | Operación | Qué hace | Costo |
 |---|---|---|
 | `iniciar(partida)` | crea el punto 0 tras `Partida.iniciar` | una copia |
-| `registrar(partida, comando, acciones_antes)` | D6: acción, no acción o pergamino; crea un punto si toca | O(1), más una copia cada K acciones |
+| `registrar(partida, comando, acciones_antes, reloj_antes)` | D6: acción, no acción o pergamino; crea un punto si toca | O(1), más una copia cada K acciones |
 | `revertir(partida)` | quita entradas y puntos hasta la última acción y agrega el ajuste | O(lo revertido) (FR-412) |
 | `ubicar_instante(t, reloj_actual)` | → `Objetivo` o rechazo si t > reloj actual (FR-403) | O(log n) |
 | `ubicar_accion(k)` | → `Objetivo` o rechazo si k ∉ [1, n + 1] (FR-404) | O(1) |

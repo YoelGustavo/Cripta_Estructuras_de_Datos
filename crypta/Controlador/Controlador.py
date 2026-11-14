@@ -5,9 +5,16 @@ import shutil
 from crypta.Controlador.Comandos import (
     ComandoInvalido,
     ejecutar_comando,
+    leer_historia,
 )
+from crypta.Modelo.LineaDeTiempo import (
+    K_POR_DEFECTO,
+    ConsultaRechazada,
+    LineaDeTiempo,
+)
+from crypta.Modelo.Reconstruccion import consultar
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
-from crypta.Modelo.Partida import AccionInvalida
+from crypta.Modelo.Partida import AccionInvalida, Partida
 from crypta.Vista.VistaConsola import VistaConsola
 from crypta.Adaptadores.GuardadoBinario import guardar_partida
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado
@@ -19,6 +26,10 @@ from crypta.Controlador.GestorContenido import GestorContenido
 RUTA_GUARDADO = "partida.cripta"
 
 LIMITE_RANKING = 10
+
+MENSAJE_HISTORIA_TERMINADA = (
+    "La partida terminó: usa --replay <log> --hasta <t> para consultarla."
+)
 
 
 def ruta_del_log_guardado(ruta_guardado):
@@ -41,6 +52,7 @@ class Controlador:
         encabezado=None,
         repositorio_fichas=None,
         tabla_puntajes=None,
+        k=K_POR_DEFECTO,
     ):
         self.partida = partida
         self.gestor_contenido = gestor_contenido
@@ -49,6 +61,12 @@ class Controlador:
         self.encabezado = encabezado
         self.repositorio_fichas = repositorio_fichas
         self.tabla_puntajes = tabla_puntajes
+
+        # Línea de tiempo (capacidad 004, research D12): la tiene el
+        # Controlador, no la Partida. Se crea al iniciar la partida (o, si
+        # la partida ya venía iniciada, en el primer comando).
+        self.k = k
+        self.linea = None
 
         # Si la sesión terminó porque llegaron datos inválidos (FR-011).
         self.error_datos = None
@@ -89,6 +107,7 @@ class Controlador:
             )
             self.partida.iniciar()
 
+        self._asegurar_linea()
         self._actualizar_fichas_en_uso()
 
         self.vista.mostrar_ayuda()
@@ -147,6 +166,11 @@ class Controlador:
 
         partes = texto.split()
         nombre = partes[0].lower()
+
+        # Antes de traducir (FR-407): no es un comando del juego, no pasa por
+        # ejecutar_comando ni se anota en partida.log.
+        if nombre == "historia":
+            return self._historia(texto)
 
         if nombre == "ayuda" and len(partes) == 1:
             self.vista.mostrar_ayuda()
@@ -222,12 +246,21 @@ class Controlador:
         
         try:
             comando = self._traducir(texto)
+            self._asegurar_linea()
+            acciones_antes = self.partida.acciones_jugador
+            reloj_antes = self.partida.reloj
 
             ejecutar_comando(
                 self.partida,
                 comando,
                 garantizar_sala=self.gestor_contenido.garantizar_sala,
             )
+
+            # Lo mismo que Comandos.ejecutar_y_registrar (research D12): el
+            # comando se ejecutó, va a la línea de tiempo.
+            if self.linea is not None:
+                self.linea.registrar(self.partida, comando, acciones_antes,
+                                     reloj_antes)
 
             if self.registro is not None:
                 self.registro.anotar(comando)
@@ -333,6 +366,10 @@ class Controlador:
 
         gestor_anterior = self.gestor_contenido
         self.partida = nueva_partida
+        # La línea de la partida cargada (historia 4, T038). Por ahora, una
+        # nueva desde el estado cargado.
+        self.linea = None
+        self._asegurar_linea()
         self.gestor_contenido = nuevo_gestor
         self.encabezado = encabezado_guardado
         if self.registro is not None:
@@ -345,6 +382,48 @@ class Controlador:
             cancel_futures=True,
         )
 
+
+    def _asegurar_linea(self):
+        """Crea la línea de tiempo con su primer punto en el estado actual,
+        si la partida ya está iniciada y todavía no hay línea. Solo sobre una
+        `Partida` del Modelo: un doble de prueba no tiene estado que copiar."""
+        if (self.linea is None and isinstance(self.partida, Partida)
+                and self.partida.iniciada):
+            self.linea = LineaDeTiempo(self.k)
+            self.linea.iniciar(self.partida)
+
+    def _historia(self, texto):
+        """`historia <t>` o `historia #k` (FR-403 a FR-409). Muestra el
+        resumen del estado pedido sin cambiar nada (FR-407)."""
+        if self.partida.terminada:
+            self.vista.mostrar_mensaje(MENSAJE_HISTORIA_TERMINADA)
+            return False
+
+        try:
+            tipo, valor = leer_historia(texto)
+        except ComandoInvalido as error:
+            self.vista.mostrar_error(str(error))
+            return False
+
+        self._asegurar_linea()
+
+        if self.linea is None:
+            self.vista.mostrar_error("La partida todavía no empezó.")
+            return False
+
+        try:
+            if tipo == "instante":
+                objetivo = self.linea.ubicar_instante(valor, self.partida.reloj)
+            else:
+                objetivo = self.linea.ubicar_accion(valor)
+
+            resumen = consultar(self.linea, objetivo, self.partida, ejecutar_comando)
+        except ConsultaRechazada as error:
+            self.vista.mostrar_error(str(error))
+            return False
+
+        self.vista.mostrar_resumen(resumen)
+        return True
 
     def _traducir(self, texto):
         partes = texto.strip().split()

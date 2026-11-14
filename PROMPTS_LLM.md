@@ -590,3 +590,7 @@ Plan, contratos y tareas:
 
 **USO:** Implementción de la fase 1 y 2 de la parte 004
 
+**Prompt:** /speckit-implement Solo la fase 3 (T014 a T023) de specs/004-linea-de-tiempo/tasks.md. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** implementacion de la fase 3 de la parte 004
+

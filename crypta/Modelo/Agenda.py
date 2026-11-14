@@ -149,6 +149,28 @@ class Agenda:
         self._pendientes += 1
         return evento
 
+    def rebobinar_secuencia(self, siguiente):
+        """Vuelve el número de secuencia a `siguiente` (≤ el actual).
+
+        Lo usa la consulta de la línea de tiempo (capacidad 004, research D8)
+        después de deshacer lo que re-ejecutó: el historial de P1 cancela los
+        eventos que se programaron, pero no rebobina este contador. Los
+        eventos con secuencia ≥ `siguiente` que quedan en el montículo ya
+        están cancelados (no son pendientes), así que reusar sus números no
+        cambia el orden de ningún evento pendiente."""
+        if siguiente < 0 or siguiente > self._siguiente_secuencia:
+            raise ValueError(
+                f"Solo se puede rebobinar la secuencia hacia atrás: "
+                f"{siguiente} y la actual es {self._siguiente_secuencia}")
+
+        for evento in self.recorrer_pendientes():
+            if evento.secuencia >= siguiente:
+                raise ValueError(
+                    f"El evento pendiente {evento.tipo} tiene secuencia "
+                    f"{evento.secuencia} ≥ {siguiente}")
+
+        self._siguiente_secuencia = siguiente
+
     def restaurar_secuencia(self, siguiente):
         if self._siguiente_secuencia != 0 or not self._monticulo.esta_vacia():
             raise ValueError("Solo se puede restaurar la secuencia de una agenda nueva")

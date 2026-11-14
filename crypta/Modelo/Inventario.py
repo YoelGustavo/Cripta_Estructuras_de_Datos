@@ -133,6 +133,16 @@ class Inventario:
 
         return self._actual.valor
 
+    def nodo_actual(self):
+        """El nodo del objeto a la vista (o None). Avanzar y retroceder no
+        entran al historial de P1: la consulta de la línea de tiempo guarda
+        este nodo en su sello y lo devuelve (capacidad 004, research D8)."""
+        return self._actual
+
+    def poner_nodo_actual(self, nodo):
+        """Devuelve el objeto a la vista a `nodo`, uno de esta lista o None."""
+        self._actual = nodo
+
     def avanzar(self):
         if self._actual is None:
             return None

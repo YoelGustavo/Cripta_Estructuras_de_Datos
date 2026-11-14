@@ -1,6 +1,7 @@
 
 from crypta.Modelo.Enemigo import CAZADOR
 from crypta.Modelo.Sala import DIRECCIONES
+from crypta.Vista.FormatoResumen import formatear_resumen
 
 
 class VistaConsola:
@@ -13,6 +14,11 @@ class VistaConsola:
 
     def leer_comando(self):
         return input("\n¿Qué deseas hacer? > ").strip()
+
+    def mostrar_resumen(self, resumen):
+        """El resumen de `historia` (capacidad 004; FR-406): el mismo texto
+        que `--replay … --hasta`. El reloj actual no va en él."""
+        print(formatear_resumen(resumen), end="")
 
     def mostrar_ayuda(self):
         print("\nCOMANDOS DISPONIBLES")
@@ -30,6 +36,7 @@ class VistaConsola:
         print("  anterior            Retroceder por el inventario")
         print("  ordenar nombre/peso/valor")
         print("  pergamino           Retroceder una acción")
+        print("  historia <t> | #k   Ver cómo estaba la partida")
         print("  puntajes            Ver la tabla de puntajes")
         print("  guardar             Guardar partida")
         print("  cargar              Cargar partida")

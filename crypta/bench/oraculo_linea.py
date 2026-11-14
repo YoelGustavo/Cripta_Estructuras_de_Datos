@@ -97,7 +97,9 @@ class Oraculo:
 
     - Después de cada evento se toma el resumen del instante del evento. Si
       el anterior era otro evento del mismo instante, se reemplaza: el estado
-      en t es el de después de **todos** los eventos ≤ t.
+      en t es el de después de **todos** los eventos ≤ t. Si el anterior es
+      la decisión del jugador en ese mismo instante, el evento no se toma:
+      viene después de la decisión.
     - Antes de cada comando, el reloj es el de la decisión: se quitan las
       entradas con tiempo ≥ reloj (las reemplaza el estado de la decisión) y
       se toman «instante <reloj>» y «acción #<k>». Un comando que no es acción
@@ -127,8 +129,13 @@ class Oraculo:
         if n > 0:
             ultima = self.entradas.obtener(n - 1)
 
-            if ultima.es_evento and ultima.tiempo == tiempo:
-                self.entradas.asignar(n - 1, nueva)
+            if ultima.tiempo == tiempo:
+                if ultima.es_evento:
+                    self.entradas.asignar(n - 1, nueva)
+
+                # Si la última es la decisión del jugador en este mismo
+                # instante, el evento viene después de ella en la agenda: el
+                # estado en t sigue siendo el de antes de decidir (FR-401).
                 return
 
         self.entradas.agregar(nueva)

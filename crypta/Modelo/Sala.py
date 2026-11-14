@@ -231,6 +231,17 @@ class Sala:
     def cantidad_pergaminos(self):
         return self.pergaminos
 
+    def estado_de_pergaminos(self):
+        """(objetos, pergaminos, apartados): lo que cambian `apartar_pergaminos`
+        y recoger o soltar pergaminos, que no entran al historial de P1. Lo
+        guarda y lo devuelve la consulta de la línea de tiempo (capacidad 004,
+        research D8). `apartar_pergaminos` reemplaza el `Vector` de objetos,
+        así que guardar la referencia basta."""
+        return (self.objetos, self.pergaminos, self._pergaminos_apartados)
+
+    def restaurar_estado_de_pergaminos(self, estado):
+        self.objetos, self.pergaminos, self._pergaminos_apartados = estado
+
     def pergaminos_ya_apartados(self):
         return self._pergaminos_apartados
 

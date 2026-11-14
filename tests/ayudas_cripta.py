@@ -610,3 +610,15 @@ def comandos_al_azar(partida, azar, cantidad):
             return
 
         yield comando_al_azar(partida, azar)
+
+
+def controlador_desde_linea(carpeta, comandos, semilla=SEMILLA):
+    """`controlador_sintetico` sobre la cripta de la línea de tiempo
+    (`esqueleto_linea`, `contenidos_linea`, `FICHAS_LINEA`), con presupuesto
+    de sobra. La partida empieza sin iniciar: `controlador.iniciar()` la
+    juega con `comandos` y después «salir»."""
+    esqueleto = esqueleto_linea()
+    fuente = FuenteContadora(esqueleto, contenidos_linea(),
+                             catalogo(*FICHAS_LINEA),
+                             generales=datos_generales(esqueleto, presupuesto=1000))
+    return controlador_sintetico(fuente, carpeta, comandos, semilla)

@@ -1472,5 +1472,98 @@ class TestVistaTerrenoYCazador(unittest.TestCase):
         self.assertIn("costo", salida.getvalue())
 
 
+class TestComandoHistoria(unittest.TestCase):
+    """T015: el comando `historia` en el Controlador (capacidad 004; FR-405,
+    FR-407, FR-409)."""
+
+    MENSAJE_TERMINADA = ("La partida terminó: usa --replay <log> --hasta <t> "
+                         "para consultarla.")
+    MAL_FORMADOS = ("historia", "historia abc", "historia -5", "historia 2,5",
+                    "historia #x", "historia 3 4")
+
+    def setUp(self):
+        self._carpeta = tempfile.TemporaryDirectory()
+        self.carpeta = self._carpeta.name
+
+    def tearDown(self):
+        self._carpeta.cleanup()
+
+    def jugar(self, comandos, carpeta=None):
+        from tests.ayudas_cripta import controlador_desde_linea
+
+        controlador = controlador_desde_linea(carpeta or self.carpeta, comandos)
+        controlador.iniciar()
+        controlador.gestor_contenido.cerrar()
+        return controlador
+
+    def leer_log(self, carpeta=None):
+        with open(os.path.join(carpeta or self.carpeta, "partida.log"),
+                  encoding="utf-8") as archivo:
+            return archivo.read()
+
+    def test_fr405_hu1_7_mal_formado_es_comando_invalido(self):
+        """HU1-7: cada forma mal escrita recibe el mismo tratamiento que un
+        comando inválido de P1 (`mostrar_error` con el mensaje de
+        `ComandoInvalido`) y no cambia nada: misma partida y mismo log que
+        sin esas líneas."""
+        from crypta.bench.oraculo_linea import serializar_estado
+
+        controlador = self.jugar(["esperar", *self.MAL_FORMADOS, "esperar"])
+
+        with tempfile.TemporaryDirectory() as otra:
+            sin = self.jugar(["esperar", "esperar"], otra)
+            self.assertEqual(self.leer_log(), self.leer_log(otra))
+            self.assertEqual(serializar_estado(controlador.partida),
+                             serializar_estado(sin.partida))
+
+        errores = controlador.vista.mostrar_error.call_args_list
+        self.assertEqual(len(errores), len(self.MAL_FORMADOS))
+        controlador.vista.mostrar_resumen.assert_not_called()
+
+        # El mismo tipo de mensaje que P1: el texto de ComandoInvalido.
+        from crypta.Controlador.Comandos import leer_historia
+        for linea, llamada in zip(self.MAL_FORMADOS, errores):
+            with self.assertRaises(ComandoInvalido) as error:
+                leer_historia(linea)
+            self.assertEqual(llamada.args[0], str(error.exception))
+
+    def test_fr409_hu1_10_partida_terminada(self):
+        """HU1-10: con victoria y con derrota, `historia` no está disponible y
+        se indica `--replay … --hasta`."""
+        for resultado in ("victoria", "derrota"):
+            with self.subTest(resultado=resultado):
+                controlador = self.jugar(["esperar"])
+                controlador.partida.terminada = True
+                controlador.partida.resultado = resultado
+
+                for linea in ("historia 0", "historia #1", "historia abc"):
+                    self.assertFalse(controlador.procesar_comando(linea))
+
+                mensajes = [llamada.args[0] for llamada
+                            in controlador.vista.mostrar_mensaje.call_args_list]
+                self.assertEqual(mensajes.count(self.MENSAJE_TERMINADA), 3)
+                controlador.vista.mostrar_resumen.assert_not_called()
+
+    def test_fr407_historia_muestra_el_resumen_y_no_va_al_log(self):
+        controlador = self.jugar(["esperar", "historia 0", "historia #1",
+                                  "esperar", "historia #3"])
+
+        self.assertEqual(controlador.vista.mostrar_resumen.call_count, 3)
+        log = self.leer_log()
+        self.assertNotIn("historia", log)
+        self.assertEqual(log.count("esperar"), 2)
+
+    def test_fr403_fr404_rechazo_con_mensaje(self):
+        controlador = self.jugar(["esperar", "historia #9", "historia 99999"])
+
+        errores = [llamada.args[0] for llamada
+                   in controlador.vista.mostrar_error.call_args_list]
+        self.assertEqual(errores, [
+            "No hay acción #9: la partida tiene 1 acciones (consulta de #1 a #2).",
+            f"No se puede consultar el instante 99999: el reloj de la partida va "
+            f"en {controlador.partida.reloj}.",
+        ])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -129,7 +129,7 @@ el oráculo.
 
 ### Pruebas de la historia 1 (escribir primero; deben fallar)
 
-- [ ] T014 [P] [HU1] Escribir `TestConsultas` en `tests/test_linea_tiempo.py` (FR-401 a FR-404), contra el oráculo de T003 con K = 3, 10 y 22:
+- [X] T014 [P] [HU1] Escribir `TestConsultas` en `tests/test_linea_tiempo.py` (FR-401 a FR-404), contra el oráculo de T003 con K = 3, 10 y 22:
   - HU1-1: reloj ≈ 1 200, `historia 500`: el texto muestra el reloj de ese estado, no el actual;
   - HU1-2: `historia <reloj+1>` se rechaza con el mensaje de contracts/cli.md (Apéndice B);
   - HU1-3: tres eventos en el mismo instante sin decisión → estado después de los tres (Apéndice B);
@@ -137,11 +137,11 @@ el oráculo.
   - HU1-5: 40 acciones: `#1`, `#20` y `#41` (= estado actual);
   - HU1-6: `#0` y `#42` rechazados;
   - casos borde: `historia 0`, t = reloj actual, t entre dos eventos, consulta que cae justo en un punto.
-- [ ] T015 [P] [HU1] Escribir `TestComandoHistoria` en `tests/test_controlador.py` (FR-405, FR-409), con `controlador_sintetico`:
+- [X] T015 [P] [HU1] Escribir `TestComandoHistoria` en `tests/test_controlador.py` (FR-405, FR-409), con `controlador_sintetico`:
   - HU1-7: `historia`, `historia abc`, `historia -5`, `historia 2,5`, `historia #x` y `historia 3 4` → mismo tratamiento que un comando inválido de P1, y nada cambia;
   - HU1-10: con victoria y con derrota, el mensaje «La partida terminó: usa --replay <log> --hasta <t> para consultarla.»;
   - `historia` no aparece en `partida.log`.
-- [ ] T016 [P] [HU1] Escribir `TestConsultaNoCambiaNada` en `tests/test_linea_tiempo.py` (FR-407, FR-408; SC-403):
+- [X] T016 [P] [HU1] Escribir `TestConsultaNoCambiaNada` en `tests/test_linea_tiempo.py` (FR-407, FR-408; SC-403):
   - HU1-8: 30 consultas al azar. No cambian la serialización de la partida viva, `azar.getstate()`, `len(historial)` ni lo que deshace el pergamino, el reloj, `acciones_jugador`, el log, las solicitudes ni el presupuesto (Apéndice B).
   - HU1-9: la misma partida con y sin 30 consultas intercaladas: mismo estado, mismo log byte por byte y mismo resultado.
   - HU1-12: partida en línea con salas sin descargar y `FuenteQueFalla` después de iniciar; las consultas de instantes cerca de esas salas no hacen solicitudes.
@@ -151,7 +151,7 @@ el oráculo.
 
 ### Implementación de la historia 1
 
-- [ ] T017 [HU1] Crear `crypta/Modelo/LineaDeTiempo.py` con `EntradaLinea`, `PuntoDeControl` y `Objetivo` exactamente como en data-model.md (D1, D5; FR-402, FR-422, FR-425):
+- [X] T017 [HU1] Crear `crypta/Modelo/LineaDeTiempo.py` con `EntradaLinea`, `PuntoDeControl` y `Objetivo` exactamente como en data-model.md (D1, D5; FR-402, FR-422, FR-425):
   - `EntradaLinea`:
     - `tipo`: «`ACCION`, `NO_ACCION` o `AJUSTE`»;
     - `comando`: «texto ya traducido, el mismo que va a `partida.log`; vacío en `AJUSTE`»;
@@ -160,7 +160,7 @@ el oráculo.
     - campos de ajuste: «solo en `AJUSTE`».
   - `PuntoDeControl(ancla, posicion, partida)`, con el invariante «a lo sumo un punto por múltiplo de K» y «el punto j está en la posición j del `Vector` de puntos».
   - `Objetivo(pedido, acciones_completas, tope, es_actual)`.
-- [ ] T018 [HU1] En `crypta/Modelo/LineaDeTiempo.py`, clase `LineaDeTiempo(k)` (D1, D5; FR-401 a FR-404, FR-417, FR-420, FR-422, FR-425):
+- [X] T018 [HU1] En `crypta/Modelo/LineaDeTiempo.py`, clase `LineaDeTiempo(k)` (D1, D5; FR-401 a FR-404, FR-417, FR-420, FR-422, FR-425):
   - `k` «`int ≥ 1`» (`ValueError` si no);
   - `entradas`, `decisiones` (reloj, posición) y `puntos` como `Vector`;
   - `iniciar(partida)`: primer punto con `copy.deepcopy`, con ancla a₀ = `partida.acciones_jugador` (0 en una partida nueva; las del estado cargado si el archivo no traía línea, T038); `ubicar_*` rechaza lo anterior a a₀;
@@ -172,7 +172,9 @@ el oráculo.
   - el rechazo lleva los mensajes de contracts/cli.md (excepción `ConsultaRechazada`).
   
   Sin `dict` ni `bisect`.
-- [ ] T019 [HU1] Crear `crypta/Modelo/Reconstruccion.py` (D2, D7, D8; FR-401, FR-407, FR-421, FR-423). Función `consultar(linea, objetivo, partida_viva, reejecutar)` → `Resumen`:
+
+  *Hecho.* `registrar` recibe también `reloj_antes`: el reloj de la decisión, que después del comando ya no se puede leer. Hasta T026, un pergamino (−1) deja la línea marcada, y toda consulta posterior se rechaza con «La historia todavía no se puede consultar después de usar un pergamino.». Así la línea nunca muestra estados revertidos.
+- [X] T019 [HU1] Crear `crypta/Modelo/Reconstruccion.py` (D2, D7, D8; FR-401, FR-407, FR-421, FR-423). Función `consultar(linea, objetivo, partida_viva, reejecutar)` → `Resumen`:
   - si `es_actual` es verdadero, `armar_resumen(partida_viva, …)`;
   - si no, punto j = ⌊m/K⌋ y `Sello`: `terminada`, `resultado`, `puerta_de_salida_abierta`, `enemigos_derrotados`, pergaminos del inventario, nodo del objeto actual, largo de la bitácora, `agenda.siguiente_secuencia` y un `Vector` de (sala, pergaminos) de cada sala donde entra el jugador;
   - re-ejecuta las entradas desde `punto.posicion` con `reejecutar(copia, comando, garantizar)`, donde `garantizar` busca la sala en `partida_viva.mapa` y hace `asignar_contenido(sala_viva.contenido)` en la del punto, o lanza `RuntimeError` si la viva no está cargada; nunca hay red;
@@ -184,16 +186,25 @@ el oráculo.
   - contador de acciones re-ejecutadas para FR-423.
   
   `reejecutar` se inyecta: Modelo no importa Controlador.
-- [ ] T020 [HU1] En `crypta/Controlador/Comandos.py` (D12; FR-408, FR-413):
+
+  *Hecho.* Agregados a P1, sin cambiar su comportamiento:
+  - `Agenda.rebobinar_secuencia(n)`, que rechaza n mayor que el actual o con un evento pendiente de secuencia ≥ n;
+  - `Inventario.nodo_actual` y `Inventario.poner_nodo_actual`;
+  - `Sala.estado_de_pergaminos` y `Sala.restaurar_estado_de_pergaminos`.
+
+  El sello guarda, además, los objetos de cada sala donde entra el jugador, porque `apartar_pergaminos` los cambia fuera del historial. Al restaurar deja la bitácora del punto vacía e invalida su búsqueda del cazador.
+- [X] T020 [HU1] En `crypta/Controlador/Comandos.py` (D12; FR-408, FR-413):
   - agregar `ejecutar_y_registrar(partida, linea, comando, garantizar_sala)`: llama a `ejecutar_comando` y, si no lanzó, pasa a `linea.registrar(partida, comando, acciones_antes)`;
   - agregar `leer_historia(texto)` → (`"instante"`, t) o (`"accion"`, k). Solo dígitos ASCII; cualquier otra forma lanza `ComandoInvalido` (FR-405).
-- [ ] T021 [HU1] En `crypta/Controlador/Controlador.py` (FR-403 a FR-409):
+- [X] T021 [HU1] En `crypta/Controlador/Controlador.py` (FR-403 a FR-409):
   - `Controlador` recibe `k` (por omisión, el K por defecto: constante `K_POR_DEFECTO = 22` en `crypta/Modelo/LineaDeTiempo.py`, research D4) y crea `self.linea` al iniciar la partida (`linea.iniciar` después de `Partida.iniciar`);
   - `procesar_comando` reconoce `historia` **antes** de `_traducir`: con la partida terminada, el mensaje de FR-409; si no, `leer_historia` → `ubicar_*` → `consultar(…, reejecutar=ejecutar_comando)` → `vista.mostrar_resumen`;
   - los comandos de juego pasan por `ejecutar_y_registrar`;
   - `historia` nunca se anota en el log.
-- [ ] T022 [P] [HU1] En `crypta/Vista/VistaConsola.py`: `mostrar_resumen(resumen)` imprime `formatear_resumen(resumen)`; la ayuda agrega `historia <t> | #k   Ver cómo estaba la partida` (contracts/cli.md; FR-406).
-- [ ] T023 [HU1] Punto de control (FR-401 a FR-409, FR-423, FR-425): T014–T016 pasan, `python -m unittest` en verde y commit «004 HU1: historia durante la partida».
+
+  *Hecho, con un ajuste*: el `Controlador` sigue llamando a `ejecutar_comando` por su nombre de módulo y anota la línea él mismo, con la misma regla que `ejecutar_y_registrar`. Así las pruebas de P1 que reemplazan `Controlador.ejecutar_comando` siguen pasando (SC-408). Además, la línea solo se arma sobre una `Partida` del Modelo, no sobre un doble de prueba. Al cargar una partida se crea una línea nueva desde el estado cargado, hasta T038.
+- [X] T022 [P] [HU1] En `crypta/Vista/VistaConsola.py`: `mostrar_resumen(resumen)` imprime `formatear_resumen(resumen)`; la ayuda agrega `historia <t> | #k   Ver cómo estaba la partida` (contracts/cli.md; FR-406).
+- [X] T023 [HU1] Punto de control (FR-401 a FR-409, FR-423, FR-425): T014–T016 pasan, `python -m unittest` en verde (891 pruebas, 1 omitida que ya existía) y commit «004 HU1: historia durante la partida» (lo hace el grupo).
 
 **Punto de control**: el MVP funciona sin pergaminos, guardado ni replay.
 

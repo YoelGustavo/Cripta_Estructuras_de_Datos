@@ -3,6 +3,9 @@
 Fase 2 (T005): lo que usan todas las historias. El historial sin límite, el
 tope de tiempo y el callback de `Partida`, y la copia de una partida para
 los puntos de control (research D3, D9; FR-407, FR-422, FR-426).
+
+Historia 1 (T014, T016): `historia <t>` e `historia #k` contra el oráculo
+tomado de la partida viva (FR-401 a FR-408, FR-423, FR-425).
 """
 
 import copy
@@ -15,8 +18,9 @@ from crypta.Modelo.Cambio import Cambio
 from crypta.Modelo.Historial import Historial, RegistroAccion
 from crypta.Modelo.Partida import TURNO_JUGADOR, AccionInvalida
 from tests.ayudas_cripta import (
-    catalogo, comando_al_azar, contenido, ficha_cazador, partida_con_pergaminos,
-    partida_sintetica, sala, salida,
+    catalogo, comando_al_azar, comandos_al_azar, contenido, ficha_cazador,
+    ficha_enemigo, nuevo_jugador, partida_con_pergaminos, partida_sintetica,
+    sala, salida, FuenteQueFalla,
 )
 
 
@@ -297,6 +301,414 @@ def _garantizar_desde(viva, copia):
             if sala_viva.contenido_cargado():
                 sala_copia.asignar_contenido(sala_viva.contenido)
     return garantizar
+
+
+# ---------------------------------------------------------------------------
+# Historia 1 (T014, T016)
+# ---------------------------------------------------------------------------
+
+def _linea_y_consulta():
+    """Imports de la historia 1, dentro de una función para que las pruebas
+    de la fase 2 no dependan de estos módulos."""
+    from crypta.Modelo.LineaDeTiempo import ConsultaRechazada, LineaDeTiempo
+    from crypta.Modelo.Reconstruccion import consultar
+    return LineaDeTiempo, ConsultaRechazada, consultar
+
+
+def sin_pergamino(comandos):
+    """Los pergaminos son de la historia 2: aquí se cambian por «esperar»."""
+    for comando in comandos:
+        yield "esperar" if comando == "pergamino" else comando
+
+
+def hasta_acciones(partida, comandos, acciones):
+    """Toma comandos hasta que la partida tiene `acciones` acciones."""
+    for comando in comandos:
+        if partida.acciones_jugador >= acciones:
+            return
+        yield comando
+
+
+SEMILLA_LINEA = 23
+
+
+class Jugada:
+    """Una partida jugada con su línea de tiempo y su oráculo."""
+
+    def __init__(self, k, semilla=SEMILLA_LINEA, cantidad=90, acciones=None,
+                 cripta=None, partida=None, comandos=None):
+        from crypta.bench.oraculo_linea import jugar_con_oraculo
+
+        LineaDeTiempo, _, _ = _linea_y_consulta()
+        self.cripta = cripta if cripta is not None else (
+            partida_con_pergaminos(semilla) if partida is None else None)
+        self.partida = partida if partida is not None else self.cripta.partida
+        self.garantizar = None if self.cripta is None else self.cripta.garantizar
+
+        if comandos is None:
+            comandos = sin_pergamino(comandos_al_azar(
+                self.partida, random.Random(semilla), cantidad))
+
+        if acciones is not None:
+            comandos = hasta_acciones(self.partida, comandos, acciones)
+
+        self.linea = LineaDeTiempo(k)
+        self.linea.iniciar(self.partida)
+        self.oraculo = jugar_con_oraculo(self.partida, self.linea, comandos,
+                                         self.garantizar)
+
+    def cerrar(self):
+        if self.cripta is not None:
+            self.cripta.cerrar()
+
+    def consultar(self, pedido):
+        """Texto de `historia <pedido>`: «instante <t>» o «acción #<k>»."""
+        _, _, consultar = _linea_y_consulta()
+        return formatear(consultar(self.linea, self.ubicar(pedido), self.partida,
+                                   ejecutar_comando))
+
+    def ubicar(self, pedido):
+        tipo, valor = pedido.split(" ")
+        if tipo == "instante":
+            return self.linea.ubicar_instante(int(valor), self.partida.reloj)
+        return self.linea.ubicar_accion(int(valor[1:]))
+
+    def esperado_en_instante(self, t):
+        """El texto del oráculo para el instante t: el de la última entrada
+        de instante con tiempo ≤ t, con el encabezado de t."""
+        elegida = None
+        for i in range(len(self.oraculo)):
+            entrada = self.oraculo.obtener(i)
+            if entrada.tiempo <= t and entrada.pedido.startswith("instante"):
+                elegida = entrada
+        lineas = elegida.texto.split("\n", 1)
+        return f"HISTORIA instante {t}\n" + lineas[1]
+
+    def instantes_entre_eventos(self):
+        """Instantes t estrictamente entre dos entradas de evento seguidas del
+        oráculo (sin decisión en medio)."""
+        resultado = []
+        for i in range(len(self.oraculo) - 1):
+            a = self.oraculo.obtener(i)
+            b = self.oraculo.obtener(i + 1)
+            if a.es_evento and b.es_evento and b.tiempo - a.tiempo >= 2:
+                resultado.append((a.tiempo + b.tiempo) // 2)
+        return resultado
+
+
+
+def formatear(resumen):
+    from crypta.Vista.FormatoResumen import formatear_resumen
+    return formatear_resumen(resumen)
+
+
+def partida_de_guardianes(cantidad, velocidad_enemigo, velocidad_jugador):
+    """Una sala con `cantidad` guardianes (no se mueven y atacan al jugador)
+    y un jugador con vida de sobra."""
+    esqueleto = [sala(1, {"E": salida(2)}), sala(2, {"O": salida(1)})]
+    enemigos = tuple((f"g-{i}", "ent_guardian") for i in range(1, cantidad + 1))
+    contenidos = [contenido(1, enemigos=enemigos)]
+    fichas = catalogo(ficha_enemigo("ent_guardian", "guardián",
+                                    velocidad=velocidad_enemigo, ataque=4))
+    jugador = nuevo_jugador(velocidad=velocidad_jugador, vida_max=500)
+    return partida_sintetica(esqueleto, contenidos, fichas, jugador=jugador)
+
+
+class TestConsultas(unittest.TestCase):
+    """T014: `historia <t>` e `historia #k` dan el estado pedido (FR-401 a
+    FR-404), comparado con el oráculo, con K = 3, 10 y 22."""
+
+    def test_fr401_fr402_todo_el_oraculo_con_varios_k(self):
+        """Cada instante y cada acción que tomó el oráculo, y los instantes
+        entre dos eventos, dan el mismo texto reconstruidos."""
+        for k in (3, 10, 22):
+            jugada = Jugada(k)
+            try:
+                self.assertGreater(jugada.partida.acciones_jugador, 30)
+                for i in range(len(jugada.oraculo)):
+                    entrada = jugada.oraculo.obtener(i)
+                    with self.subTest(k=k, pedido=entrada.pedido):
+                        self.assertEqual(jugada.consultar(entrada.pedido), entrada.texto)
+
+                entre = jugada.instantes_entre_eventos()
+                self.assertGreater(len(entre), 0)
+                for t in entre:
+                    with self.subTest(k=k, entre=t):
+                        self.assertEqual(jugada.consultar(f"instante {t}"),
+                                         jugada.esperado_en_instante(t))
+            finally:
+                jugada.cerrar()
+
+    def test_fr403_hu1_1_un_instante_pasado_lleva_su_reloj(self):
+        """HU1-1: con la partida mucho más adelante, el resumen muestra el
+        reloj de ese estado, no el actual."""
+        jugada = Jugada(10, cantidad=200)
+        try:
+            self.assertGreater(jugada.partida.reloj, 1000)
+            eventos = [jugada.oraculo.obtener(i).tiempo for i in range(len(jugada.oraculo))
+                       if jugada.oraculo.obtener(i).es_evento
+                       and jugada.oraculo.obtener(i).tiempo <= 500]
+            t = max(eventos)
+            texto = jugada.consultar(f"instante {t}")
+            self.assertEqual(texto, jugada.esperado_en_instante(t))
+            self.assertIn(f"Reloj: {t}   ", texto)
+            self.assertNotIn(f"Reloj: {jugada.partida.reloj}   ", texto)
+        finally:
+            jugada.cerrar()
+
+    def test_fr403_hu1_2_instante_futuro_se_rechaza(self):
+        """HU1-2 (Apéndice B): t mayor que el reloj → mensaje de contracts/cli.md."""
+        _, ConsultaRechazada, _ = _linea_y_consulta()
+        jugada = Jugada(10, cantidad=30)
+        try:
+            reloj = jugada.partida.reloj
+            with self.assertRaises(ConsultaRechazada) as error:
+                jugada.ubicar(f"instante {reloj + 1}")
+            self.assertEqual(
+                str(error.exception),
+                f"No se puede consultar el instante {reloj + 1}: el reloj de la "
+                f"partida va en {reloj}.")
+        finally:
+            jugada.cerrar()
+
+    def test_fr401_hu1_3_tres_eventos_en_el_mismo_instante(self):
+        """HU1-3 (Apéndice B): tres guardianes atacan en el instante 100 y el
+        jugador no decide en 100 (velocidad 90: decide en 0, 111, 222): el
+        estado en 100 es el de después de los tres ataques."""
+        partida = partida_de_guardianes(3, velocidad_enemigo=100, velocidad_jugador=90)
+        en_100 = []
+        jugada = Jugada(3, partida=partida, comandos=["esperar", "esperar", "esperar"])
+        try:
+            self.assertNotIn(100, [jugada.linea.decisiones.obtener(i)[0]
+                                   for i in range(len(jugada.linea.decisiones))])
+            # Repetir sobre una copia para contar los eventos del instante 100.
+            copia = copy.deepcopy(jugada.linea.puntos.obtener(0).partida)
+            copia.al_ejecutar_evento = (
+                lambda p, e: en_100.append(e) if e.tiempo == 100 else None)
+            jugar(copia, None, ["esperar", "esperar"])
+            self.assertEqual(len(en_100), 3)
+
+            texto = jugada.consultar("instante 100")
+            self.assertEqual(texto, jugada.esperado_en_instante(100))
+            vida_antes = int(jugada.consultar("instante 99").split("Vida: ")[1].split("/")[0])
+            vida_en_100 = int(texto.split("Vida: ")[1].split("/")[0])
+            self.assertLess(vida_en_100, vida_antes)
+        finally:
+            jugada.cerrar()
+
+    def test_fr401_hu1_4_decision_y_evento_posterior_del_mismo_instante(self):
+        """HU1-4: el jugador decide en 100 y un guardián (velocidad 200) tiene
+        un turno en 100 programado después: el estado en 100 es el de antes
+        de la decisión, sin ese ataque."""
+        partida = partida_de_guardianes(1, velocidad_enemigo=200, velocidad_jugador=100)
+        jugada = Jugada(3, partida=partida, comandos=["esperar", "esperar", "esperar"])
+        try:
+            self.assertEqual(jugada.linea.decisiones.obtener(1)[0], 100)
+            texto = jugada.consultar("instante 100")
+            self.assertEqual(texto, jugada.consultar("acción #2").replace(
+                "HISTORIA acción #2", "HISTORIA instante 100"))
+            self.assertEqual(texto, jugada.esperado_en_instante(100))
+
+            # El ataque de 100 sí llegó: en 101 la vida es menor.
+            vida_100 = int(texto.split("Vida: ")[1].split("/")[0])
+            vida_101 = int(jugada.consultar("instante 101").split("Vida: ")[1].split("/")[0])
+            self.assertLess(vida_101, vida_100)
+        finally:
+            jugada.cerrar()
+
+    def test_fr402_fr404_hu1_5_cuarenta_acciones(self):
+        """HU1-5: con 40 acciones, #1, #20 y #41 (= estado actual)."""
+        from crypta.Modelo.Resumen import armar_resumen, pedido_accion
+
+        jugada = Jugada(10, cantidad=400, acciones=40)
+        try:
+            self.assertEqual(jugada.partida.acciones_jugador, 40)
+            for k in (1, 20, 41):
+                entrada = [jugada.oraculo.obtener(i) for i in range(len(jugada.oraculo))
+                           if jugada.oraculo.obtener(i).pedido == f"acción #{k}"][-1]
+                self.assertEqual(jugada.consultar(f"acción #{k}"), entrada.texto)
+
+            actual = formatear(armar_resumen(jugada.partida, pedido_accion(41)))
+            self.assertEqual(jugada.consultar("acción #41"), actual)
+        finally:
+            jugada.cerrar()
+
+    def test_fr404_hu1_6_acciones_fuera_de_rango(self):
+        """HU1-6: #0 y #42 con 40 acciones → mensaje de contracts/cli.md."""
+        _, ConsultaRechazada, _ = _linea_y_consulta()
+        jugada = Jugada(10, cantidad=400, acciones=40)
+        try:
+            for k in (0, 42):
+                with self.assertRaises(ConsultaRechazada) as error:
+                    jugada.ubicar(f"acción #{k}")
+                self.assertEqual(
+                    str(error.exception),
+                    f"No hay acción #{k}: la partida tiene 40 acciones "
+                    f"(consulta de #1 a #41).")
+        finally:
+            jugada.cerrar()
+
+    def test_fr401_casos_borde(self):
+        """`historia 0`; t = reloj actual (= estado actual); consulta que cae
+        justo en un punto de control (no re-ejecuta nada)."""
+        from crypta.Modelo.Resumen import armar_resumen, pedido_instante
+
+        jugada = Jugada(5, cantidad=80)
+        try:
+            self.assertEqual(jugada.consultar("instante 0"),
+                             jugada.esperado_en_instante(0))
+
+            reloj = jugada.partida.reloj
+            self.assertEqual(jugada.consultar(f"instante {reloj}"),
+                             formatear(armar_resumen(jugada.partida, pedido_instante(reloj))))
+
+            # #11 = estado antes de la acción 11 = punto de control con ancla 10.
+            texto = jugada.consultar("acción #11")
+            self.assertEqual(jugada.linea.ultimas_reejecutadas, 0)
+            entrada = [jugada.oraculo.obtener(i) for i in range(len(jugada.oraculo))
+                       if jugada.oraculo.obtener(i).pedido == "acción #11"][-1]
+            self.assertEqual(texto, entrada.texto)
+        finally:
+            jugada.cerrar()
+
+
+class TestConsultaNoCambiaNada(unittest.TestCase):
+    """T016: una consulta no cambia nada (FR-407, FR-408; SC-403)."""
+
+    def consultas_al_azar(self, jugada, azar, cantidad):
+        pedidos = []
+        n = jugada.partida.acciones_jugador
+        for _ in range(cantidad):
+            if azar.random() < 0.5:
+                pedidos.append(f"acción #{azar.randint(1, n + 1)}")
+            else:
+                pedidos.append(f"instante {azar.randint(0, jugada.partida.reloj)}")
+        return pedidos
+
+    def test_fr407_hu1_8_treinta_consultas_no_cambian_la_partida(self):
+        """HU1-8 (Apéndice B): ni el estado, ni el generador, ni el
+        historial del pergamino, ni el reloj, ni las acciones, ni las
+        solicitudes."""
+        jugada = Jugada(10, cantidad=120)
+        try:
+            partida = jugada.partida
+            antes = serializar_estado(partida)
+            azar = partida.azar.getstate()
+            historial = partida.estado.historial
+            largo = len(historial)
+            ultima = historial._acciones.ultimo().valor
+            reloj, acciones = partida.reloj, partida.acciones_jugador
+            solicitudes = jugada.cripta.fuente.cantidad_solicitudes()
+
+            for pedido in self.consultas_al_azar(jugada, random.Random(4), 30):
+                jugada.consultar(pedido)
+
+            self.assertEqual(serializar_estado(partida), antes)
+            self.assertEqual(partida.azar.getstate(), azar)
+            self.assertIs(partida.estado.historial, historial)
+            self.assertEqual(len(historial), largo)
+            self.assertIs(historial._acciones.ultimo().valor, ultima)
+            self.assertEqual((partida.reloj, partida.acciones_jugador), (reloj, acciones))
+            self.assertEqual(jugada.cripta.fuente.cantidad_solicitudes(), solicitudes)
+        finally:
+            jugada.cerrar()
+
+    def test_fr407_hu1_12_sin_red(self):
+        """HU1-12: con la fuente cambiada por una que falla, las consultas no
+        hacen ninguna solicitud (las salas salen de la partida viva)."""
+        jugada = Jugada(10, cantidad=60)
+        try:
+            cargadas = sum(1 for i in range(len(jugada.partida.mapa.obtener_todas()))
+                           if jugada.partida.mapa.obtener_todas().obtener(i).contenido_cargado())
+            self.assertLess(cargadas, 9)          # quedan salas sin descargar
+            self.assertGreater(cargadas, 2)
+            solicitudes = jugada.cripta.fuente.cantidad_solicitudes()
+            jugada.cripta.gestor._fuente = FuenteQueFalla()
+
+            for pedido in self.consultas_al_azar(jugada, random.Random(8), 40):
+                jugada.consultar(pedido)
+
+            self.assertEqual(jugada.cripta.fuente.cantidad_solicitudes(), solicitudes)
+        finally:
+            jugada.cerrar()
+
+    def test_d8_el_punto_queda_igual_y_las_consultas_se_repiten(self):
+        """D7 y D8: cada punto serializa igual antes y después de 50
+        consultas, sin el contenido de las salas que las consultas cargaron
+        en él (quedan cargadas, decisión del grupo); y repetir una consulta
+        da el mismo texto."""
+        jugada = Jugada(10, cantidad=150)
+        try:
+            puntos = jugada.linea.puntos
+            # Copias tomadas ANTES de consultar: no las toca ninguna consulta.
+            originales = [copy.deepcopy(puntos.obtener(j).partida)
+                          for j in range(len(puntos))]
+            pedidos = self.consultas_al_azar(jugada, random.Random(15), 50)
+            textos = [jugada.consultar(pedido) for pedido in pedidos]
+
+            alguna_cargada = False
+            for j in range(len(puntos)):
+                punto = puntos.obtener(j)
+                omitir = punto.salas_cargadas
+                alguna_cargada = alguna_cargada or len(omitir) > 0
+                self.assertEqual(serializar_estado(punto.partida, omitir),
+                                 serializar_estado(originales[j], omitir),
+                                 f"punto {j}")
+            self.assertTrue(alguna_cargada)      # el caso de D7 sí se probó
+
+            for pedido, texto in zip(pedidos, textos):
+                self.assertEqual(jugada.consultar(pedido), texto, pedido)
+        finally:
+            jugada.cerrar()
+
+    def test_fr423_fr425_cada_consulta_rehace_a_lo_sumo_k_y_mira_un_punto(self):
+        for k in (3, 10):
+            jugada = Jugada(k, cantidad=120)
+            try:
+                for pedido in self.consultas_al_azar(jugada, random.Random(k), 40):
+                    jugada.consultar(pedido)
+                    self.assertLessEqual(jugada.linea.ultimas_reejecutadas, k, pedido)
+                    if jugada.linea.ultimas_reejecutadas > 0:
+                        self.assertEqual(jugada.linea.puntos_examinados, 1, pedido)
+            finally:
+                jugada.cerrar()
+
+    def test_fr408_hu1_9_misma_partida_con_y_sin_consultas(self):
+        """HU1-9 y SC-403: con la misma cripta, semilla y comandos, una
+        partida con 30 consultas intercaladas y otra sin ninguna terminan con
+        el mismo estado, el mismo resultado y el mismo `partida.log`, byte
+        por byte."""
+        import os
+        import tempfile
+
+        from tests.ayudas_cripta import controlador_desde_linea
+
+        comandos = ["mover E", "esperar", "atacar 1", "esperar", "mover O",
+                    "recoger 1", "equipar", "siguiente", "recoger 1", "mover E",
+                    "mover E", "atacar 1", "esperar", "mover S", "esperar"]
+        consultas = ["historia 0", "historia #2", "historia 150", "historia #1",
+                     "historia 77", "historia #3"]
+        con_consultas = []
+        for i, comando in enumerate(comandos):
+            con_consultas.append(comando)
+            con_consultas.append(consultas[i % len(consultas)])
+            con_consultas.append(consultas[(i + 3) % len(consultas)])
+
+        self.assertEqual(sum(1 for c in con_consultas if c.startswith("historia")), 30)
+
+        resultados = []
+        for lista in (comandos, con_consultas):
+            with tempfile.TemporaryDirectory() as carpeta:
+                controlador = controlador_desde_linea(carpeta, lista)
+                controlador.iniciar()
+                with open(os.path.join(carpeta, "partida.log"), "rb") as archivo:
+                    log = archivo.read()
+                resultados.append((serializar_estado(controlador.partida),
+                                   controlador.partida.resultado, log))
+                controlador.gestor_contenido.cerrar()
+
+        self.assertEqual(resultados[0], resultados[1])
+        self.assertNotIn(b"historia", resultados[1][2])
 
 
 if __name__ == "__main__":
