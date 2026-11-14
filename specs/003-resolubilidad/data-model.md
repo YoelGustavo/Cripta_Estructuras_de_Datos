@@ -92,6 +92,7 @@ o `sin obtener` para siempre → con `dependencia` o sin ella, y quizá en un ci
 | `dependencias` | `Vector[Dependencia]`, por id de la llave | FR-312, FR-314 |
 | `ciclos` | `Vector[Vector[str]]`, cada uno desde su menor id, ordenados por esa llave | FR-315 |
 | `salida_sin_puerta` | `bool` (llave_salida obtenible pero ninguna puerta que la pide lleva a sala_salida desde la región) | FR-317 |
+| `llave_salida`, `sala_salida` | ids de la cripta (o None), para el texto de FR-317 | FR-317 |
 
 ### PuertaFrontera
 

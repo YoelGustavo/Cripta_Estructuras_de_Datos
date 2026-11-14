@@ -177,5 +177,42 @@ class TestOrdenSeguible(unittest.TestCase):
         self.assertLess(resolubles, CRIPTAS - 10)
 
 
+class TestEquivalenciaReporte(unittest.TestCase):
+    """FR-313, FR-314, FR-332, SC-302: el texto completo (orden o reporte con
+    frontera, ubicaciones, dependencias y ciclos) es igual al de la
+    alternativa ingenua, que calcula las dependencias con un recorrido por
+    llave."""
+
+    def test_texto_igual_al_de_la_ingenua_FR_332_SC_302(self):
+        from crypta.Vista.FormatoVerificacion import texto_resultado
+
+        no_resolubles = con_ciclos = con_dependencia = 0
+
+        for semilla in range(1000, 1000 + CRIPTAS):
+            esqueleto, generales, llaves = generar(semilla)
+
+            with self.subTest(semilla=semilla):
+                mapa = mapa_de(esqueleto)
+                ubicaciones = leer_ubicaciones(llaves, mapa)
+                resultado = verificar(mapa, generales, ubicaciones)
+                ingenuo = verificar_ingenuo(mapa, generales, ubicaciones)
+
+                self.assertEqual(texto_resultado(resultado),
+                                 texto_resultado(ingenuo))
+
+                if not resultado.resoluble:
+                    no_resolubles += 1
+                    con_ciclos += len(resultado.reporte.ciclos) > 0
+                    dependencias = resultado.reporte.dependencias
+                    con_dependencia += any(
+                        dependencias.obtener(i).depende_de is not None
+                        for i in range(len(dependencias)))
+
+        # La muestra cubre lo que se quiere comparar.
+        self.assertGreater(no_resolubles, CRIPTAS // 3)
+        self.assertGreater(con_ciclos, 20)
+        self.assertGreater(con_dependencia, 40)
+
+
 if __name__ == "__main__":
     unittest.main()

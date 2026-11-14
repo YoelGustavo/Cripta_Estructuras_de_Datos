@@ -40,12 +40,14 @@ class Reporte:
       en su menor id, ordenados por esa llave (FR-315).
     - `falta_sala_salida`, `falta_llave_salida` (FR-318).
     - `salida_sin_puerta`: `llave_salida` es obtenible pero ninguna puerta
-      que la pide lleva a `sala_salida` desde la región (FR-317).
+      que la pide lleva a `sala_salida` desde la región (FR-317); para el
+      texto, `llave_salida` y `sala_salida` son los de la cripta.
     """
 
     __slots__ = ("no_obtenibles", "frontera", "ubicaciones_frontera",
                  "dependencias", "ciclos", "falta_sala_salida",
-                 "falta_llave_salida", "salida_sin_puerta")
+                 "falta_llave_salida", "salida_sin_puerta", "llave_salida",
+                 "sala_salida")
 
     def __init__(self):
         self.no_obtenibles = Vector()
@@ -56,6 +58,8 @@ class Reporte:
         self.falta_sala_salida = False
         self.falta_llave_salida = False
         self.salida_sin_puerta = False
+        self.llave_salida = None
+        self.sala_salida = None
 
 
 class PuertaFrontera:

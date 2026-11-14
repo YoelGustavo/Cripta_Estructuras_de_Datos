@@ -471,7 +471,6 @@ class TestVisitasUnaVez(unittest.TestCase):
         self.assertEqual(contador.maximo("region"), 1)
         self.assertLessEqual(contador.maximo("salida"), 2)
 
-    @unittest.expectedFailure       # se activa con las capas (T024)
     def test_no_resoluble_cada_sala_una_vez_y_cada_salida_tres_FR_313(self):
         """Cripta no resoluble con varias capas más allá de la frontera:
         cada sala se marca a lo sumo una vez (en la región o en una capa) y
@@ -483,6 +482,330 @@ class TestVisitasUnaVez(unittest.TestCase):
         self.assertGreater(contador.maximo("capa"), 0)
         self.assertLessEqual(max(contador.salas_marcadas().values()), 1)
         self.assertLessEqual(contador.maximo("salida"), 3)
+
+
+def reporte_de(esqueleto, datos, *ubicaciones):
+    resultado = verificar_cripta(esqueleto, datos, respuesta_llaves(*ubicaciones))
+    return resultado, resultado.reporte
+
+
+def dependencias_de(reporte):
+    """{llave: llave de la que depende o motivo}."""
+    resultado = {}
+
+    for i in range(len(reporte.dependencias)):
+        dependencia = reporte.dependencias.obtener(i)
+        resultado[dependencia.llave] = (dependencia.depende_de
+                                        if dependencia.depende_de is not None
+                                        else dependencia.motivo)
+
+    return resultado
+
+
+def ciclos_de(reporte):
+    return [lista(reporte.ciclos.obtener(i)) for i in range(len(reporte.ciclos))]
+
+
+def frontera_de(reporte):
+    return [(p.id_origen, p.direccion, p.id_destino, p.llave)
+            for p in (reporte.frontera.obtener(i)
+                      for i in range(len(reporte.frontera)))]
+
+
+def ubicaciones_de(reporte):
+    resultado = []
+
+    for i in range(len(reporte.ubicaciones_frontera)):
+        llave, lugares = reporte.ubicaciones_frontera.obtener(i)
+        resultado.append((llave, lista(lugares)))
+
+    return resultado
+
+
+# HU2-1: sala 1 inicial, sala 2 de salida; la salida E de 1 a 2 pide
+# `salida`, que está en la sala 2.
+ESQUELETO_HU2_1 = [
+    sala(1, {"E": puerta(2, SALIDA)}),
+    sala(2, {"O": puerta(1, SALIDA)}),
+]
+TEXTO_HU2_1 = (
+    "Verificación de resolubilidad: la cripta NO es resoluble.\n"
+    "Llaves que no se pueden obtener:\n"
+    "  itm_llave_salida\n"
+    "Frontera bloqueada:\n"
+    "  sala 1, E -> sala 2, pide itm_llave_salida\n"
+    "Dónde están las llaves de la frontera:\n"
+    "  itm_llave_salida: sala 2\n"
+    "Dependencias:\n"
+    "  itm_llave_salida depende de itm_llave_salida\n"
+    "Ciclos de dependencia:\n"
+    "  itm_llave_salida -> itm_llave_salida"
+)
+
+# HU2-2: N de 1 a 2 pide `b`, S de 1 a 3 pide `a`; `a` en la 2, `b` en la 3.
+ESQUELETO_HU2_2 = [
+    sala(1, {"N": puerta(2, B), "S": puerta(3, A)}),
+    sala(2, {"S": puerta(1, B)}),
+    sala(3, {"N": puerta(1, A)}),
+]
+
+
+class TestReporteBasico(unittest.TestCase):
+    """HU2-1, HU2-3, HU2-8, HU2-9, HU2-10 (FR-302, FR-309 a FR-312,
+    FR-316 a FR-318)."""
+
+    def test_HU2_1_texto_completo_FR_309_a_316(self):
+        """HU2-1 (Apéndice B): `llave_salida` detrás de la única puerta que
+        ella misma abre: el reporte completo, en el orden de FR-316."""
+        resultado, _ = reporte_de(ESQUELETO_HU2_1,
+                                  generales(ESQUELETO_HU2_1, 2),
+                                  ubicacion(SALIDA, 2))
+
+        self.assertFalse(resultado.resoluble)
+        self.assertEqual(texto(resultado), TEXTO_HU2_1)
+
+    def test_HU2_3_llave_que_no_esta_en_la_cripta_FR_311_312_314(self):
+        """HU2-3: la frontera pide `x`, que no está en la ubicación."""
+        x = "itm_llave_x"
+        esqueleto = [
+            sala(1, {"E": puerta(2, x)}),
+            sala(2, {"O": puerta(1, x), "E": puerta(3, SALIDA)}),
+            sala(3, {"O": puerta(2, SALIDA)}),
+        ]
+        resultado, reporte = reporte_de(esqueleto, generales(esqueleto, 3),
+                                        ubicacion(SALIDA, 2))
+
+        self.assertEqual(lista(reporte.no_obtenibles), [SALIDA, x])
+        self.assertEqual(frontera_de(reporte), [(1, "E", 2, x)])
+        self.assertEqual(ubicaciones_de(reporte), [(x, [])])
+        self.assertEqual(dependencias_de(reporte),
+                         {SALIDA: x, x: "no está en la cripta"})
+        self.assertIn("  itm_llave_x: no está en la cripta\n", texto(resultado))
+        self.assertIn("  itm_llave_x no depende de ninguna: no está en la "
+                      "cripta", texto(resultado))
+
+    def test_HU2_8_salida_obtenible_sin_puerta_que_la_pida_FR_317(self):
+        """HU2-8: `salida` es obtenible pero ninguna puerta que la pide lleva
+        a `sala_salida` desde la región: el reporte lo dice."""
+        esqueleto = [
+            sala(1, {"E": salida(2)}),
+            sala(2, {"O": salida(1)}),
+        ]
+        resultado, reporte = reporte_de(esqueleto, generales(esqueleto, 2),
+                                        ubicacion(SALIDA, 1))
+
+        self.assertTrue(reporte.salida_sin_puerta)
+        self.assertTrue(texto(resultado).endswith(
+            "\nSe puede obtener itm_llave_salida, pero ninguna puerta que la "
+            "pide lleva a la sala 2 desde la región alcanzable."))
+
+    def test_HU2_9_falta_sala_salida_y_llave_salida_FR_302_318(self):
+        """HU2-9: sin `sala_salida` o sin `llave_salida` no es resoluble y el
+        reporte dice cuál falta; lo demás se calcula igual."""
+        esqueleto = [
+            sala(1, {"E": puerta(2, A)}),
+            sala(2, {"O": puerta(1, A)}),
+        ]
+
+        for sala_salida, llave_salida, faltan in (
+                (None, SALIDA, ["Falta sala_salida en la cripta."]),
+                (2, None, ["Falta llave_salida en la cripta."]),
+                (None, None, ["Falta sala_salida en la cripta.",
+                              "Falta llave_salida en la cripta."])):
+            with self.subTest(sala_salida=sala_salida, llave_salida=llave_salida):
+                datos = generales(esqueleto, sala_salida,
+                                  llave_salida=llave_salida)
+                resultado, reporte = reporte_de(esqueleto, datos,
+                                                ubicacion(A, 2))
+
+                self.assertFalse(resultado.resoluble)
+                self.assertEqual(frontera_de(reporte), [(1, "E", 2, A)])
+                self.assertEqual(dependencias_de(reporte)[A], A)
+                self.assertTrue(texto(resultado).endswith("\n" + "\n".join(faltan)))
+
+    def test_HU2_10_puerta_bloqueada_dentro_de_la_region_no_es_frontera_FR_310(self):
+        """HU2-10, y el orden de la frontera: por id de sala de origen y
+        luego N, S, E, O."""
+        x, y = "itm_llave_x", "itm_llave_y"
+        esqueleto = [
+            sala(1, {"N": puerta(5, x), "E": salida(2), "O": puerta(6, y)}),
+            sala(2, {"O": salida(1), "E": salida(3), "S": puerta(7, x)}),
+            sala(3, {"O": salida(2), "N": puerta(1, x)}),   # dentro: no
+            sala(5, {"S": puerta(1, x)}),
+            sala(6, {"E": puerta(1, y)}),
+            sala(7, {"N": puerta(2, x)}),
+        ]
+        _, reporte = reporte_de(esqueleto, generales(esqueleto, 7))
+
+        self.assertEqual(frontera_de(reporte), [(1, "N", 5, x), (1, "O", 6, y),
+                                                (2, "S", 7, x)])
+
+
+class TestDependencias(unittest.TestCase):
+    """HU2-2, HU2-4 a HU2-7 (FR-312, FR-314, FR-315)."""
+
+    def test_HU2_2_ciclo_de_dos_llaves_FR_314_315(self):
+        """HU2-2: `a` depende de `b`, `b` de `a`, y un único ciclo que
+        empieza por la de menor id."""
+        _, reporte = reporte_de(ESQUELETO_HU2_2,
+                                generales(ESQUELETO_HU2_2, 2, llave_salida=B),
+                                ubicacion(A, 2), ubicacion(B, 3))
+
+        self.assertEqual(dependencias_de(reporte), {A: B, B: A})
+        self.assertEqual(ciclos_de(reporte), [[A, B]])
+
+    def test_HU2_4_sala_inalcanzable_ni_abriendo_todo_FR_314(self):
+        """HU2-4: una llave en una sala de la que solo salen salidas sin
+        vuelta no depende de ninguna y no está en ningún ciclo."""
+        esqueleto = [
+            sala(1, {"E": puerta(2, SALIDA)}),
+            sala(2, {"O": puerta(1, SALIDA)}),
+            sala(5, {"N": salida(1)}),
+        ]
+        resultado, reporte = reporte_de(esqueleto, generales(esqueleto, 2),
+                                        ubicacion(SALIDA, 5))
+
+        self.assertEqual(dependencias_de(reporte),
+                         {SALIDA: "su sala no se alcanza ni abriendo todas "
+                                  "las puertas"})
+        self.assertEqual(ciclos_de(reporte), [])
+        self.assertIn("  itm_llave_salida no depende de ninguna: su sala no se "
+                      "alcanza ni abriendo todas las puertas", texto(resultado))
+
+    def test_HU2_5_gana_el_camino_con_menos_puertas_bloqueadas_FR_314(self):
+        """HU2-5: a la sala 7 se llega cruzando una puerta bloqueada (`b`) o
+        dos (la primera `a`): `c` depende de `b`, aunque `a` < `b`."""
+        esqueleto = [
+            sala(1, {"E": puerta(2, A), "S": puerta(4, B)}),
+            sala(2, {"O": puerta(1, A), "E": puerta(3, D)}),
+            sala(3, {"O": puerta(2, D), "S": salida(7)}),
+            sala(4, {"N": puerta(1, B), "E": salida(7)}),
+            sala(7, {"N": salida(3), "O": salida(4)}),
+        ]
+        _, reporte = reporte_de(esqueleto, generales(esqueleto, 7),
+                                ubicacion(C, 7))
+
+        self.assertEqual(dependencias_de(reporte)[C], B)
+
+    def test_HU2_6_empate_gana_la_de_menor_id_FR_314(self):
+        """HU2-6: dos caminos con una sola puerta bloqueada cada uno (`e` y
+        `d`): `c` depende de `d`."""
+        e = "itm_llave_e"
+        esqueleto = [
+            sala(1, {"N": puerta(2, e), "S": puerta(3, D)}),
+            sala(2, {"S": puerta(1, e), "E": salida(7)}),
+            sala(3, {"N": puerta(1, D), "E": salida(7)}),
+            sala(7, {"O": salida(2), "S": salida(3)}),
+        ]
+        _, reporte = reporte_de(esqueleto, generales(esqueleto, 7),
+                                ubicacion(C, 7))
+
+        self.assertEqual(dependencias_de(reporte)[C], D)
+
+    def test_HU2_7_cadena_que_llega_a_un_ciclo_FR_315(self):
+        """HU2-7: `c` depende de `a`, en el ciclo `a -> b -> a`; el único
+        ciclo reportado es ese."""
+        esqueleto = [
+            sala(1, {"N": puerta(2, B), "S": puerta(3, A), "E": puerta(4, A)}),
+            sala(2, {"S": puerta(1, B)}),
+            sala(3, {"N": puerta(1, A)}),
+            sala(4, {"O": puerta(1, A)}),
+        ]
+        resultado, reporte = reporte_de(
+            esqueleto, generales(esqueleto, 2, llave_salida=B),
+            ubicacion(A, 2), ubicacion(B, 3), ubicacion(C, 4))
+
+        self.assertEqual(dependencias_de(reporte), {A: B, B: A, C: A})
+        self.assertEqual(ciclos_de(reporte), [[A, B]])
+        self.assertIn("Ciclos de dependencia:\n"
+                      "  itm_llave_a -> itm_llave_b -> itm_llave_a",
+                      texto(resultado))
+
+    def test_dependencia_es_la_primera_puerta_del_camino_FR_314(self):
+        """Tres capas: a la sala 4 se llega por `b`, luego `a`, luego `d`;
+        `c` depende de `b` (la primera), no de la última."""
+        esqueleto = [
+            sala(1, {"E": puerta(2, B)}),
+            sala(2, {"O": puerta(1, B), "E": puerta(3, A)}),
+            sala(3, {"O": puerta(2, A), "E": puerta(4, D)}),
+            sala(4, {"O": puerta(3, D)}),
+        ]
+        _, reporte = reporte_de(esqueleto, generales(esqueleto, 4),
+                                ubicacion(C, 4))
+
+        self.assertEqual(dependencias_de(reporte)[C], B)
+
+    def test_dos_ciclos_ordenados_por_su_primera_llave_FR_315(self):
+        e = "itm_llave_e"
+        esqueleto = [
+            sala(1, {"N": puerta(2, e), "S": puerta(3, D),
+                     "E": puerta(4, B), "O": puerta(5, A)}),
+            sala(2, {"S": puerta(1, e)}),
+            sala(3, {"N": puerta(1, D)}),
+            sala(4, {"O": puerta(1, B)}),
+            sala(5, {"E": puerta(1, A)}),
+        ]
+        # d -> e -> d y a -> b -> a
+        _, reporte = reporte_de(esqueleto, generales(esqueleto, 2),
+                                ubicacion(D, 2), ubicacion(e, 3),
+                                ubicacion(A, 4), ubicacion(B, 5))
+
+        self.assertEqual(ciclos_de(reporte), [[A, B], [D, e]])
+
+
+class TestReporteDeterminista(unittest.TestCase):
+    """HU2-11 y el orden de FR-311 (FR-311, FR-316, FR-320, SC-305)."""
+
+    ESQUELETO = [
+        sala(1, {"N": puerta(2, B), "S": puerta(3, A), "E": puerta(4, A)}),
+        sala(2, {"S": puerta(1, B), "E": puerta(5, D)}),
+        sala(3, {"N": puerta(1, A)}),
+        sala(4, {"O": puerta(1, A)}),
+        sala(5, {"O": puerta(2, D)}),
+    ]
+    LLAVES = [ubicacion(A, 2), ubicacion(B, 3), ubicacion(C, 4),
+              ubicacion(SALIDA, 5, enemigo="e-9"), ubicacion(B, 4)]
+
+    def test_HU2_11_mismo_texto_en_cualquier_orden_FR_320(self):
+        base = texto(verificar_cripta(self.ESQUELETO,
+                                      generales(self.ESQUELETO, 5),
+                                      respuesta_llaves(*self.LLAVES)))
+        azar = random.Random(11)
+
+        for _ in range(15):
+            llaves = list(self.LLAVES)
+            azar.shuffle(llaves)
+            salas = []
+
+            for datos in self.ESQUELETO:
+                direcciones = list(datos["salidas"].items())
+                azar.shuffle(direcciones)
+                salas.append(sala(datos["id"], dict(direcciones)))
+
+            azar.shuffle(salas)
+            self.assertEqual(
+                texto(verificar_cripta(salas, generales(salas, 5),
+                                       respuesta_llaves(*llaves))),
+                base)
+
+    def test_ubicaciones_por_sala_y_luego_enemigo_FR_311(self):
+        """FR-311: por sala; en la misma sala, primero la ubicación sin
+        enemigo y después las que tienen enemigo, por id de enemigo."""
+        esqueleto = [
+            sala(1, {"E": puerta(2, A)}),
+            sala(2, {"O": puerta(1, A)}),
+            sala(3, {}),
+            sala(7, {}),
+        ]
+        resultado, reporte = reporte_de(
+            esqueleto, generales(esqueleto, 2, llave_salida=A),
+            ubicacion(A, 7), ubicacion(A, 3, enemigo="e-2"), ubicacion(A, 3),
+            ubicacion(A, 3, enemigo="e-1"))
+
+        self.assertEqual(ubicaciones_de(reporte),
+                         [(A, [(3, None), (3, "e-1"), (3, "e-2"), (7, None)])])
+        self.assertIn("  itm_llave_a: sala 3, sala 3 (la suelta e-1), "
+                      "sala 3 (la suelta e-2), sala 7\n", texto(resultado))
 
 
 if __name__ == "__main__":
