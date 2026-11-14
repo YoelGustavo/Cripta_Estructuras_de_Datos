@@ -155,7 +155,8 @@ partida idéntica en la que esas acciones nunca se hicieron.
    el reloj que quedó después del pergamino, **entonces** se rechaza. *(FR-403, FR-410)*
 3. **Dada** una partida que usó un pergamino y siguió con acciones nuevas, **cuando** se consulta
    cualquier instante o acción, **entonces** el resumen es igual al de una partida que hizo
-   directamente las acciones que quedaron, sin las revertidas. *(FR-410, FR-411)*
+   directamente las acciones que quedaron, sin las revertidas, salvo los pergaminos gastados, los
+   pergaminos de las salas y la posición del objeto actual del inventario. *(FR-410, FR-411)*
 4. **Dada** una partida larga, **cuando** se usa un pergamino, **entonces** el recorte de la línea
    de tiempo no recorre toda la historia: su costo no crece con la cantidad de acciones previas.
    *(FR-412)*
