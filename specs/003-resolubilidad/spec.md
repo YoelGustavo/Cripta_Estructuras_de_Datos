@@ -494,7 +494,9 @@ Medidos en el equipo local, sin red ni renderizado (P2 §6.1; constitución, pri
 - **SC-307**: Todas las pruebas de la primera parte y de la capacidad 001 siguen pasando, y
   `--replay` de partidas existentes da el mismo resultado. Las que inician una partida sin conexión
   necesitan la ubicación de las llaves en sus datos de prueba (FR-324): solo se ajustan esos datos,
-  no lo que las pruebas comprueban.
+  no lo que las pruebas comprueban. Única excepción: las pruebas en línea que cuentan las
+  solicitudes exactas de una partida (o fijan el presupuesto justo para un escenario) suben en una,
+  por la consulta de ubicación de llaves (FR-322).
 - **SC-308**: En la revisión, con una cripta nueva no resoluble, cualquier integrante puede señalar
   en el reporte la llave que falta, la puerta que bloquea y el ciclo, sin consultar nada adicional.
 
