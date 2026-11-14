@@ -4,7 +4,7 @@
 
 **Creada**: 2026-11-12
 
-**Estado**: Borrador
+**Estado**: Confirmada
 
 **Fuentes**: P2 §3.6, §5.5, §6.1, §6.3, §7.2, §7.3 y Apéndice B («Línea de tiempo»). Reglas
 heredadas de P1 (§2.3, §2.11, §4.6, §4.10, §4.11) y de la capacidad 001 (límite de 20 ms por ciclo).
@@ -258,7 +258,8 @@ secciones.
    300 salas con unos 20 enemigos activos; acciones mezcladas, sin que la partida termine) con el
    K por defecto, **cuando** `--bench` mide consultas `historia` repartidas por toda la partida,
    **entonces** el p95 es menor que 50 ms; y `--bench` también reporta, sin límite, el p95 en la
-   partida de escala de 2 000 salas con 50 cazadores. *(FR-432)*
+   partida de escala de 2 000 salas con 50 cazadores (al menos 1 000 acciones, K por defecto).
+   *(FR-432)*
 8. **Dado** el escenario de 50 cazadores de la capacidad 001 con la línea de tiempo activa,
    **cuando** `--bench` mide el ciclo de eventos, **entonces** el p95 sigue por debajo de 20 ms.
    *(FR-433)*
@@ -391,14 +392,15 @@ para no chocar con las otras capacidades.
 
 ### Requisitos funcionales — Medición
 
-- **FR-427**: `--bench` DEBE generar partidas sintéticas de al menos 5 000 acciones del jugador, de
-  forma determinista por semilla, sobre dos criptas: (a) una del tamaño de la cripta de referencia
-  publicada por el profesor (cripta-06, 300 salas), que es cripta-06 si su contenido está en la
-  copia local y, si no, una sintética de 300 salas con unos 20 enemigos activos; y (b) como prueba
-  de escala, la cripta sintética de 2 000 salas con 50 cazadores activos de la capacidad 001. Las
-  acciones DEBEN mezclar movimientos, ataques, recoger y usar objetos y
+- **FR-427**: `--bench` DEBE generar partidas sintéticas, de forma determinista por semilla, sobre
+  dos criptas: (a) una del tamaño de la cripta de referencia publicada por el profesor (cripta-06,
+  300 salas), que es cripta-06 si su contenido está en la copia local y, si no, una sintética de
+  300 salas con unos 20 enemigos activos, con al menos 5 000 acciones del jugador; y (b) como prueba
+  de escala, la cripta sintética de 2 000 salas con 50 cazadores activos de la capacidad 001, con al
+  menos 1 000 acciones del jugador y solo el K por defecto (con 5 000 acciones los puntos de control
+  ocuparían unos 2,2 GB). Las acciones DEBEN mezclar movimientos, ataques, recoger y usar objetos y
   algunos pergaminos, y el jugador DEBE tener vida de sobra para que la partida no termine antes de
-  las 5 000 acciones (como en el bench del ciclo de P1).
+  completarlas (como en el bench del ciclo de P1).
 - **FR-428**: `--bench` DEBE medir memoria y tiempo de consulta para al menos tres valores de K y para
   la alternativa sin puntos de control. Esta última PUEDE medirse con menos consultas que las de
   FR-432, porque cada una puede tener que reconstruir toda la partida.
@@ -449,8 +451,9 @@ Medidos en el equipo local, sin red ni vista (P2 §6.1; constitución, principio
 - **SC-404**: Según `--bench`, el p95 de `historia` es menor que 50 ms en una partida de al menos
   5 000 acciones sobre una cripta del tamaño de la de referencia (cripta-06 si está en la copia
   local; si no, una sintética de 300 salas con unos 20 enemigos activos), con el K por defecto; el
-  p95 en la partida de escala de 2 000 salas con 50 cazadores se reporta sin límite y, si pasa de
-  50 ms, se documenta en los Límites de `DECISIONES.md`.
+  p95 en la partida de escala de 2 000 salas con 50 cazadores (al menos 1 000 acciones, K por
+  defecto) se reporta sin límite y, si pasa de 50 ms, se documenta en los Límites de
+  `DECISIONES.md`.
 - **SC-405**: Según `--bench`, el p95 del ciclo de eventos con la línea de tiempo activa sigue por
   debajo de 20 ms en el escenario de la capacidad 001.
 - **SC-406**: `--bench` muestra, para al menos tres valores de K y la alternativa sin puntos de
