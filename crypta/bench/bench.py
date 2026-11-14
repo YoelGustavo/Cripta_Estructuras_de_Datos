@@ -7,7 +7,7 @@ import time
 
 from crypta.bench import (bench_agenda, bench_cache, bench_cazador, bench_ciclo,
                           bench_inventario, bench_ordenamiento, bench_rastro,
-                          bench_red, bench_resolubilidad)
+                          bench_linea, bench_red, bench_resolubilidad)
 from crypta.bench.medicion import formato_tiempo, tabla
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
@@ -240,6 +240,16 @@ SECCIONES = (
      bench_resolubilidad.ejecutar_igualdad),
     ("resol_numeracion", "R5 Numeración de llaves (research D1)",
      bench_resolubilidad.ejecutar_numeracion),
+    # Capacidad 004 (specs/004-linea-de-tiempo/contracts/bench.md).
+    ("linea_l1", "L1 Consulta de historia por K (FR-428, FR-432)", bench_linea.ejecutar_l1),
+    ("linea_l2", "L2 Hacia adelante frente a hacia atrás (FR-429)", bench_linea.ejecutar_l2),
+    ("linea_l3", "L3 Igualdad de resúmenes (FR-430)",
+     lambda rapido: bench_linea.ejecutar_l3(rapido)),
+    ("linea_l4", "L4 Ciclo con la línea activa (FR-433)", bench_linea.ejecutar_l4),
+    ("linea_l5", "L5 Memoria de la línea (FR-434)", bench_linea.ejecutar_l5),
+    ("linea_l6", "L6 Puntos examinados (FR-425)", bench_linea.ejecutar_l6),
+    ("linea_l7", "L7 Cómo se copia un punto (research D3)", bench_linea.ejecutar_l7),
+    ("linea_l8", "L8 Guardar y cargar con la línea (FR-417)", bench_linea.ejecutar_l8),
 )
 
 

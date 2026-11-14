@@ -602,3 +602,10 @@ Plan, contratos y tareas:
 
 **USO:** implementacion de la fase 5 de la parte 004
 
+**Prompt:** /speckit-implement Solo la fase 6 (T033 a T039) de specs/004-linea-de-tiempo/tasks.md. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** implementacion de la fase 6 de la parte 004
+
+**Prompt:** /speckit-implement Solo la fase 7 (T040 a T051) de specs/004-linea-de-tiempo/tasks.md. T050 no la hagas: la corro yo. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** implementacion de la fase 7 de la parte 004

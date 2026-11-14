@@ -325,13 +325,13 @@ por defecto (contracts/bench.md).
 
 ### Pruebas de la historia 5 (escribir primero; deben fallar)
 
-- [ ] T040 [P] [HU5] Escribir `TestCheckpointCada` en `tests/test_controlador.py` (FR-420, FR-422, FR-424, FR-426):
+- [X] T040 [P] [HU5] Escribir `TestCheckpointCada` en `tests/test_controlador.py` (FR-420, FR-422, FR-424, FR-426):
   - HU5-4: `--checkpoint-cada 0`, `-3`, `x` y `2.5` → error de argumentos;
   - `--help` muestra el K por defecto;
   - HU5-1: la misma partida con K = 1, 10, 100 y el K por defecto da resúmenes idénticos;
   - HU5-3: 5 000 acciones con K = 10 → anclas 0, 10, 20…, y entre ellas solo entradas;
   - HU5-11: el log de una partida de la 001 reproducido con y sin línea da el mismo estado final (`serializar_estado`) y el mismo resultado.
-- [ ] T041 [P] [HU5] Escribir las pruebas de la línea de tiempo en `tests/test_bench.py` (FR-427 a FR-431):
+- [X] T041 [P] [HU5] Escribir las pruebas de la línea de tiempo en `tests/test_bench.py` (FR-427 a FR-431):
   - HU5-5: huella repetible de `partida_linea` con la misma semilla;
   - L1–L8 corren en modo rápido (acciones y consultas reducidas);
   - HU5-6: L3 con una variante saboteada (reconstrucción que salta una acción) imprime ERROR y `ejecutar` devuelve un código ≠ 0;
@@ -340,15 +340,15 @@ por defecto (contracts/bench.md).
 
 ### Implementación de la historia 5
 
-- [ ] T042 [HU5] En `crypta/main.py` (FR-420; contracts/cli.md): argumento `--checkpoint-cada K`, con un `type` propio para enteros ≥ 1 y `default=K_POR_DEFECTO`. El ayuda dice el valor. Se pasa al `Controlador` (T021) y a `Reproductor.reproducir_registro` (T030).
-- [ ] T043 [HU5] Crear `crypta/bench/bench_linea.py`, el generador (FR-427; contracts/bench.md). `partida_linea(cripta, semilla, acciones)`:
+- [X] T042 [HU5] En `crypta/main.py` (FR-420; contracts/cli.md): argumento `--checkpoint-cada K`, con un `type` propio para enteros ≥ 1 y `default=K_POR_DEFECTO`. El ayuda dice el valor. Se pasa al `Controlador` (T021) y a `Reproductor.reproducir_registro` (T030).
+- [X] T043 [HU5] Crear `crypta/bench/bench_linea.py`, el generador (FR-427; contracts/bench.md). `partida_linea(cripta, semilla, acciones)`:
   - **(a)**: cripta-06 si la copia local tiene contenidos (se comprueba en `AlmacenDisco`, sin red). Si no, una sintética de 300 salas en cuadrícula con costos variables, puertas abiertas, cerradas y con llave, armas, armaduras, pociones, pergaminos de retroceso y **20 enemigos activos** repartidos.
   - **(b)**: `partida_con_cazadores(50)` de `crypta/bench/bench_ciclo.py` con los mismos objetos y pergaminos.
   - Jugador con `vida_max = 10**9`. Acciones mezcladas y deterministas con un `random.Random(semilla)` propio: ≥ 5 000 netas en (a) y ≥ 1 000 en (b), con **un `pergamino` de retroceso cada 50 acciones** (contracts/bench.md); las rechazadas no cuentan.
   - Huella: las cantidades del generador (salas, enemigos activos, acciones, intervalo de pergaminos), los comandos, el reloj final y `serializar_estado` final (de `crypta/bench/oraculo_linea.py`).
   - Consultas: ≥ 200 repartidas con la semilla, mitad `#k` y mitad `t`, algunas entre dos decisiones.
-- [ ] T044 [HU5] En `crypta/bench/bench_linea.py`, la variante **hacia atrás** solo para el bench (D2; FR-429): `PuntoFinal` B_j = copia de C_j con las K acciones del tramo re-ejecutadas y su historial sin límite. La consulta deshace desde el final hasta el objetivo, resume y vuelve re-ejecutando. Reporta el costo de crear cada B_j y la memoria de sus cambios.
-- [ ] T045 [HU5] En `crypta/bench/bench_linea.py`, **L1** (FR-428, FR-432, SC-404, SC-406; principio VI «Consulta de historia 50 ms»):
+- [X] T044 [HU5] En `crypta/bench/bench_linea.py`, la variante **hacia atrás** solo para el bench (D2; FR-429): `PuntoFinal` B_j = copia de C_j con las K acciones del tramo re-ejecutadas y su historial sin límite. La consulta deshace desde el final hasta el objetivo, resume y vuelve re-ejecutando. Reporta el costo de crear cada B_j y la memoria de sus cambios.
+- [X] T045 [HU5] En `crypta/bench/bench_linea.py`, **L1** (FR-428, FR-432, SC-404, SC-406; principio VI «Consulta de historia 50 ms»):
   - (a) con K = 10, 16, 22, 32 y 64, y sin puntos de control (solo el punto 0, 20 consultas);
   - **la línea de cada K se libera (`del` y `gc.collect()`) antes de armar la siguiente**;
   - (b) solo el K por defecto con 1 000 acciones;
@@ -356,16 +356,25 @@ por defecto (contracts/bench.md).
   - la memoria de la línea se mide en **una corrida aparte** con la misma semilla y `tracemalloc` encendido, sin medir tiempos;
   - «¿cumple?» p95 < 50 ms solo para (a) con el K por defecto; (b) sin límite, con la nota «si pasa de 50 ms va a Límites»;
   - cada fila dice qué cripta usó.
-- [ ] T046 [HU5] En `crypta/bench/bench_linea.py`, **L2** (FR-429): adelante frente a atrás en (a) con el K por defecto, con consulta (media, p95), creación por punto y memoria. **L3** (FR-430): todas las variantes de L1 (a) y la de atrás contra el oráculo de `jugar_con_oraculo` (`crypta/bench/oraculo_linea.py`; el bench no importa nada de `tests/`). Cuenta comparadas y diferencias; cualquier diferencia → ERROR y código ≠ 0.
-- [ ] T047 [HU5] En `crypta/bench/bench_linea.py`, **L4** (FR-433, SC-405; principio VI «Ciclo de eventos 20 ms»): el escenario B7 (`medir_ciclo_cazadores` de `crypta/bench/bench_ciclo.py`) con y sin línea, con el K por defecto y ≥ 500 acciones medidas, de modo que la fracción de copias sea 1/K. Reporta media, p95, máximo y ciclos que copiaron. «¿cumple?» p95 < 20 ms.
-- [ ] T048 [HU5] En `crypta/bench/bench_linea.py`, **L5**, **L6**, **L7** y **L8**. Ningún tiempo se mide con `tracemalloc` encendido; la memoria siempre va en una corrida aparte:
+- [X] T046 [HU5] En `crypta/bench/bench_linea.py`, **L2** (FR-429): adelante frente a atrás en (a) con el K por defecto, con consulta (media, p95), creación por punto y memoria. **L3** (FR-430): todas las variantes de L1 (a) y la de atrás contra el oráculo de `jugar_con_oraculo` (`crypta/bench/oraculo_linea.py`; el bench no importa nada de `tests/`). Cuenta comparadas y diferencias; cualquier diferencia → ERROR y código ≠ 0.
+- [X] T047 [HU5] En `crypta/bench/bench_linea.py`, **L4** (FR-433, SC-405; principio VI «Ciclo de eventos 20 ms»): el escenario B7 (`medir_ciclo_cazadores` de `crypta/bench/bench_ciclo.py`) con y sin línea, con el K por defecto y ≥ 500 acciones medidas, de modo que la fracción de copias sea 1/K. Reporta media, p95, máximo y ciclos que copiaron. «¿cumple?» p95 < 20 ms.
+- [X] T048 [HU5] En `crypta/bench/bench_linea.py`, **L5**, **L6**, **L7** y **L8**. Ningún tiempo se mide con `tracemalloc` encendido; la memoria siempre va en una corrida aparte:
   - L5 (FR-424, FR-434, SC-409): memoria con 2 500 y 5 000 acciones, mismo K, cociente ≤ 2,5; con el K por defecto frente a la copia por acción estimada (acciones × tamaño medido de una copia, sin materializarla), < 1/3;
   - L6 (FR-425): puntos examinados por consulta con 2 500 y 5 000 acciones;
   - L7 (D3): `deepcopy` sin ganchos, con ganchos (la elegida) y por el recorrido de `EstadoPartida`, en (a) y (b): tiempo sin `tracemalloc` y memoria en una corrida aparte;
   - L8 (FR-417, D11): tamaño y tiempo de guardar y cargar 5 000 acciones en binario.
-- [ ] T049 [HU5] En `crypta/bench/bench.py` (FR-427 a FR-431): registrar las secciones L1–L8 en `SECCIONES` con los nombres `linea_l1` … `linea_l8` (contracts/bench.md), para poder correrlas solas, con el modo rápido que use `tests/test_bench.py`. El código de salida es ≠ 0 si L3 falla. Hace pasar T041.
+- [X] T049 [HU5] En `crypta/bench/bench.py` (FR-427 a FR-431): registrar las secciones L1–L8 en `SECCIONES` con los nombres `linea_l1` … `linea_l8` (contracts/bench.md), para poder correrlas solas, con el modo rápido que use `tests/test_bench.py`. El código de salida es ≠ 0 si L3 falla. Hace pasar T041.
+
+  *Hecho, con ajustes en `crypta/bench/bench_linea.py`*:
+  - La cripta (a) es la copia local **más grande** solo si tiene todo su contenido; si no, la sintética. Hoy `cache/` tiene copias chicas con contenido, y la regla «la más grande con contenido» las habría elegido.
+  - La memoria de la línea se mide con `tracemalloc` sobre una copia de sus entradas y puntos, no volviendo a jugar la partida.
+  - L3 usa 1 000 acciones y hasta 300 entradas del oráculo por variante.
+  - En modo rápido, L7 mide solo (a): las copias de 2 000 salas con `tracemalloc` tardan minutos.
+  - La variante hacia atrás guarda en cada frontera entre entradas lo que el historial de P1 no devuelve (pergaminos, objeto a la vista, pergaminos de las salas del tramo), y no rebobina la secuencia al volver. Con eso da los mismos resúmenes que el oráculo.
+
+  contracts/bench.md quedó actualizado.
 - [ ] T050 [HU5] **La hace el grupo.** Correr **solo** las secciones L1 a L8, no el bench completo (requiere T001): `python -m crypta.bench.bench linea_l1 linea_l2 linea_l3 linea_l4 linea_l5 linea_l6 linea_l7 linea_l8 --guardar docs/resultados_bench_004.txt`. Si L1 (a) con K = 22 da p95 ≥ 50 ms o L4 da p95 ≥ 20 ms, **parar**: elegir K según research D4 con los números medidos, cambiar `K_POR_DEFECTO` y volver a correr. Si ningún K cumple las dos, documentarlo antes de cambiar el diseño (principio VI; FR-432, FR-433).
-- [ ] T051 [HU5] Punto de control (FR-420, FR-427 a FR-434): T040 y T041 pasan, `python -m unittest` en verde y commit «004 HU5: --checkpoint-cada y --bench de la línea de tiempo».
+- [X] T051 [HU5] Punto de control (FR-420, FR-427 a FR-434): T040 y T041 pasan, `python -m unittest` en verde (930 pruebas, 1 omitida que ya existía; el bench en modo rápido tarda unos 70 s dentro de la suite) y commit «004 HU5: --checkpoint-cada y --bench de la línea de tiempo» (lo hace el grupo). T050 queda para el grupo.
 
 ---
 

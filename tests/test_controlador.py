@@ -1565,5 +1565,127 @@ class TestComandoHistoria(unittest.TestCase):
         ])
 
 
+class TestCheckpointCada(ConCriptaDePrueba):
+    """T040: `--checkpoint-cada K` y los puntos de control (capacidad 004;
+    FR-420, FR-422, FR-424, FR-426)."""
+
+    def argumentos(self, *lista):
+        with patch.object(sys, "argv", ["crypta"] + list(lista)):
+            return programa.crear_argumentos()
+
+    def test_fr420_hu5_4_valores_invalidos(self):
+        for valor in ("0", "-3", "x", "2.5"):
+            with self.subTest(valor=valor):
+                with patch("sys.stderr"), self.assertRaises(SystemExit) as salida:
+                    self.argumentos("--checkpoint-cada", valor)
+                self.assertEqual(salida.exception.code, 2)
+
+    def test_fr420_por_omision_el_k_por_defecto_y_lo_dice_la_ayuda(self):
+        from crypta.Modelo.LineaDeTiempo import K_POR_DEFECTO
+
+        self.assertEqual(self.argumentos().checkpoint_cada, K_POR_DEFECTO)
+        self.assertEqual(self.argumentos("--checkpoint-cada", "7").checkpoint_cada, 7)
+
+        ayuda = io.StringIO()
+        with redirect_stdout(ayuda), self.assertRaises(SystemExit):
+            self.argumentos("--help")
+        texto = " ".join(ayuda.getvalue().split())
+        self.assertIn("--checkpoint-cada", texto)
+        self.assertIn(f"por defecto: {K_POR_DEFECTO}", texto)
+
+    def test_fr420_el_k_llega_al_controlador_y_al_replay(self):
+        args = Namespace(cripta="c-prueba", offline=True, jugador="Ana", semilla=7,
+                         cache_size=25, replay=None, bench=False, checkpoint_cada=7)
+        with patch("crypta.main.AlmacenDisco", return_value=self.almacen):
+            controlador, _, _, _ = programa.crear_partida(args)
+        controlador.gestor_contenido.cerrar()
+        self.assertEqual(controlador.k, 7)
+
+        self.jugar(["esperar", "esperar"])
+        with patch("crypta.Controlador.Reproductor.Reproductor.reproducir",
+                   autospec=True, side_effect=Reproductor.reproducir) as reproducir:
+            codigo, _ = self.correr_main("--offline", "--replay", "partida.log",
+                                         "--checkpoint-cada", "3")
+        self.assertEqual(codigo, 0)
+        self.assertEqual(reproducir.call_args.kwargs.get("k"), 3)
+
+    def test_fr421_hu5_1_misma_partida_con_varios_k(self):
+        """HU5-1: con K = 1, 10, 100 y el por defecto, los mismos resúmenes."""
+        import random
+        from crypta.Modelo.LineaDeTiempo import K_POR_DEFECTO
+        from tests.ayudas_cripta import comandos_al_azar
+        from tests.test_linea_tiempo import Jugada, con_pergaminos_en_mano
+
+        textos = []
+        for k in (1, 10, 100, K_POR_DEFECTO):
+            cripta = con_pergaminos_en_mano(3, 12)
+            jugada = Jugada(k, cripta=cripta, comandos=comandos_al_azar(
+                cripta.partida, random.Random(12), 120))
+            try:
+                n = jugada.partida.acciones_jugador
+                pedidos = [f"acción #{j}" for j in range(1, n + 2)] + \
+                          [f"instante {t}" for t in range(0, jugada.partida.reloj + 1, 37)]
+                textos.append([jugada.consultar(pedido) for pedido in pedidos])
+            finally:
+                jugada.cerrar()
+
+        for otros in textos[1:]:
+            self.assertEqual(otros, textos[0])
+
+    def test_fr422_fr424_hu5_3_cinco_mil_acciones_con_k_10(self):
+        """HU5-3: un punto cada 10 acciones (anclas 0, 10, 20…) y, fuera de
+        ellos, solo entradas de la línea."""
+        import random
+        from crypta.Modelo.LineaDeTiempo import EntradaLinea
+        from tests.ayudas_cripta import comandos_al_azar
+        from tests.test_linea_tiempo import (Jugada, con_pergaminos_en_mano,
+                                             hasta_acciones, sin_pergamino)
+
+        cripta = con_pergaminos_en_mano(0, 5)
+        jugador = cripta.partida.jugador
+        jugador.vida_max = jugador.vida = 10 ** 9
+        jugada = Jugada(10, cripta=cripta, comandos=hasta_acciones(
+            cripta.partida, sin_pergamino(comandos_al_azar(
+                cripta.partida, random.Random(5), 60000)), 5000))
+        try:
+            linea = jugada.linea
+            self.assertEqual(linea.cantidad_acciones(), 5000)
+            self.assertEqual([linea.puntos.obtener(j).ancla for j in range(len(linea.puntos))],
+                             list(range(0, 5001, 10)))
+            for i in range(len(linea.entradas)):
+                self.assertIsInstance(linea.entradas.obtener(i), EntradaLinea)
+        finally:
+            jugada.cerrar()
+
+    def test_fr426_hu5_11_reproducir_con_y_sin_linea_da_lo_mismo(self):
+        """HU5-11: el log de una partida de la 001 reproducido con la línea
+        (Reproductor) y sin ella (ejecutar_comando a mano) da el mismo estado
+        final y el mismo resultado."""
+        from crypta.Adaptadores.RegistroPartida import leer_registro
+        from crypta.bench.oraculo_linea import serializar_estado
+
+        self.jugar(["recoger 2", "equipar", "recoger 1", "siguiente", "usar",
+                    "mover N", "atacar 1", "atacar 1", "atacar 1", "esperar"])
+
+        con_linea = self.reproducir()
+
+        encabezado, comandos = leer_registro("partida.log")
+        preparador = PreparadorReplay(FuenteOffline(self.almacen), self.almacen)
+        try:
+            preparador.cripta_disponible(encabezado.cripta_id, encabezado.version_cripta)
+            preparador.catalogo_disponible(encabezado.version_catalogo)
+            sin_linea = preparador.crear_partida(encabezado)
+            sin_linea.iniciar()
+            while not comandos.esta_vacia():
+                from crypta.Controlador.Comandos import ejecutar_comando
+                ejecutar_comando(sin_linea, comandos.desencolar(),
+                                 preparador.garantizar_sala)
+        finally:
+            preparador.cerrar()
+
+        self.assertEqual(serializar_estado(con_linea), serializar_estado(sin_linea))
+        self.assertEqual(con_linea.resultado, sin_linea.resultado)
+
+
 if __name__ == "__main__":
     unittest.main()

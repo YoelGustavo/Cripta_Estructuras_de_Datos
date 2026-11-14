@@ -20,6 +20,7 @@ from crypta.Controlador.RepositorioFichas import RepositorioFichas
 from crypta.Controlador.Verificacion import (RESOLUBLE, codigo_de,
                                              preparar_verificacion, texto_de)
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
+from crypta.Modelo.LineaDeTiempo import K_POR_DEFECTO
 from crypta.Modelo.Reconstruccion import consultar
 from crypta.Modelo.Resumen import armar_resumen, pedido_instante
 from crypta.Modelo.TablaPuntajes import ErrorTablaPuntajes, TablaPuntajes
@@ -44,6 +45,16 @@ def entero_no_negativo(texto):
     if not texto or any(caracter not in "0123456789" for caracter in texto):
         raise argparse.ArgumentTypeError(
             f"debe ser un entero mayor o igual que 0: {texto!r}")
+
+    return int(texto)
+
+
+def entero_positivo(texto):
+    """`type` de `--checkpoint-cada` (FR-420): un entero ≥ 1, solo dígitos."""
+    if not texto or any(caracter not in "0123456789" for caracter in texto) \
+            or int(texto) < 1:
+        raise argparse.ArgumentTypeError(
+            f"debe ser un entero mayor o igual que 1: {texto!r}")
 
     return int(texto)
 
@@ -116,6 +127,16 @@ def crear_argumentos():
         type=int,
         default=25,
         help="Capacidad de la caché de fichas (predeterminado: 25)"
+    )
+
+    parser.add_argument(
+        "--checkpoint-cada",
+        dest="checkpoint_cada",
+        metavar="K",
+        type=entero_positivo,
+        default=K_POR_DEFECTO,
+        help=("Acciones del jugador entre dos puntos de control de la línea "
+              f"de tiempo (por defecto: {K_POR_DEFECTO})")
     )
 
     parser.add_argument(
@@ -243,7 +264,8 @@ def crear_partida(args, preparada=None):
         registro=registro,
         encabezado=encabezado,
         repositorio_fichas=repositorio,
-        tabla_puntajes=tabla
+        tabla_puntajes=tabla,
+        k=getattr(args, "checkpoint_cada", K_POR_DEFECTO),
     )
 
     return controlador, gestor_cripta, datos_cripta, fuente
@@ -259,7 +281,8 @@ def reproducir(args):
     )
 
     try:
-        resultado = Reproductor(preparador).reproducir(args.replay)
+        resultado = Reproductor(preparador).reproducir(
+            args.replay, k=getattr(args, "checkpoint_cada", K_POR_DEFECTO))
 
     except ErrorRegistro as error:
         print(f"El registro no se puede leer: {error}")

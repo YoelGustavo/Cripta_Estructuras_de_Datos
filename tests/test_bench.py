@@ -987,5 +987,149 @@ class TestBenchResolubilidad(unittest.TestCase):
         self.assertRegex(texto, r"500\s+insertar\s+ordenados\s+\S+ \S+\s+500")
 
 
+# ======================================================================
+# Capacidad 004: línea de tiempo (specs/004-linea-de-tiempo/contracts/bench.md)
+# ======================================================================
+
+SECCIONES_LINEA = tuple(f"linea_l{i}" for i in range(1, 9))
+
+
+class TestGeneradorLinea(unittest.TestCase):
+    """T041: el generador de partidas de la línea de tiempo (FR-427)."""
+
+    def test_hu5_5_huella_repetible_FR_427(self):
+        from crypta.bench import bench_linea
+
+        a = bench_linea.partida_linea("a", 11, 120)
+        b = bench_linea.partida_linea("a", 11, 120)
+        otra = bench_linea.partida_linea("a", 12, 120)
+
+        self.assertEqual(a.huella(), b.huella())
+        self.assertNotEqual(a.huella(), otra.huella())
+
+    def test_fr427_mezcla_de_acciones_y_pergaminos(self):
+        """Mueve, ataca, recoge, usa y usa pergaminos (uno cada 50 acciones);
+        el jugador no muere; 20 enemigos activos en la sintética."""
+        from crypta.bench import bench_linea
+
+        jugada = bench_linea.partida_linea("a", 3, 400)
+        comandos = [jugada.comandos.obtener(i).split()[0]
+                    for i in range(len(jugada.comandos))]
+
+        for nombre in ("mover", "atacar", "recoger", "pergamino"):
+            self.assertIn(nombre, comandos)
+        self.assertTrue("usar" in comandos or "equipar" in comandos)
+        self.assertGreaterEqual(comandos.count("pergamino"), 400 // 50 - 1)
+        self.assertEqual(jugada.linea.cantidad_acciones(), 400)
+        self.assertFalse(jugada.partida.terminada)
+        self.assertEqual(jugada.enemigos_activos, bench_linea.ENEMIGOS_REFERENCIA)
+        self.assertEqual(jugada.salas, bench_linea.SALAS_REFERENCIA)
+
+
+class TestBenchLinea(unittest.TestCase):
+    """T041: secciones L1 a L8 en modo rápido (FR-427 a FR-431; HU5-5,
+    HU5-6, HU5-12)."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Una vez las ocho secciones en modo rápido, con una red que falla
+        si se la llama, una vista que falla si se crea y sin copias locales
+        (FR-431, HU5-12)."""
+        from crypta.bench import bench_linea
+
+        lineas = []
+        cls._carpeta = tempfile.TemporaryDirectory()
+
+        with patch("crypta.Adaptadores.FuenteHTTP.requests.get",
+                   side_effect=AssertionError("--bench usó la red")), \
+                patch("crypta.Vista.VistaConsola.VistaConsola.__init__",
+                      side_effect=AssertionError("--bench creó la vista")), \
+                patch("crypta.Adaptadores.FuenteOffline.FuenteOffline.__init__",
+                      side_effect=AssertionError("--bench usó una fuente")), \
+                patch.object(bench_linea, "CARPETA_COPIAS", cls._carpeta.name):
+            cls.codigo = bench.ejecutar(list(SECCIONES_LINEA), rapido=True,
+                                        salida=lineas.append)
+
+        cls.texto = "\n".join(str(linea) for linea in lineas)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._carpeta.cleanup()
+
+    def seccion(self, titulo):
+        inicio = self.texto.index(f"=== {titulo}")
+        fin = self.texto.find("\n=== ", inicio + 1)
+        return self.texto[inicio:] if fin < 0 else self.texto[inicio:fin]
+
+    def test_hu5_12_corren_todas_sin_vista_ni_red_FR_431(self):
+        for i in range(1, 9):
+            self.assertIn(f"=== L{i}", self.texto)
+        self.assertEqual(self.codigo, 0)
+        self.assertNotIn("ERROR", self.texto)
+
+    def test_hu5_6_hu5_7_l1_consulta_por_k_FR_428_FR_432(self):
+        texto = self.seccion("L1")
+        for columna in ("cripta", "K", "puntos", "media", "p95", "máximo",
+                        "crear puntos", "memoria", "¿cumple?"):
+            self.assertIn(columna, texto)
+        self.assertIn("sintética 300 salas", texto)
+        self.assertIn("sin puntos", texto)
+        self.assertIn("2000 salas", texto)
+        self.assertIn("sin límite", texto)
+
+    def test_l2_adelante_frente_a_atras_FR_429(self):
+        texto = self.seccion("L2")
+        for palabra in ("hacia adelante", "hacia atrás", "crear un punto", "memoria"):
+            self.assertIn(palabra, texto)
+
+    def test_hu5_6_l3_igualdad_FR_430(self):
+        texto = self.seccion("L3")
+        self.assertIn("0 diferencias", texto)
+        self.assertIn("hacia atrás", texto)
+        self.assertIn("sin puntos", texto)
+
+    def test_hu5_8_l4_ciclo_FR_433(self):
+        texto = self.seccion("L4")
+        for palabra in ("sin línea", "con línea", "p95", "copiaron", "¿cumple?"):
+            self.assertIn(palabra, texto)
+
+    def test_hu5_9_l5_memoria_FR_434(self):
+        texto = self.seccion("L5")
+        for palabra in ("5 000 / 2 500", "línea / copia por acción", "¿cumple?"):
+            self.assertIn(palabra, texto)
+
+    def test_hu5_10_l6_puntos_examinados_FR_425(self):
+        self.assertIn("examinados", self.seccion("L6"))
+
+    def test_l7_y_l8(self):
+        texto = self.seccion("L7")
+        for palabra in ("sin ganchos", "con ganchos", "EstadoPartida"):
+            self.assertIn(palabra, texto)
+        texto = self.seccion("L8")
+        for palabra in ("tamaño", "guardar", "cargar"):
+            self.assertIn(palabra, texto)
+
+    def test_hu5_6_l3_una_variante_saboteada_da_error_FR_430(self):
+        """Una reconstrucción que salta una acción: L3 imprime ERROR y el
+        --bench sale con código distinto de 0."""
+        from crypta.bench import bench_linea
+        from crypta.Modelo.LineaDeTiempo import Objetivo
+        from crypta.Modelo.Reconstruccion import consultar
+
+        def saboteada(linea, objetivo, partida, reejecutar):
+            if objetivo.acciones_completas > linea.accion_base and not objetivo.es_actual:
+                objetivo = Objetivo(objetivo.pedido, objetivo.acciones_completas - 1,
+                                    objetivo.tope)
+            return consultar(linea, objetivo, partida, reejecutar)
+
+        lineas = []
+        with patch.object(bench_linea, "CONSULTAR_ADELANTE", saboteada):
+            codigo = bench.ejecutar(["linea_l3"], rapido=True, salida=lineas.append)
+
+        texto = "\n".join(str(linea) for linea in lineas)
+        self.assertNotEqual(codigo, 0)
+        self.assertIn("ERROR", texto)
+
+
 if __name__ == "__main__":
     unittest.main()
