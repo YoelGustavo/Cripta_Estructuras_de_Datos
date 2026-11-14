@@ -535,3 +535,29 @@ Tareas (tasks.md y, donde aplique, plan.md y contracts/):
 Marca las tareas hechas y no hagas commit.
 
 **USO:** Implementacio nde fase 8 del punto 003, ayuda con las decisiones del programa.
+
+**Prompt:** Cambio del grupo a specs/004-linea-de-tiempo/spec.md (no toques nada más, no hagas commit): el profesor publicó la cripta de referencia, cripta-06 (300 salas). En FR-432, SC-404, HU5-7 y donde se cite la cripta del bench de historia: el p95 < 50 ms se mide con una partida de al menos 5 000 acciones en una cripta del tamaño de la de referencia (cripta-06 si su contenido está en la copia local; si no, una sintética de 300 salas con unos 20 enemigos activos). La partida de 2 000 salas y 50 cazadores se sigue midiendo y reportando, sin límite, como prueba de escala; si pasa de 50 ms se documenta en Límites. Regístralo en ## Aclaraciones como decisión del grupo, citando que la cripta de referencia ya se publicó. FR-433 no cambia.
+
+**USO:** spec 004: historia se mide con la cripta de referencia
+
+**Prompt:** /speckit-plan SPECIFY_FEATURE_DIRECTORY=specs/004-linea-de-tiempo (actualiza .specify/feature.json). Plan de la 004 según su spec y la constitución. Datos medidos por el grupo en otra máquina (en la nuestra, cerca del doble):
+- Una acción: 0,47 ms (300 salas, 20 enemigos); 1,4 ms (2 000 salas, 50 enemigos); 2,7 ms (2 000 salas, 50 cazadores).
+- Una copia completa con copy.deepcopy: 36 ms y 1,5 MB (300 salas); 234 ms y 9,5 MB (2 000 salas).
+Lo que el plan debe resolver con números:
+- Copiar un punto de control en cada consulta no cabe en 50 ms: la consulta tiene que reconstruir sobre el punto de control y dejarlo como estaba (por ejemplo, re-simular hasta K acciones sobre él con su propio historial sin límite y deshacerlas después con el mecanismo del pergamino de P1) o aplicar cambios registrados. Compara hacia adelante y hacia atrás (FR-429).
+- El K por defecto equilibra tres cosas: consulta ≈ K × (acción + deshacer) < 50 ms (FR-432); el costo de crear un punto de control cada K acciones no debe subir el p95 del ciclo de la 001 por encima de 20 ms (FR-433: si menos del 5 % de las acciones copian, el p95 no las ve); y memoria ≈ (acciones / K) × tamaño de la copia (FR-434).
+- Evalúa que la copia comparta lo que nunca cambia (nombres, salidas, contenido original de cada sala) para bajar tiempo y memoria.
+- Al re-simular, las salas que el jugador entró después del punto de control pueden no tener contenido en la copia: hay que tomarlo de lo ya cargado, sin red (FR-407).
+- Reutiliza Historial/Cambio y ejecutar_comando de P1, y el recorrido de EstadoPartida para el formato nuevo del guardado.
+- Solo TDA del curso. No implementes nada. No hagas commit.
+
+**USO:** Creación del plan y contratos del punto 004.
+
+**Prompt:** Ajustes del grupo al plan de specs/004-linea-de-tiempo (no implementes nada, no hagas commit):
+1. Spec: en HU2-3 agrega "salvo los pergaminos gastados, los pergaminos de las salas y la posición del objeto actual del inventario", como propone research D6, y quita de plan.md y research.md lo de "se propone". Ese cambio de spec lo commiteo yo aparte.
+2. D8: el pergamino de P1 no rebobina el número de secuencia de la agenda (siguiente_secuencia). Agrégalo al sello; si no, la prueba de serialización idéntica falla.
+3. D7 y D8 se contradicen: una sala que se carga durante la re-simulación queda cargada en el punto de control después de deshacer. Decisión: se acepta que quede cargada (las reglas solo miran contenido_cargado al mover y al iniciar, y P1 ya garantiza que el orden de los enemigos no depende de cuándo llega el contenido). La prueba de D8 compara la serialización sin el contenido de esas salas, y además comprueba que repetir una consulta da el mismo resumen. Escríbelo así en research.md y data-model.md.
+4. contracts/bench.md y plan.md: la partida de escala (b) usa 1 000 acciones y en L1 solo el K por defecto (con 5 000 acciones serían ~2,2 GB de puntos de control). En L1 (a), libera la línea de cada K antes de armar la siguiente.
+
+**USO:** Ajuste del plan del punto 004
+
