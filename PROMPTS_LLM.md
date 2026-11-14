@@ -503,3 +503,20 @@ Tareas (tasks.md y, donde aplique, plan.md y contracts/):
 - T050: no escribe en docs/resultados_bench_p2.txt (ahí están los números de la 001). Solo corre las secciones de resolubilidad y revisa que R2 y R3 cumplan; el bench completo se corre al final del proyecto.
 
 **USO:** Arreglo y specificamiento del analize
+
+**Promp:** /speckit-implement Solo las fases 1 y 2 (T001 a T010) de specs/003-resolubilidad/tasks.md. T001 ya está hecho (yo hice los commits de spec y plan): márcalo. Detente en el punto de control de la fase 2, marca las tareas hechas y no hagas commit.
+
+**USO:** Implementacion de la fase 1 y 2 del punto 003
+
+**Prompt:** /speckit-implement Solo la fase 3 (T011 a T018) de specs/003-resolubilidad/tasks.md. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Implementacion de la fase 3 del punto 003
+
+**Prompt:** /speckit-implement Solo la fase 4 (T019 a T028) de specs/003-resolubilidad/tasks.md. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** IMpplementacion del a fase 4 del punto 003
+
+**Prompt:** /speckit-implement Solo la fase 5 (T029 a T040) de specs/003-resolubilidad/tasks.md. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Implementación de la fase 5 del punto 003
+

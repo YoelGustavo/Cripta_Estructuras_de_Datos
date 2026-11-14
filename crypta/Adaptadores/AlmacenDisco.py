@@ -120,7 +120,8 @@ class AlmacenDisco:
         version,
         esqueleto,
         contenidos,
-        datos_generales=None
+        datos_generales=None,
+        llaves=None
     ):
         datos = {
             "version": version,
@@ -131,6 +132,11 @@ class AlmacenDisco:
         
         if datos_generales is not None:
             datos["datos_generales"] = datos_generales
+
+        # Ubicación de las llaves (capacidad 003, FR-323): la respuesta del
+        # servicio tal cual, válida mientras coincida `version`.
+        if llaves is not None:
+            datos["llaves"] = llaves
 
         with open(
             self._ruta_cripta(cripta_id),

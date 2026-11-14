@@ -2,7 +2,7 @@
 
 import json
 
-from crypta.Adaptadores.FuenteDatos import FuenteDatos
+from crypta.Adaptadores.FuenteDatos import FuenteDatos, LlavesNoDisponibles
 from crypta.Adaptadores.AlmacenDisco import AlmacenDisco
 
 
@@ -170,6 +170,18 @@ class FuenteOffline(FuenteDatos):
 
         return {"entidades": entidades}
 
+
+    def obtener_llaves(self, cripta_id):
+        """La ubicación de las llaves guardada en la copia local (FR-323).
+        Si la copia no la tiene, no se puede verificar (FR-324)."""
+        llaves = self._cripta_local(cripta_id).get("llaves")
+
+        if llaves is None:
+            raise LlavesNoDisponibles(
+                "sin conexión y sin la ubicación de las llaves en la copia "
+                "local")
+
+        return llaves
 
     def obtener_version_cripta(self, cripta_id):
         datos = self._cripta_local(cripta_id)

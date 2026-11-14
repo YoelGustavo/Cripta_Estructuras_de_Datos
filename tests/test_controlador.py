@@ -220,6 +220,10 @@ CONTENIDOS_PRUEBA = [
     {"sala": 3, "enemigos": [], "objetos": [], "trampas": []},
 ]
 
+# Ubicación de las llaves de c-prueba (capacidad 003): itm_llave está en la
+# sala 2 (la suelta nadie; la tiene la sala), y la cripta es resoluble.
+LLAVES_PRUEBA = {"llaves": [{"id": "itm_llave", "sala": 2}]}
+
 FICHAS_PRUEBA = {
     "itm_antorcha": {"id": "itm_antorcha", "nombre": "Antorcha",
                      "clase": "antorcha", "peso": 1, "valor": 5,
@@ -238,7 +242,8 @@ def almacen_de_prueba(carpeta):
     almacen = AlmacenDisco(os.path.join(carpeta, "cache"))
     almacen.guardar_catalogo("cat-1", FICHAS_PRUEBA)
     almacen.guardar_cripta("c-prueba", "v1", ESQUELETO_PRUEBA,
-                           CONTENIDOS_PRUEBA, datos_generales=DATOS_PRUEBA)
+                           CONTENIDOS_PRUEBA, datos_generales=DATOS_PRUEBA,
+                           llaves=LLAVES_PRUEBA)
     return almacen
 
 
@@ -839,6 +844,8 @@ class ServidorFalso:
             return Respuesta({"entidades": [FICHAS_PRUEBA[i] for i in ids]})
         if camino == "/catalogo/version":
             return Respuesta({"version": "cat-1"})
+        if camino == "/criptas/c-prueba/llaves":
+            return Respuesta(LLAVES_PRUEBA)
         if camino == "/criptas/c-prueba/version":
             return Respuesta({"id": "c-prueba", "version": "v1"})
         raise AssertionError(f"ruta desconocida: {ruta}")
@@ -1048,7 +1055,8 @@ class TestPresupuestoEnElJuego(ConCriptaDePrueba):
         self.assertEqual(codigo, 0)
         # general, esqueleto, versión del catálogo, UN lote de contenido
         # (las 3 salas) y UN lote de fichas (las 4).
-        self.assertEqual(len(servidor.pedidos), 5)
+        # +1: ubicación de llaves, FR-322 (capacidad 003, SC-307).
+        self.assertEqual(len(servidor.pedidos), 6)
         self.assertEqual(len(servidor.de_catalogo()), 1)
 
     def test_el_reporte_dice_lo_que_se_gasto(self):
@@ -1063,12 +1071,13 @@ class TestPresupuestoEnElJuego(ConCriptaDePrueba):
         self.assertGreater(aciertos, 0)
 
     def test_sin_presupuesto_la_accion_no_se_hace_y_el_juego_sigue(self):
-        # Con 5 solo alcanza para la sala inicial: entrar a la 2 no se puede.
+        # Con 6 solo alcanza para la sala inicial: entrar a la 2 no se puede.
+        # +1: ubicación de llaves, FR-322 (capacidad 003, SC-307).
         codigo, servidor, vista = self.jugar_en_linea(
-            ["mover N", "recoger 1", "mover N"], presupuesto=5)
+            ["mover N", "recoger 1", "mover N"], presupuesto=6)
 
         self.assertEqual(codigo, 0)
-        self.assertLessEqual(len(servidor.pedidos), 5)
+        self.assertLessEqual(len(servidor.pedidos), 6)
         errores = [str(c) for c in vista.mostrar_error.call_args_list]
         self.assertEqual(len(errores), 2)
         self.assertIn("presupuesto", errores[0])

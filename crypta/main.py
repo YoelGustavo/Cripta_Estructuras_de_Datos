@@ -16,6 +16,8 @@ from crypta.Controlador.GestorContenido import GestorContenido
 from crypta.Controlador.GestorCripta import GestorCripta
 from crypta.Controlador.PreparadorReplay import PreparadorReplay
 from crypta.Controlador.RepositorioFichas import RepositorioFichas
+from crypta.Controlador.Verificacion import (RESOLUBLE, codigo_de,
+                                             preparar_verificacion, texto_de)
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.TablaPuntajes import ErrorTablaPuntajes, TablaPuntajes
 from crypta.Controlador.Reproductor import (
@@ -82,6 +84,12 @@ def crear_argumentos():
     )
 
     parser.add_argument(
+        "--forzar",
+        action="store_true",
+        help="Jugar aunque la cripta no sea resoluble o no se pueda verificar"
+    )
+
+    parser.add_argument(
         "--cache-size",
         type=int,
         default=25,
@@ -99,8 +107,21 @@ def crear_fuente(args, almacen):
     return FuenteHTTP()
 
 
-def crear_partida(args):
+class CriptaPreparada:
+    """La cripta cargada y con el presupuesto fijado, todavía sin verificar
+    ni crear la partida."""
 
+    def __init__(self, almacen, fuente, gestor_cripta, datos_cripta, mapa):
+        self.almacen = almacen
+        self.fuente = fuente
+        self.gestor_cripta = gestor_cripta
+        self.datos_cripta = datos_cripta
+        self.mapa = mapa
+
+
+def preparar_cripta(args, cripta_id=None):
+    """Carga la cripta (copia local o red) y fija el presupuesto. No
+    verifica: eso vive en `main` y en `--verificar` (contracts/cli.md)."""
     almacen = AlmacenDisco()
     fuente = crear_fuente(args, almacen)
 
@@ -110,10 +131,26 @@ def crear_partida(args):
     )
 
     datos_cripta, mapa, desde_cache = gestor_cripta.cargar(
-        args.cripta
+        cripta_id if cripta_id is not None else args.cripta
     )
 
     fuente.fijar_presupuesto(datos_cripta["presupuesto_solicitudes"])
+
+    return CriptaPreparada(almacen, fuente, gestor_cripta, datos_cripta, mapa)
+
+
+def crear_partida(args, preparada=None):
+    """Crea la partida, partida.log, la vista y el controlador. Conserva su
+    firma y su retorno; sin `preparada` prepara la cripta ella misma, sin
+    verificar (T038)."""
+    if preparada is None:
+        preparada = preparar_cripta(args)
+
+    almacen = preparada.almacen
+    fuente = preparada.fuente
+    gestor_cripta = preparada.gestor_cripta
+    datos_cripta = preparada.datos_cripta
+    mapa = preparada.mapa
 
     version_catalogo = fuente.obtener_version_catalogo()["version"]
 
@@ -263,6 +300,22 @@ def listar_criptas(args):
     return 0
 
 
+def guardar_copia_local(args, cripta_id, preparada):
+    """En línea, guarda la copia local (esqueleto, contenidos ya cargados y
+    llaves) aunque la partida no inicie (FR-323)."""
+    if args.offline:
+        return
+
+    try:
+        preparada.gestor_cripta.persistir(
+            cripta_id,
+            preparada.datos_cripta,
+            preparada.mapa
+        )
+    except OSError as error:
+        print(f"No se pudo guardar la copia local: {error}")
+
+
 def ejecutar_benchmarks():
     """Devuelve el código del --bench: distinto de 0 si alguna sección
     encontró un error, por ejemplo una decisión del cazador distinta del
@@ -307,8 +360,25 @@ def main():
     codigo = 0
 
     try:
+        preparada = preparar_cripta(args)
+        resultado = preparar_verificacion(
+            preparada.gestor_cripta, args.cripta, preparada.datos_cripta,
+            preparada.mapa)
+        print(texto_de(resultado))
+        codigo_verificacion = codigo_de(resultado)
+
+        if codigo_verificacion != RESOLUBLE:
+            if not args.forzar:
+                # La partida no inicia: ni vista ni partida.log (FR-325).
+                print("La partida no inicia. Use --forzar para jugarla de "
+                      "todos modos.")
+                guardar_copia_local(args, args.cripta, preparada)
+                return codigo_verificacion
+
+            print("Se inicia la partida por --forzar.")
+
         controlador, gestor_cripta, datos_cripta, fuente = crear_partida(
-            args
+            args, preparada
         )
 
         print(f"Cripta: {args.cripta}")

@@ -140,5 +140,13 @@ class FuenteHTTP(FuenteDatos):
             "/catalogo/version"
         )
 
+    def obtener_llaves(self, cripta_id):
+        """Ubicación de las llaves (P2 §4.2). Cuenta y respeta el
+        presupuesto como toda solicitud, incluidos los reintentos de un 429
+        (FR-322)."""
+        return self._get(
+            f"/criptas/{cripta_id}/llaves"
+        )
+
     def cantidad_solicitudes(self):
         return self._solicitudes
