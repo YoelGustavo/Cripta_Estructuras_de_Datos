@@ -18,6 +18,7 @@ from crypta.Modelo.Partida import AccionInvalida, Partida
 from crypta.Vista.VistaConsola import VistaConsola
 from crypta.Adaptadores.GuardadoBinario import guardar_partida
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado
+from crypta.Adaptadores.EstadoPartida import ErrorGuardado
 from crypta.Adaptadores.RegistroPartida import ErrorRegistro, leer_registro
 from crypta.Controlador.FichasEnUso import FichasEnUso
 from crypta.Controlador.GestorContenido import GestorContenido
@@ -237,7 +238,9 @@ class Controlador:
                     "Partida cargada correctamente."
                 )
                 return True
-            except (OSError, ValueError) as error:
+            except (OSError, ValueError, ErrorGuardado) as error:
+                # FR-419: un archivo de otro formato se rechaza con su mensaje
+                # y la partida en curso no cambia.
                 self.vista.mostrar_error(
                     f"No se pudo cargar la partida: {error}"
                 )
@@ -289,11 +292,11 @@ class Controlador:
         if self.registro is not None:
             copiar_archivo(self.registro.ruta, ruta_del_log_guardado(ruta))
 
-        guardar_partida(
-            self.partida,
-            ruta,
-            self.encabezado,
-        )
+        if self.linea is None:
+            guardar_partida(self.partida, ruta, self.encabezado)
+        else:
+            # Formato 3 (FR-417): con la línea de tiempo y su K.
+            guardar_partida(self.partida, ruta, self.encabezado, linea=self.linea)
 
     def _revisar_log_guardado(self, ruta_log, encabezado_guardado):
         if not os.path.exists(ruta_log):
@@ -366,10 +369,7 @@ class Controlador:
 
         gestor_anterior = self.gestor_contenido
         self.partida = nueva_partida
-        # La línea de la partida cargada (historia 4, T038). Por ahora, una
-        # nueva desde el estado cargado.
-        self.linea = None
-        self._asegurar_linea()
+        self._adoptar_linea(archivo.linea)
         self.gestor_contenido = nuevo_gestor
         self.encabezado = encabezado_guardado
         if self.registro is not None:
@@ -382,6 +382,22 @@ class Controlador:
             cancel_futures=True,
         )
 
+
+    def _adoptar_linea(self, linea):
+        """La línea de la partida cargada (FR-417, FR-418): se usa su K y, si
+        `--checkpoint-cada` pedía otro, se avisa. Un archivo sin línea (de las
+        pruebas o del bench) empieza una nueva en el estado cargado."""
+        if linea is None:
+            self.linea = None
+            self._asegurar_linea()
+            return
+
+        if linea.k != self.k:
+            self.vista.mostrar_mensaje(
+                f"La partida guardada usa --checkpoint-cada {linea.k}; se usa ese valor.")
+            self.k = linea.k
+
+        self.linea = linea
 
     def _asegurar_linea(self):
         """Crea la línea de tiempo con su primer punto en el estado actual,

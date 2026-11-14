@@ -1920,16 +1920,18 @@ class TestGuardadoConCazadores(ConCarpetaTemporal):
         with self.assertRaises(ErrorGuardado) as error:
             ArchivoGuardado(self.ruta("viejo.cripta"))
 
-        self.assertEqual(FORMATO_GUARDADO, 2)
+        # Capacidad 004 (FR-419, T034): el formato subió a 3 con la línea de
+        # tiempo; el 1 sigue rechazándose, ahora como «formato incompatible».
+        self.assertEqual(FORMATO_GUARDADO, 3)
         self.assertEqual(
             str(error.exception),
-            "La partida se guardó con la versión 1 del formato y este "
-            "programa lee la versión 2: no se puede cargar")
+            "Formato incompatible: la partida se guardó con la versión 1 del "
+            "formato y este programa lee la versión 3; no se puede cargar")
 
     def test_fr026_el_formato_json_tambien_subio(self):
         """FR-026: el JSON del --bench sube de versión y rechaza el 1."""
         from crypta.Adaptadores.GuardadoJSON import FORMATO_JSON
-        self.assertEqual(FORMATO_JSON, 2)
+        self.assertEqual(FORMATO_JSON, 3)          # capacidad 004 (T034)
 
         guardar_partida_json(self.partida, self.ruta("p.json"),
                              self.encabezado)
@@ -2000,6 +2002,286 @@ class TestGuardadoConCazadores(ConCarpetaTemporal):
         with self.assertRaises(ErrorGuardado):
             ArchivoGuardadoJSON(self.ruta("p.json")).cargar_partida(
                 self.fichas.get)
+
+
+
+# ======================================================================
+# Capacidad 004: la línea de tiempo en el archivo de partida (formato 3)
+# ======================================================================
+
+class TestLineaGuardada(ConCarpetaTemporal):
+    """T033: guardar y cargar con la línea de tiempo (FR-417 a FR-419;
+    contracts/guardado.md)."""
+
+    def partida_con_linea(self, k=10, acciones=200, semilla=61):
+        """Una partida de la línea de tiempo con `acciones` acciones netas y
+        pergaminos, y su línea con K = `k`."""
+        from tests.test_linea_tiempo import Jugada, con_pergaminos_en_mano, hasta_acciones
+        from tests.ayudas_cripta import comandos_al_azar
+
+        cripta = con_pergaminos_en_mano(4, semilla)
+        jugador = cripta.partida.jugador
+        jugador.vida_max = jugador.vida = 10 ** 9
+        comandos = hasta_acciones(cripta.partida, comandos_al_azar(
+            cripta.partida, random.Random(semilla), 20 * acciones), acciones)
+        jugada = Jugada(k, cripta=cripta, comandos=comandos)
+        self.addCleanup(jugada.cerrar)
+        self.assertEqual(jugada.partida.acciones_jugador, acciones)
+        self.assertTrue(any(jugada.linea.entradas.obtener(i).tipo == "ajuste"
+                            for i in range(len(jugada.linea.entradas))))
+        return jugada
+
+    def encabezado(self, partida):
+        return Encabezado("cripta-prueba", "v-prueba", "c-prueba", partida.semilla,
+                          partida.jugador.nombre)
+
+    def pedidos(self, partida, cantidad=50, semilla=9):
+        azar = random.Random(semilla)
+        n = partida.acciones_jugador
+        return [f"acción #{azar.randint(1, n + 1)}" if azar.random() < 0.5
+                else f"instante {azar.randint(0, partida.reloj)}"
+                for _ in range(cantidad)]
+
+    def consultar(self, linea, partida, pedido):
+        from crypta.Modelo.Reconstruccion import consultar
+        from crypta.Vista.FormatoResumen import formatear_resumen
+
+        tipo, valor = pedido.split(" ")
+        if tipo == "instante":
+            objetivo = linea.ubicar_instante(int(valor), partida.reloj)
+        else:
+            objetivo = linea.ubicar_accion(int(valor[1:]))
+        return formatear_resumen(consultar(linea, objetivo, partida, ejecutar_comando))
+
+    def test_fr417_hu4_1_las_consultas_sobreviven_a_guardar_y_cargar(self):
+        """HU4-1: 200 acciones con pergaminos; en binario y en JSON, 50
+        consultas dan el mismo texto después de cargar; la partida sigue y
+        termina igual que sin guardar."""
+        from crypta.bench.oraculo_linea import serializar_estado
+        from crypta.Controlador.Comandos import ejecutar_y_registrar
+        from crypta.Controlador.GestorContenido import GestorContenido
+        from tests.ayudas_cripta import CRIPTA_ID, comandos_al_azar
+        from tests.test_linea_tiempo import sin_pergamino
+
+        jugada = self.partida_con_linea()
+        pedidos = self.pedidos(jugada.partida)
+        antes = [self.consultar(jugada.linea, jugada.partida, pedido) for pedido in pedidos]
+        cargadas = []
+
+        for nombre, guardar, Archivo in FORMATOS:
+            with self.subTest(formato=nombre):
+                ruta = self.ruta(f"linea.{nombre}")
+                guardar(jugada.partida, ruta, self.encabezado(jugada.partida),
+                        linea=jugada.linea)
+                archivo = Archivo(ruta)
+                cargada = archivo.cargar_partida(jugada.cripta.partida._fichas)
+
+                self.assertIsNotNone(archivo.linea)
+                self.assertEqual(archivo.linea.k, 10)
+                self.assertEqual(len(archivo.linea.puntos), len(jugada.linea.puntos))
+                self.assertEqual(serializar_estado(cargada), serializar_estado(jugada.partida))
+                despues = [self.consultar(archivo.linea, cargada, pedido) for pedido in pedidos]
+                self.assertEqual(despues, antes)
+                cargadas.append((cargada, archivo.linea))
+
+        # Sigue igual: los mismos comandos en la cargada (binario) y en la
+        # original dan el mismo estado y las mismas consultas.
+        cargada, linea_cargada = cargadas[0]
+        gestor = GestorContenido(jugada.cripta.fuente, cargada.mapa, CRIPTA_ID)
+        self.addCleanup(gestor.cerrar)
+        seguidos = []
+        for comando in sin_pergamino(comandos_al_azar(cargada, random.Random(77), 80)):
+            seguidos.append(comando)
+            for partida, linea, garantizar in ((cargada, linea_cargada, gestor.garantizar_sala),
+                                               (jugada.partida, jugada.linea, jugada.garantizar)):
+                try:
+                    ejecutar_y_registrar(partida, linea, comando, garantizar)
+                except (ComandoInvalido, AccionInvalida):
+                    pass
+
+        self.assertGreater(len(seguidos), 40)
+        self.assertEqual(serializar_estado(cargada), serializar_estado(jugada.partida))
+        for pedido in self.pedidos(cargada, 20, semilla=3):
+            self.assertEqual(self.consultar(linea_cargada, cargada, pedido),
+                             self.consultar(jugada.linea, jugada.partida, pedido))
+
+    def test_fr417_sin_linea_el_bloque_queda_vacio(self):
+        """`guardar_partida` sin línea escribe un bloque `linea` vacío;
+        `cargar_partida` sigue devolviendo solo la partida y `linea` es
+        None. Con línea, la línea queda en el lector (binario y JSON)."""
+        jugada = self.partida_con_linea(acciones=30)
+
+        for nombre, guardar, Archivo in FORMATOS:
+            with self.subTest(formato=nombre):
+                ruta = self.ruta(f"sin.{nombre}")
+                guardar(jugada.partida, ruta, self.encabezado(jugada.partida))
+                archivo = Archivo(ruta)
+                cargada = archivo.cargar_partida(jugada.cripta.partida._fichas)
+                self.assertIsInstance(cargada, Partida)
+                self.assertIsNone(archivo.linea)
+
+    def test_fr418_hu4_2_se_usa_el_k_guardado(self):
+        """HU4-2: guardada con K = 10 y cargada por un Controlador con K = 50:
+        aviso y K = 10."""
+        from tests.ayudas_cripta import controlador_desde_linea
+
+        comandos = ["mover E", "esperar", "esperar", "mover O", "esperar"] * 3
+        controlador = controlador_desde_linea(self.carpeta, comandos)
+        controlador.k = 10
+        controlador.iniciar()
+        controlador.gestor_contenido.cerrar()
+        ruta = self.ruta("k10.cripta")
+        controlador.guardar(ruta)
+
+        otro = controlador_desde_linea(self.carpeta, [])
+        otro.k = 50
+        otro.cargar_partida(ruta)
+        otro.gestor_contenido.cerrar()
+
+        mensajes = [llamada.args[0] for llamada in otro.vista.mostrar_mensaje.call_args_list]
+        self.assertIn("La partida guardada usa --checkpoint-cada 10; se usa ese valor.",
+                      mensajes)
+        self.assertEqual(otro.linea.k, 10)
+        self.assertEqual(otro.k, 10)
+        self.assertEqual(otro.linea.cantidad_acciones(), controlador.linea.cantidad_acciones())
+
+    def test_fr417_el_controlador_sin_linea_crea_una_nueva(self):
+        """Un archivo sin línea (guardado por P1 o por el bench): el
+        Controlador crea una línea nueva con el punto inicial en el estado
+        cargado, y las acciones anteriores a la carga se rechazan."""
+        from crypta.Modelo.LineaDeTiempo import ConsultaRechazada
+        from tests.ayudas_cripta import controlador_desde_linea
+
+        controlador = controlador_desde_linea(self.carpeta, ["mover E", "esperar", "esperar"])
+        controlador.iniciar()
+        controlador.gestor_contenido.cerrar()
+        ruta = self.ruta("sin_linea.cripta")
+        guardar_partida(controlador.partida, ruta, controlador.encabezado)
+        from crypta.Controlador.Controlador import copiar_archivo, ruta_del_log_guardado
+        copiar_archivo(controlador.registro.ruta, ruta_del_log_guardado(ruta))
+
+        otro = controlador_desde_linea(self.carpeta, [])
+        otro.cargar_partida(ruta)
+        otro.gestor_contenido.cerrar()
+
+        self.assertEqual(otro.linea.accion_base, 3)
+        self.assertEqual(otro.linea.cantidad_acciones(), 3)
+        with self.assertRaises(ConsultaRechazada):
+            otro.linea.ubicar_accion(2)
+        self.assertTrue(otro.linea.ubicar_accion(4).es_actual)
+
+    def archivo_de_otro_formato(self, formato_viejo, nombre="viejo"):
+        """Un guardado válido de hoy con el número de formato cambiado."""
+        jugada = self.partida_con_linea(acciones=20)
+        binario = self.ruta(f"{nombre}.bin")
+        guardar_partida(jugada.partida, binario, self.encabezado(jugada.partida),
+                        linea=jugada.linea)
+        with open(binario, "rb") as archivo:
+            datos = archivo.read()
+        with open(binario, "wb") as archivo:
+            archivo.write(datos[:4] + formato_viejo.to_bytes(2, "little") + datos[6:])
+
+        documento_json = self.ruta(f"{nombre}.json")
+        guardar_partida_json(jugada.partida, documento_json, self.encabezado(jugada.partida),
+                             linea=jugada.linea)
+        with open(documento_json, encoding="utf-8") as archivo:
+            documento = json.load(archivo)
+        documento["formato"] = formato_viejo
+        with open(documento_json, "w", encoding="utf-8") as archivo:
+            json.dump(documento, archivo)
+        return binario, documento_json
+
+    def test_fr419_hu4_3_hu4_4_formatos_anteriores_se_rechazan(self):
+        """HU4-3 (Apéndice B) y HU4-4: un archivo de P1 (formato 1) o de la
+        001 (formato 2) se rechaza con «formato incompatible», en binario y
+        en JSON."""
+        for viejo in (1, 2):
+            binario, documento_json = self.archivo_de_otro_formato(viejo, f"f{viejo}")
+            for ruta, Archivo in ((binario, ArchivoGuardado),
+                                  (documento_json, ArchivoGuardadoJSON)):
+                with self.subTest(formato=viejo, archivo=Archivo.__name__):
+                    with self.assertRaises(ErrorGuardado) as error:
+                        Archivo(ruta)
+                    self.assertIn("formato incompatible", str(error.exception).lower())
+
+    def test_fr419_hu4_3_la_partida_en_curso_no_cambia(self):
+        """Con el comando `cargar` del juego: se muestra el rechazo y la
+        partida en curso, su línea y su log siguen igual."""
+        from crypta.bench.oraculo_linea import serializar_estado
+        from crypta.Controlador.Controlador import RUTA_GUARDADO
+        from tests.ayudas_cripta import controlador_desde_linea
+
+        binario, _ = self.archivo_de_otro_formato(1)
+        controlador = controlador_desde_linea(self.carpeta, ["mover E", "esperar"])
+        controlador.iniciar()
+        controlador.gestor_contenido.cerrar()
+        partida, linea = controlador.partida, controlador.linea
+        antes = serializar_estado(partida)
+
+        anterior = os.getcwd()
+        os.chdir(self.carpeta)
+        try:
+            os.replace(binario, RUTA_GUARDADO)
+            self.assertFalse(controlador.procesar_comando("cargar"))
+        finally:
+            os.chdir(anterior)
+
+        self.assertIs(controlador.partida, partida)
+        self.assertIs(controlador.linea, linea)
+        self.assertEqual(serializar_estado(partida), antes)
+        error = controlador.vista.mostrar_error.call_args_list[-1].args[0]
+        self.assertIn("formato incompatible", error.lower())
+
+    def test_fr417_linea_inconsistente_es_error_guardado(self):
+        """Anclas con huecos, posiciones que no crecen o relojes que no
+        suben: el bloque `linea` está dañado."""
+        from crypta.Adaptadores.EstadoPartida import ErrorGuardado as Error
+        from crypta.Modelo.LineaDeTiempo import LineaDeTiempo
+
+        jugada = self.partida_con_linea(k=5, acciones=30)
+        original = jugada.linea
+
+        def guardar_y_cargar(linea):
+            ruta = self.ruta("danada.json")
+            guardar_partida_json(jugada.partida, ruta, self.encabezado(jugada.partida),
+                                 linea=linea)
+            ArchivoGuardadoJSON(ruta).cargar_partida(jugada.cripta.partida._fichas)
+
+        def copia_superficial():
+            linea = LineaDeTiempo(original.k)
+            linea.entradas, linea.decisiones = original.entradas, original.decisiones
+            linea.accion_base, linea.reloj_base = original.accion_base, original.reloj_base
+            linea.iniciada = True
+            linea.puntos = Vector()
+            for j in range(len(original.puntos)):
+                linea.puntos.agregar(original.puntos.obtener(j))
+            return linea
+
+        guardar_y_cargar(original)                      # la buena carga
+
+        con_hueco = copia_superficial()
+        con_hueco.puntos.quitar(1)
+        with self.assertRaises(Error):
+            guardar_y_cargar(con_hueco)
+
+        from crypta.Modelo.LineaDeTiempo import PuntoDeControl
+        mal_puesto = copia_superficial()
+        punto = mal_puesto.puntos.obtener(2)
+        mal_puesto.puntos.asignar(2, PuntoDeControl(punto.ancla, punto.posicion - 1,
+                                                    punto.partida))
+        with self.assertRaises(Error):
+            guardar_y_cargar(mal_puesto)
+
+        reloj_que_baja = copia_superficial()
+        entradas = Vector()
+        for i in range(len(original.entradas)):
+            entradas.agregar(original.entradas.obtener(i))
+        primera = entradas.obtener(len(entradas) - 1)
+        from crypta.Modelo.LineaDeTiempo import EntradaLinea
+        entradas.agregar(EntradaLinea("accion", "esperar", 0, primera.numero_accion + 1))
+        reloj_que_baja.entradas = entradas
+        with self.assertRaises(Error):
+            guardar_y_cargar(reloj_que_baja)
 
 
 if __name__ == "__main__":

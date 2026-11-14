@@ -4,7 +4,12 @@ from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.Efecto import ANTORCHA, VELOCIDAD, VENENO, Efecto
 from crypta.Modelo.Enemigo import Enemigo
 from crypta.Modelo.Evento import Evento
+from crypta.Modelo.Bitacora import Bitacora
+from crypta.Modelo.Historial import Historial
 from crypta.Modelo.Jugador import Jugador
+from crypta.Modelo.LineaDeTiempo import (
+    ACCION, AJUSTE, NO_ACCION, EntradaLinea, LineaDeTiempo, PuntoDeControl,
+)
 from crypta.Modelo.Mapa import Mapa
 from crypta.Modelo.Partida import (
     APAGAR_ANTORCHA, CIERRE_PUERTA, FIN_VELOCIDAD, PULSO_VENENO, REARME_TRAMPA,
@@ -651,6 +656,143 @@ def _leer_objetivo(l, evento):
         evento.posicion = l.entero("posicion")
     elif tipo not in TIPOS_DE_EVENTO:
         raise ErrorGuardado(f"Tipo de evento desconocido: {tipo!r}")
+
+
+# Formato 3 (capacidad 004, contracts/guardado.md): el bloque `linea`.
+_TIPOS_DE_ENTRADA = (ACCION, NO_ACCION, AJUSTE)      # 0, 1, 2 en el archivo
+
+
+def escribir_linea(e, linea, k):
+    """La línea de tiempo con el recorrido de siempre (research D11). Con
+    `linea = None`, el bloque queda vacío: solo `k` y las listas `entradas` y
+    `puntos` sin elementos. Cada punto de control se escribe con
+    `escribir_general` y `escribir_sala`, como la partida viva."""
+    e.entero("k", k if linea is None else linea.k)
+
+    entradas = Vector() if linea is None else linea.entradas
+    e.empezar_lista("entradas", len(entradas))
+
+    for i in range(len(entradas)):
+        entrada = entradas.obtener(i)
+        e.empezar_grupo(None)
+        e.entero("tipo", _codigo_de_tipo(entrada.tipo))
+        e.texto("comando", entrada.comando)
+        e.entero("reloj", entrada.reloj)
+        e.entero("numero_accion", entrada.numero_accion)
+        e.entero_opcional("pergaminos_inventario", entrada.pergaminos_inventario)
+        e.entero_opcional("posicion_actual", entrada.posicion_actual)
+        e.entero_opcional("pergaminos_sala", entrada.pergaminos_sala)
+        e.terminar_grupo()
+
+    e.terminar_lista()
+
+    puntos = Vector() if linea is None else linea.puntos
+    e.empezar_lista("puntos", len(puntos))
+
+    for j in range(len(puntos)):
+        punto = puntos.obtener(j)
+        e.empezar_grupo(None)
+        e.entero("ancla", punto.ancla)
+        e.entero("posicion", punto.posicion)
+
+        e.empezar_grupo("general")
+        escribir_general(e, punto.partida)
+        e.terminar_grupo()
+
+        salas = punto.partida.mapa.obtener_todas()
+        e.empezar_lista("salas", len(salas))
+
+        for i in range(len(salas)):
+            e.empezar_grupo(None)
+            escribir_sala(e, salas.obtener(i))
+            e.terminar_grupo()
+
+        e.terminar_lista()
+        e.terminar_grupo()
+
+    e.terminar_lista()
+
+
+def leer_linea(l, encabezado, fichas):
+    """La línea de tiempo del archivo, o None si el bloque está vacío. Cada
+    punto se arma con `armar_partida` y recibe un historial sin límite y una
+    bitácora vacía (research D3). Si algo no cuadra, `ErrorGuardado`."""
+    k = l.entero("k")
+    entradas = Vector()
+
+    for _ in range(l.empezar_lista("entradas")):
+        l.empezar_grupo(None)
+        codigo = l.entero("tipo")
+        comando = l.texto("comando")
+        reloj = l.entero("reloj")
+        numero = l.entero("numero_accion")
+        pergaminos_inventario = l.entero_opcional("pergaminos_inventario")
+        posicion_actual = l.entero_opcional("posicion_actual")
+        pergaminos_sala = l.entero_opcional("pergaminos_sala")
+        l.terminar_grupo()
+
+        try:
+            entradas.agregar(EntradaLinea(
+                _tipo_de_codigo(codigo), comando, reloj, numero,
+                pergaminos_inventario, posicion_actual, pergaminos_sala))
+        except ValueError as error:
+            raise ErrorGuardado(f"La línea de tiempo guardada está dañada: {error}")
+
+    l.terminar_lista()
+
+    puntos = Vector()
+    cantidad = l.empezar_lista("puntos")
+
+    for _ in range(cantidad):
+        l.empezar_grupo(None)
+        ancla = l.entero("ancla")
+        posicion = l.entero("posicion")
+
+        l.empezar_grupo("general")
+        general = leer_general(l)
+        l.terminar_grupo()
+
+        salas = Vector()
+
+        for _ in range(l.empezar_lista("salas")):
+            l.empezar_grupo(None)
+            salas.agregar(leer_sala(l, fichas))
+            l.terminar_grupo()
+
+        l.terminar_lista()
+        l.terminar_grupo()
+
+        partida = armar_partida(encabezado, general, salas, fichas)
+        partida.estado.historial = Historial(limite=None)
+        partida.bitacora = Bitacora()
+        puntos.agregar(PuntoDeControl(ancla, posicion, partida))
+
+    l.terminar_lista()
+
+    if cantidad == 0:
+        if len(entradas) > 0:
+            raise ErrorGuardado("La línea de tiempo guardada tiene entradas y ningún punto")
+        return None
+
+    try:
+        return LineaDeTiempo.desde_guardado(k, entradas, puntos)
+    except ValueError as error:
+        raise ErrorGuardado(f"La línea de tiempo guardada está dañada: {error}")
+
+
+def _codigo_de_tipo(tipo):
+    for codigo in range(len(_TIPOS_DE_ENTRADA)):
+        if _TIPOS_DE_ENTRADA[codigo] == tipo:
+            return codigo
+
+    raise ValueError(f"Tipo de entrada desconocido: {tipo!r}")
+
+
+def _tipo_de_codigo(codigo):
+    if not 0 <= codigo < len(_TIPOS_DE_ENTRADA):
+        raise ErrorGuardado(f"Tipo de entrada de la línea de tiempo desconocido: {codigo}")
+
+    return _TIPOS_DE_ENTRADA[codigo]
 
 
 def armar_partida(encabezado, general, salas_leidas, fichas):

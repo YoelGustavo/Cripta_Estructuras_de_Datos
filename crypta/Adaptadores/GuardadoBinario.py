@@ -3,9 +3,10 @@ import struct
 
 from crypta.Adaptadores.EstadoPartida import (
     ErrorGuardado, armar_partida, escribir_encabezado, escribir_general,
-    escribir_sala, evento_suelto, leer_encabezado, leer_general, leer_sala,
-    revisar_antes_de_guardar,
+    escribir_linea, escribir_sala, evento_suelto, leer_encabezado, leer_general,
+    leer_linea, leer_sala, revisar_antes_de_guardar,
 )
+from crypta.Modelo.LineaDeTiempo import K_POR_DEFECTO
 from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
 from crypta.estructuras.Vector import Vector
 from crypta.estructuras.ordenamiento import ordenar
@@ -13,7 +14,10 @@ from crypta.estructuras.ordenamiento import ordenar
 
 MAGIA = b"CRPT"
 # 2: cada puerta guarda su costo (capacidad 001, FR-026).
-FORMATO_GUARDADO = 2
+# 3: el bloque `linea` con la línea de tiempo (capacidad 004, FR-417). Va
+#    entre la última sala y el índice: empieza donde terminan las salas y
+#    llega hasta el índice, así la cabecera no cambia (contracts/guardado.md).
+FORMATO_GUARDADO = 3
 
 _INICIO = struct.Struct("<4sH")
 _CABECERA = struct.Struct("<HIIQI")
@@ -25,7 +29,15 @@ _REAL = struct.Struct("<d")
 _BYTE = struct.Struct("<B")
 
 
-def guardar_partida(partida, ruta, encabezado):
+def mensaje_de_formato(formato, esperado, tipo=""):
+    """Rechazo de otra versión del formato (FR-419): nunca se migra."""
+    return (f"Formato incompatible: la partida se guardó con la versión {formato} "
+            f"del formato{tipo} y este programa lee la versión {esperado}; no se "
+            f"puede cargar")
+
+
+def guardar_partida(partida, ruta, encabezado, linea=None):
+    """Formato 3. Sin `linea`, el bloque `linea` queda vacío (solo K)."""
     revisar_antes_de_guardar(partida, encabezado)
 
     e = EscritorBinario()
@@ -50,6 +62,11 @@ def guardar_partida(partida, ruta, encabezado):
         indice.agregar((salas.obtener(i).id, posicion, len(registro)))
         posicion += len(registro)
 
+    e = EscritorBinario()
+    escribir_linea(e, linea, K_POR_DEFECTO)
+    bloque_linea = e.datos()
+    posicion += len(bloque_linea)
+
     ordenar(indice, clave=_id_de_entrada)
 
     temporal = ruta + ".tmp"
@@ -63,6 +80,8 @@ def guardar_partida(partida, ruta, encabezado):
 
         for i in range(len(registros)):
             archivo.write(registros.obtener(i))
+
+        archivo.write(bloque_linea)
 
         for i in range(len(indice)):
             archivo.write(_ENTRADA.pack(*indice.obtener(i)))
@@ -83,11 +102,16 @@ class ArchivoGuardado:
       - cargar_partida(fichas): todo, para seguir jugando.
 
     bytes_leidos cuenta lo que se ha leído del archivo (para comprobar que
-    leer una sala no lee el archivo completo)."""
+    leer una sala no lee el archivo completo).
+
+    `linea`: la línea de tiempo leída por `cargar_partida` (formato 3), o
+    None si el bloque estaba vacío o todavía no se cargó. No va en la
+    Partida (research D12)."""
 
     def __init__(self, ruta):
         self._ruta = ruta
         self.bytes_leidos = 0
+        self.linea = None
 
         try:
             archivo = open(ruta, "rb")
@@ -103,10 +127,7 @@ class ArchivoGuardado:
                 raise ErrorGuardado(f"{ruta} no es una partida guardada de CRIPTA")
 
             if formato != FORMATO_GUARDADO:
-                raise ErrorGuardado(
-                    f"La partida se guardó con la versión {formato} del formato y "
-                    f"este programa lee la versión {FORMATO_GUARDADO}: no se puede cargar"
-                )
+                raise ErrorGuardado(mensaje_de_formato(formato, FORMATO_GUARDADO))
 
             (_, largo_encabezado, largo_general, posicion_indice,
              cantidad) = _CABECERA.unpack(self._leer(archivo, _CABECERA.size))
@@ -145,6 +166,16 @@ class ArchivoGuardado:
             self._ids.agregar(id_sala)
 
         self._indice = ArbolBusqueda.desde_ordenados(pares)
+
+        # El bloque `linea` empieza donde termina la última sala y llega
+        # hasta el índice.
+        fin_salas = inicio_salas
+        for i in range(cantidad):
+            _, (posicion, largo) = pares.obtener(i)
+            fin_salas = max(fin_salas, posicion + largo)
+
+        self._posicion_linea = fin_salas
+        self._largo_linea = posicion_indice - fin_salas
 
     def _leer(self, archivo, cantidad):
         datos = archivo.read(cantidad)
@@ -199,7 +230,14 @@ class ArchivoGuardado:
                 entrada = self._indice.obtener(id_sala)
                 salas.agregar(self._leer_registro(archivo, id_sala, entrada, fichas))
 
-        return armar_partida(self.encabezado, general, salas, fichas)
+            archivo.seek(self._posicion_linea)
+            l = LectorBinario(self._leer(archivo, self._largo_linea))
+            linea = leer_linea(l, self.encabezado, fichas)
+            l.terminar()
+
+        partida = armar_partida(self.encabezado, general, salas, fichas)
+        self.linea = linea
+        return partida
 
     def _leer_registro(self, archivo, id_sala, entrada, fichas):
         posicion, largo = entrada

@@ -4,18 +4,21 @@ import os
 
 from crypta.Adaptadores.EstadoPartida import (
     ErrorGuardado, armar_partida, escribir_encabezado, escribir_general,
-    escribir_sala, evento_suelto, leer_encabezado, leer_general, leer_sala,
-    revisar_antes_de_guardar,
+    escribir_linea, escribir_sala, evento_suelto, leer_encabezado, leer_general,
+    leer_linea, leer_sala, revisar_antes_de_guardar,
 )
+from crypta.Adaptadores.GuardadoBinario import mensaje_de_formato
+from crypta.Modelo.LineaDeTiempo import K_POR_DEFECTO
 from crypta.estructuras.Pila import Pila
 from crypta.estructuras.Vector import Vector
 
 
 # 2: cada puerta guarda su costo (capacidad 001, FR-026).
-FORMATO_JSON = 2
+# 3: el grupo `linea` con la línea de tiempo (capacidad 004, FR-417).
+FORMATO_JSON = 3
 
 
-def guardar_partida_json(partida, ruta, encabezado):
+def guardar_partida_json(partida, ruta, encabezado, linea=None):
     revisar_antes_de_guardar(partida, encabezado)
 
     documento = {"formato": FORMATO_JSON}
@@ -39,6 +42,10 @@ def guardar_partida_json(partida, ruta, encabezado):
 
     e.terminar_lista()
 
+    e.empezar_grupo("linea")
+    escribir_linea(e, linea, K_POR_DEFECTO)
+    e.terminar_grupo()
+
     temporal = ruta + ".tmp"
 
     with open(temporal, "w", encoding="utf-8") as archivo:
@@ -58,6 +65,8 @@ class ArchivoGuardadoJSON:
 
         self.tamano = os.path.getsize(ruta)
         self.bytes_leidos = self.tamano
+        # La línea de tiempo leída por `cargar_partida` (research D12).
+        self.linea = None
 
         try:
             self._documento = json.loads(texto)
@@ -69,9 +78,7 @@ class ArchivoGuardadoJSON:
 
         if self._documento["formato"] != FORMATO_JSON:
             raise ErrorGuardado(
-                f"La partida se guardó con la versión {self._documento['formato']} del "
-                f"formato JSON y este programa lee la versión {FORMATO_JSON}"
-            )
+                mensaje_de_formato(self._documento["formato"], FORMATO_JSON, " JSON"))
 
         l = LectorJSON(self._documento)
         l.empezar_grupo("encabezado")
@@ -114,7 +121,13 @@ class ArchivoGuardadoJSON:
 
         l.terminar_lista()
 
-        return armar_partida(self.encabezado, general, salas, fichas)
+        l.empezar_grupo("linea")
+        linea = leer_linea(l, self.encabezado, fichas)
+        l.terminar_grupo()
+
+        partida = armar_partida(self.encabezado, general, salas, fichas)
+        self.linea = linea
+        return partida
 
 
 

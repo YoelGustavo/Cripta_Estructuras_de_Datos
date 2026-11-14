@@ -287,7 +287,7 @@ de los formatos 1 y 2 (D11).
 
 ### Pruebas de la historia 4 (escribir primero; deben fallar)
 
-- [ ] T033 [P] [HU4] Escribir `TestLineaGuardada` en `tests/test_persistencia.py` (FR-417 a FR-419; contracts/guardado.md):
+- [X] T033 [P] [HU4] Escribir `TestLineaGuardada` en `tests/test_persistencia.py` (FR-417 a FR-419; contracts/guardado.md):
   - HU4-1: 200 acciones con pergaminos; guardar en binario y en JSON; cargar; 50 consultas `t` y `#k` dan el mismo texto que antes de guardar; la partida sigue y termina igual que sin guardar;
   - HU4-2: guardada con K = 10 y cargada con un controlador con K = 50 → aviso «La partida guardada usa --checkpoint-cada 10; se usa ese valor.» y K = 10;
   - HU4-3: archivo de P1 (formato 1) → «formato incompatible» y la partida en curso no cambia (Apéndice B);
@@ -295,18 +295,24 @@ de los formatos 1 y 2 (D11).
   - archivo con anclas con huecos, posiciones no crecientes o relojes que no suben → `ErrorGuardado`;
   - `guardar_partida(partida, ruta, encabezado)` **sin** línea escribe un bloque `linea` vacío (solo K); `cargar_partida` devuelve solo la partida y `archivo.linea is None`; el `Controlador` crea entonces una línea nueva con el punto inicial en el estado cargado, y `historia #k` de una acción anterior a la carga se rechaza;
   - con línea, `cargar_partida` sigue devolviendo solo la partida y la línea queda en `archivo.linea` (binario y JSON).
-- [ ] T034 [P] [HU4] Actualizar en `tests/test_persistencia.py` las pruebas que comprueban el número de formato del archivo de partida para que esperen el formato 3. Solo esas cambian: las demás llamadas a `guardar_partida` y `cargar_partida` siguen iguales porque las firmas no cambian (FR-419; SC-408).
+- [X] T034 [P] [HU4] Actualizar en `tests/test_persistencia.py` las pruebas que comprueban el número de formato del archivo de partida para que esperen el formato 3. Solo esas cambian: las demás llamadas a `guardar_partida` y `cargar_partida` siguen iguales porque las firmas no cambian (FR-419; SC-408).
 
 ### Implementación de la historia 4
 
-- [ ] T035 [HU4] En `crypta/Adaptadores/EstadoPartida.py` (D11; contracts/guardado.md; FR-417 a FR-419), con el escritor y el lector abstractos existentes:
+- [X] T035 [HU4] *(Hecho: `leer_linea(l, encabezado, fichas)` recibe también el encabezado, que necesita `armar_partida`; la validación está en `LineaDeTiempo.desde_guardado`, en el Modelo.)* En `crypta/Adaptadores/EstadoPartida.py` (D11; contracts/guardado.md; FR-417 a FR-419), con el escritor y el lector abstractos existentes:
   - `escribir_linea(e, linea, k)`: con `linea = None`, solo `k` y las listas `entradas` y `puntos` vacías; si no, k, la lista de entradas (`tipo` 0/1/2, `comando`, `reloj`, `numero_accion` y los tres `entero_opcional` del ajuste) y la lista de puntos (`ancla`, `posicion`, grupo `general` con `escribir_general(e, punto.partida)` y lista `salas` con `escribir_sala` de cada sala del punto);
   - `leer_linea(l, fichas)`: devuelve `None` si el bloque está vacío; si no, arma cada punto con `armar_partida`, le pone `Historial(limite=None)`, una `Bitacora()` nueva y `_perseguidor = None`, y reconstruye `decisiones` en O(n);
   - valida anclas a₀, a₀ + K, a₀ + 2K… sin huecos, posiciones crecientes y relojes que suben estrictamente; si algo falla, `ErrorGuardado`.
-- [ ] T036 [HU4] En `crypta/Adaptadores/GuardadoBinario.py` (FR-417, FR-419; contracts/guardado.md): `FORMATO_GUARDADO = 3`; el bloque `linea` va después de los registros de sala, con su posición y su largo en la cabecera. **Las firmas no cambian**: `guardar_partida(partida, ruta, encabezado, linea=None)` (sin línea, bloque vacío con el K por defecto) y `ArchivoGuardado.cargar_partida(fichas)` sigue devolviendo solo la partida; la línea leída queda en `self.linea` (`None` si el bloque estaba vacío), no en la `Partida` (D12). El rechazo de otros formatos queda igual. Las llamadas existentes de `tests/` y `crypta/bench/bench.py` no se tocan.
-- [ ] T037 [HU4] En `crypta/Adaptadores/GuardadoJSON.py`: `FORMATO_JSON = 3`, el mismo bloque `linea` con `EscritorJSON`/`LectorJSON`, `guardar_partida_json(…, linea=None)` y `ArchivoGuardadoJSON.linea` después de `cargar_partida`, que sigue devolviendo solo la partida (FR-417, FR-419).
-- [ ] T038 [HU4] En `crypta/Controlador/Controlador.py` (FR-417, FR-418): `guardar` pasa `linea=self.linea`; `cargar_partida` toma `archivo.linea` después de `archivo.cargar_partida(...)`. Si no es `None`, avisa si `self.k != linea.k` con el texto de HU4-2 y adopta la línea cargada. Si es `None`, crea `LineaDeTiempo(self.k)` e `iniciar(nueva_partida)` con el punto inicial en el estado cargado (ancla a₀ = `acciones_jugador` cargadas, data-model.md).
-- [ ] T039 [HU4] Punto de control (FR-417 a FR-419): T033 y T034 pasan, `python -m unittest` en verde y commit «004 HU4: guardado formato 3 con la línea de tiempo».
+- [X] T036 [HU4] En `crypta/Adaptadores/GuardadoBinario.py` (FR-417, FR-419; contracts/guardado.md): `FORMATO_GUARDADO = 3`; el bloque `linea` va después de los registros de sala, con su posición y su largo en la cabecera. **Las firmas no cambian**: `guardar_partida(partida, ruta, encabezado, linea=None)` (sin línea, bloque vacío con el K por defecto) y `ArchivoGuardado.cargar_partida(fichas)` sigue devolviendo solo la partida; la línea leída queda en `self.linea` (`None` si el bloque estaba vacío), no en la `Partida` (D12). El rechazo de otros formatos queda igual. Las llamadas existentes de `tests/` y `crypta/bench/bench.py` no se tocan.
+
+  *Hecho, con un ajuste*: el bloque `linea` **no** lleva su posición ni su largo en la cabecera. Va entre la última sala y el índice: empieza donde termina el último registro de sala y llega hasta el índice. Así la cabecera de 22 bytes no cambia y siguen pasando, sin tocarlas, las pruebas de P1 que leen sus campos por posición (SC-408). El mensaje de rechazo ahora empieza con «Formato incompatible:» (`mensaje_de_formato`, que comparte el JSON). contracts/guardado.md ya lo dice.
+- [X] T037 [HU4] En `crypta/Adaptadores/GuardadoJSON.py`: `FORMATO_JSON = 3`, el mismo bloque `linea` con `EscritorJSON`/`LectorJSON`, `guardar_partida_json(…, linea=None)` y `ArchivoGuardadoJSON.linea` después de `cargar_partida`, que sigue devolviendo solo la partida (FR-417, FR-419).
+- [X] T038 [HU4] En `crypta/Controlador/Controlador.py` (FR-417, FR-418): `guardar` pasa `linea=self.linea`; `cargar_partida` toma `archivo.linea` después de `archivo.cargar_partida(...)`. Si no es `None`, avisa si `self.k != linea.k` con el texto de HU4-2 y adopta la línea cargada. Si es `None`, crea `LineaDeTiempo(self.k)` e `iniciar(nueva_partida)` con el punto inicial en el estado cargado (ancla a₀ = `acciones_jugador` cargadas, data-model.md).
+
+  *Hecho, y además*:
+  - `guardar` sigue llamando a `guardar_partida` con 3 argumentos cuando no hay línea, que es lo que espera la prueba de P1 con partida falsa.
+  - Hueco de P1 que afectaba a FR-419: `procesar_comando("cargar")` no atrapaba `ErrorGuardado`, así que un archivo incompatible terminaba el programa. Ahora muestra el rechazo y la partida en curso no cambia (prueba en T033).
+- [X] T039 [HU4] Punto de control (FR-417 a FR-419): T033 y T034 pasan, `python -m unittest` en verde (913 pruebas, 1 omitida que ya existía) y commit «004 HU4: guardado formato 3 con la línea de tiempo» (lo hace el grupo).
 
 ---
 

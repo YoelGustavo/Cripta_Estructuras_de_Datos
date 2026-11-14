@@ -147,6 +147,90 @@ class LineaDeTiempo:
 
     # --- Construcción -----------------------------------------------------
 
+    @classmethod
+    def desde_guardado(cls, k, entradas, puntos):
+        """La línea leída de un archivo de partida (research D11; FR-417).
+        `entradas` es un `Vector` de `EntradaLinea` y `puntos` uno de
+        `PuntoDeControl` ya armados. Valida que todo cuadre y reconstruye
+        `decisiones` en O(n); si algo no cuadra, `ValueError`:
+
+        - anclas a₀, a₀ + K, a₀ + 2K… sin huecos, una por cada múltiplo que la
+          partida alcanzó, y cada punto con esa cantidad de acciones;
+        - posiciones crecientes; cada punto (salvo el primero) justo después
+          de la entrada de su acción;
+        - acciones numeradas en orden y relojes de decisión que suben
+          estrictamente."""
+        linea = cls(k)
+
+        if len(puntos) == 0:
+            raise ValueError("La línea de tiempo guardada no tiene puntos de control")
+
+        primero = puntos.obtener(0)
+
+        if primero.posicion != 0:
+            raise ValueError("El primer punto de control no está al principio de la línea")
+
+        linea.accion_base = primero.ancla
+        linea.reloj_base = primero.partida.reloj
+        reloj_anterior = linea.reloj_base - 1
+        reloj_entrada = linea.reloj_base
+
+        for i in range(len(entradas)):
+            entrada = entradas.obtener(i)
+            n = linea.cantidad_acciones()
+
+            if entrada.reloj < reloj_entrada:
+                raise ValueError(f"El reloj baja en la entrada {i} de la línea de tiempo")
+
+            reloj_entrada = entrada.reloj
+
+            if entrada.tipo == ACCION:
+                if entrada.numero_accion != n + 1:
+                    raise ValueError(f"La entrada {i} dice acción #{entrada.numero_accion} "
+                                     f"y le toca la #{n + 1}")
+
+                if entrada.reloj <= reloj_anterior:
+                    raise ValueError(f"El reloj de la acción #{entrada.numero_accion} no sube")
+
+                reloj_anterior = entrada.reloj
+                linea.decisiones.agregar((entrada.reloj, i))
+            elif entrada.numero_accion != n + 1:
+                raise ValueError(f"La entrada {i} no es de la próxima acción (#{n + 1})")
+
+            linea.entradas.agregar(entrada)
+
+        n = linea.cantidad_acciones()
+
+        if len(puntos) != (n - linea.accion_base) // k + 1:
+            raise ValueError(f"Con {n} acciones y K = {k} tendría que haber "
+                             f"{(n - linea.accion_base) // k + 1} puntos de control, "
+                             f"no {len(puntos)}")
+
+        for j in range(len(puntos)):
+            punto = puntos.obtener(j)
+
+            if punto.ancla != linea.accion_base + j * k:
+                raise ValueError(f"El punto de control {j} tiene ancla {punto.ancla}")
+
+            if punto.partida.acciones_jugador != punto.ancla:
+                raise ValueError(f"El punto de control {j} no tiene {punto.ancla} acciones")
+
+            if j > 0:
+                anterior = puntos.obtener(j - 1)
+
+                if punto.posicion <= anterior.posicion or punto.posicion > len(entradas):
+                    raise ValueError(f"La posición del punto de control {j} no crece")
+
+                entrada = entradas.obtener(punto.posicion - 1)
+
+                if entrada.tipo != ACCION or entrada.numero_accion != punto.ancla:
+                    raise ValueError(f"El punto de control {j} no va después de su acción")
+
+            linea.puntos.agregar(punto)
+
+        linea.iniciada = True
+        return linea
+
     def iniciar(self, partida):
         """Primer punto de control, con ancla a₀ = acciones de la partida (0
         en una partida nueva). Va después de `Partida.iniciar`."""

@@ -3,8 +3,13 @@
 Formato 3 en `GuardadoBinario` (`FORMATO_GUARDADO = 3`) y en `GuardadoJSON` (`FORMATO_JSON = 3`).
 Se mantienen, sin cambios, el encabezado, el bloque general, los registros de sala y el índice. Se
 agrega un bloque `linea`, escrito con los mismos métodos del escritor abstracto (`entero`, `texto`,
-`empezar_grupo`, `empezar_lista`…). En el binario va después de los registros de sala y la cabecera
-guarda su posición y su largo.
+`empezar_grupo`, `empezar_lista`…). En el binario va entre la última sala y el índice: empieza
+donde termina el último registro de sala y llega hasta el índice. La cabecera de 22 bytes no
+cambia, así siguen valiendo las pruebas de P1 que leen sus campos (SC-408).
+
+Rechazo de otro número de formato, en binario y en JSON: «Formato incompatible: la partida se
+guardó con la versión <v> del formato[ JSON] y este programa lee la versión 3; no se puede
+cargar».
 
 ```text
 linea
