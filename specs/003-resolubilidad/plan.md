@@ -132,8 +132,10 @@ crypta/
 ├── bench/
 │   ├── bench_resolubilidad.py   # NUEVO: generador y secciones R1–R5
 │   └── bench.py                 # CAMBIA: llama a las secciones nuevas; código ≠ 0 si R4 falla
-└── main.py                      # CAMBIA: --verificar, --forzar; crear_partida dividida en
-                                 #         preparar_cripta + crear partida; códigos 1 y 2
+└── main.py                      # CAMBIA: --verificar, --forzar (FR-336); preparar_cripta nueva;
+                                 #         crear_partida(args, preparada=None) con la misma firma y
+                                 #         retorno, sin verificar; la verificación, solo en main y
+                                 #         en --verificar; códigos 1 y 2
 
 tests/
 ├── test_resolubilidad.py            # NUEVO: HU1 y HU2 con criptas armadas a mano
@@ -145,8 +147,8 @@ tests/
 └── test_bench.py                    # CAMBIA: huella del generador, R1–R5 en modo rápido, R4 saboteada
 ```
 
-**Decisión de estructura**: se mantiene el proyecto único; solo se agregan módulos y se divide
-`crear_partida` en `main.py`.
+**Decisión de estructura**: se mantiene el proyecto único; solo se agregan módulos y se separa
+`preparar_cripta` de `crear_partida` en `main.py`, que conserva su firma y su retorno.
 
 ## Estructuras y complejidad
 
@@ -187,8 +189,8 @@ Detalle en [contracts/bench.md](contracts/bench.md).
 |---|---|---|---|
 | FR-330, HU5-1 | generador | semilla fija, dos ejecuciones | huella idéntica |
 | FR-331, HU5-2 | R1 | 500/125, 1 000/250, 2 000/500 salas/llaves; resolubles y no; la ingenua de 2 000 salas con una sola repetición | se reporta, con el cociente ingenua / incremental |
-| FR-334, SC-303, HU5-4 | R2 | 2 000 salas, 500 llaves encadenadas (y la cripta publicada más grande si está en la copia local) | < 200 ms (principio VI) |
-| FR-335, SC-304, HU5-5 | R3 | 2 000, 4 000, 8 000 salas con llaves proporcionales; la ingenua en los tamaños de R1 | cocientes de la incremental ≤ 3 |
+| FR-334, SC-303, HU5-4 | R2 | 2 000 salas, 500 llaves encadenadas (y la cripta publicada más grande, que T050 deja en la copia local con `--verificar`); desde el esqueleto cargado y la ubicación en memoria; la carga del esqueleto aparte, sin límite | < 200 ms (principio VI) |
+| FR-335, SC-304, HU5-5 | R3 | incremental con 500 a 8 000 salas; ingenua con 500, 1 000 y 2 000; llaves proporcionales | cocientes de la incremental ≤ 3; los de la ingenua, en la misma tabla y los mismos tamaños |
 | FR-332, HU5-3 | R4 | las criptas de los tamaños de R1 y 50 pequeñas (las de 4 000 y 8 000 salas no: la ingenua tardaría minutos) | 0 diferencias; si no, ERROR y código ≠ 0 |
 | FR-333, HU5-6 | todas | — | sin vista ni red (prueba con fuente que falla y vista que falla) |
 | D1 | R5 | K = 500, 2 000, 8 000; `insertar` con ids barajados y ordenados frente a ordenar + `desde_ordenados` | se reporta, con la altura de cada árbol |
@@ -233,6 +235,7 @@ escenario n de la historia x.
 | FR-326 | `test_verificacion_inicio` · `--replay` de una partida forzada no verifica ni pide llaves; cargar partida no verifica | HU3-9, HU3-10 |
 | FR-327 | `test_verificacion_inicio` · el archivo de partida y `partida.log` no contienen la verificación; el pergamino no la toca | HU3-10 |
 | FR-328, FR-329 | `test_verificacion_inicio` · `--verificar` con resoluble (0), no resoluble (2), red/datos inválidos/sin llaves (1); sin vista ni `partida.log`; solicitudes contadas y copia guardada | HU4-1 a HU4-5 |
+| FR-336 | `test_verificacion_inicio` · `--verificar` con `--replay` o `--bench` → código 1 sin pedir llaves; `--forzar` no cambia `--verificar` | HU4-6 |
 | FR-330 a FR-333 | `test_bench` · huella repetible; R1–R5 corren en modo rápido; R4 con una variante saboteada da ERROR; fuente y vista que fallan | HU5-1 a HU5-3, HU5-6 |
 | FR-334, FR-335 | `--bench` (R2, R3); `test_bench` solo comprueba que se calculan y reportan | HU5-4, HU5-5 |
 | SC-302 | `test_equivalencia_resolubilidad` · ≥ 200 criptas por semilla (resolubles y no): texto igual al de la ingenua | — |

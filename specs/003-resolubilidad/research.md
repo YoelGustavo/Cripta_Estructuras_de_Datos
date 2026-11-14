@@ -284,12 +284,15 @@ muestra), así la comparación cubre todo lo que ve el jugador.
   inicia, `persistir` del final la guarda como hoy, ahora con las llaves.
 - **No pide contenido** (FR-321): la verificación solo recibe el `Mapa` (esqueleto) y la ubicación;
   no tiene acceso a `GestorContenido`.
-- **Inicio de partida**: `crear_partida` se divide en `preparar_cripta` (cargar, fijar presupuesto,
-  llaves, verificar) y la creación de la partida. `partida.log` se crea solo si se decide iniciar
-  (FR-325). El resultado se imprime antes de crear la vista; no toca el mapa conocido (FR-325) ni la
+- **Inicio de partida**: se separa `preparar_cripta` (cargar y fijar presupuesto, sin verificar)
+  de `crear_partida(args, preparada=None)`, que conserva su firma y su retorno de 4 valores; sin
+  `preparada`, la prepara ella misma sin verificar, así las pruebas existentes que la llaman no
+  cambian. La verificación (llaves, validar, verificar) vive solo en `main` y en `--verificar`.
+  `partida.log` se crea solo si se decide iniciar (FR-325). El resultado se imprime antes de crear la vista; no toca el mapa conocido (FR-325) ni la
   partida (FR-327). `--replay` (`PreparadorReplay`) y la carga de una partida guardada no pasan por
   `preparar_cripta` (FR-326).
-- **Códigos** (FR-325, FR-329): 0 resoluble; 2 no resoluble; 1 no verificable o datos inválidos.
+- **Códigos** (FR-325, FR-329, FR-336): 0 resoluble; 2 no resoluble; 1 no verificable, datos
+  inválidos o `--verificar` junto con `--replay` o `--bench`.
   Los datos inválidos (FR-319) cortan antes de preguntar por `--forzar`.
 
 ## D10. Formato del texto
@@ -306,11 +309,12 @@ Para 2 000 salas, ~8 000 salidas y 500 llaves, el recorrido completo son unas de
 operaciones de `Vector`; con el costo medido en la 001 (búsqueda en 2 000 salas en pocos ms) se
 espera muy por debajo de 200 ms. La alternativa ingenua con 500 llaves encadenadas repite ~500
 recorridos de la cripta: se espera del orden de segundos, y su cociente al duplicar el tamaño cerca
-de 4. Se mide en R1 y R3, solo hasta 2 000 salas (con 4 000 y 8 000 tardaría minutos).
+de 4. Se mide en R1 y R3, solo hasta 2 000 salas (con 4 000 y 8 000 tardaría minutos); en R3 la
+incremental también se mide con 500, 1 000 y 2 000 salas para comparar los cocientes.
 
-La medición de FR-334 empieza con el `Mapa` ya cargado (cargar el esqueleto es P1 y 001) y la
-respuesta de llaves en memoria, e incluye validación, numeración, recorrido, reporte y texto. El
-bench reporta aparte el tiempo de cargar el `Mapa`.
+Como dice FR-334, la medición empieza con el esqueleto ya cargado (`Mapa`; cargarlo es de P1 y
+de la 001) y la respuesta de llaves en memoria, e incluye validación, numeración, recorrido,
+reporte y texto. El bench reporta aparte el tiempo de cargar el `Mapa`, sin límite.
 
 ## Puntos que no quedan abiertos
 

@@ -484,3 +484,22 @@ Después sigue con las preguntas normales.
 
 **USO:** Ajuste del resultado anterior entregado.
 
+**Prompt:** Arreglos del grupo al análisis de la 003 (no implementes nada; no hagas commit):
+
+Spec (specs/003-resolubilidad/spec.md):
+- C1: agrega FR-336 en «Modo --verificar»: "--verificar junto con --replay o con --bench es un error de uso: el programa termina con código 1 sin verificar. --forzar no tiene efecto con --verificar ni con --replay." Agrega el escenario HU4-6 que lo prueba.
+- A1: en FR-334 aclara que la medición empieza con el esqueleto ya cargado y la ubicación de las llaves en memoria (cargar el esqueleto es de P1 y la 001); el bench reporta la carga aparte, sin límite.
+
+Tareas (tasks.md y, donde aplique, plan.md y contracts/):
+- C1: T041 y T042 citan FR-336.
+- U1: T038 fija que crear_partida(args) conserva su firma y su retorno de 4 valores y recibe un segundo parámetro opcional con la cripta ya preparada; si no se le da, la prepara ella misma SIN verificar. La verificación vive solo en main y en --verificar. T039 solo agrega llaves a los datos de las pruebas que pasan por main.
+- G1: T030 comprueba que el Mapa no cambia; agrega una nota de que la parte de HU3-11 sobre el mapa conocido se prueba en la capacidad 002.
+- G2: T011 solo comprueba la ubicación por enemigo; FR-321 queda en T031.
+- F1: quita [P] de las tareas que comparten archivo con otra de su bloque.
+- F2: en T021, "dos" → "tres".
+- U2: T014 usa una cripta resoluble (cada salida a lo sumo dos veces) y agrega una no resoluble (a lo sumo tres).
+- F3: R3 mide también la incremental con 500, 1 000 y 2 000 salas, para que sus cocientes se comparen con los de la ingenua en la misma tabla.
+- G3: T050 primero lista las criptas con --listar y verifica la más grande con --verificar para que quede en cache/; si no hay ninguna publicada, se anota en DECISIONES.
+- T050: no escribe en docs/resultados_bench_p2.txt (ahí están los números de la 001). Solo corre las secciones de resolubilidad y revisa que R2 y R3 cumplan; el bench completo se corre al final del proyecto.
+
+**USO:** Arreglo y specificamiento del analize
