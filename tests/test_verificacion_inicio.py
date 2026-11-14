@@ -414,5 +414,98 @@ class TestSinVerificacion(ConCarpeta):
         self.assertNotIn(b"no se pueden obtener", guardado)
 
 
+class TestModoVerificar(ConCarpeta):
+    """HU4-1 a HU4-6 (FR-322, FR-323, FR-328, FR-329, FR-336)."""
+
+    def verificar(self, *argumentos, fuente=None):
+        """--verificar sin vista ni partida: crear una u otra falla."""
+        with patch("crypta.main.nueva_partida",
+                   side_effect=AssertionError("--verificar creó una partida")):
+            codigo, texto = self.correr(*argumentos, fuente=fuente)
+
+        self.vistas.assert_not_called()
+        self.assertFalse(self.hay_partida_log())
+        return codigo, texto
+
+    def test_HU4_1_resoluble_codigo_0_FR_328_329(self):
+        codigo, texto = self.verificar("--offline", "--verificar", "c-prueba")
+
+        self.assertEqual(codigo, 0)
+        self.assertIn("Verificación de resolubilidad: la cripta es resoluble.\n"
+                      "Orden de llaves:\n"
+                      "  Ronda 1: itm_llave\n", texto)
+
+    def test_HU4_2_no_resoluble_codigo_2_FR_328_329(self):
+        codigo, texto = self.verificar("--offline", "--verificar", "c-cerrada")
+
+        self.assertEqual(codigo, 2)
+        self.assertIn(REPORTE_CERRADA, texto)
+        self.assertNotIn(NO_INICIA, texto)
+
+    def test_HU4_3_errores_codigo_1_FR_329(self):
+        """Falla de red, datos inválidos y sin conexión sin llaves en la
+        copia: se imprime el motivo y el código es 1."""
+        self.guardar_cerrada(None)
+        codigo, texto = self.verificar(
+            "--verificar", "c-cerrada",
+            fuente=FuenteQueFallaEnLlaves(RuntimeError("sin red")))
+        self.assertEqual(codigo, 1)
+        self.assertIn("no se pudo verificar (falla de red: sin red)", texto)
+
+        codigo, texto = self.verificar("--offline", "--verificar", "c-cerrada")
+        self.assertEqual(codigo, 1)
+        self.assertIn("no se pudo verificar (sin conexión y sin la ubicación "
+                      "de las llaves en la copia local)", texto)
+
+        self.guardar_cerrada(respuesta_llaves(ubicacion(SALIDA, 99)))
+        codigo, texto = self.verificar("--offline", "--verificar", "c-cerrada")
+        self.assertEqual(codigo, 1)
+        self.assertIn("la ubicación de llaves tiene un dato inválido", texto)
+
+        # Una falla de red al pedir los datos de la cripta también es 1.
+        sin_red = Mock()
+        sin_red.obtener_cripta.side_effect = RuntimeError("Error de red")
+        codigo, texto = self.verificar("--verificar", "c-cerrada",
+                                       fuente=sin_red)
+        self.assertEqual(codigo, 1)
+        self.assertIn("Error de red", texto)
+
+    def test_HU4_5_en_linea_cuenta_y_guarda_la_copia_FR_322_323(self):
+        """HU4-5: sin copia local, pide esqueleto y llaves (contadas) y las
+        guarda en la copia local como un inicio normal."""
+        self.almacen = AlmacenDisco(os.path.join(self.carpeta, "vacia"))
+        fuente = fuente_cerrada()
+
+        codigo, _ = self.verificar("--verificar", "c-cerrada", fuente=fuente)
+
+        self.assertEqual(codigo, 2)
+        self.assertEqual(fuente.por_operacion["obtener_pagina_salas"], 1)
+        self.assertEqual(fuente.por_operacion["obtener_llaves"], 1)
+        self.assertNotIn("obtener_contenido", fuente.por_operacion)
+        guardada = self.almacen.cargar_cripta("c-cerrada", "v7")
+        self.assertEqual(guardada["llaves"], LLAVES_CERRADA)
+        self.assertEqual(guardada["esqueleto"], ESQUELETO_CERRADA)
+
+    def test_HU4_6_combinaciones_FR_336(self):
+        """HU4-6: --verificar con --replay o --bench es error de uso
+        (código 1, sin verificar); --forzar no cambia nada."""
+        for extra in (("--replay", "partida.log"), ("--bench",)):
+            with self.subTest(extra=extra), \
+                    patch.object(FuenteOffline, "obtener_llaves",
+                                 side_effect=AssertionError("verificó")), \
+                    patch("crypta.bench.bench.ejecutar",
+                          side_effect=AssertionError("corrió el bench")):
+                codigo, texto = self.verificar("--offline", "--verificar",
+                                               "c-cerrada", *extra)
+
+                self.assertEqual(codigo, 1)
+                self.assertNotIn("Verificación de resolubilidad", texto)
+
+        sin = self.verificar("--offline", "--verificar", "c-cerrada")
+        con = self.verificar("--offline", "--verificar", "c-cerrada",
+                             "--forzar")
+        self.assertEqual(con, sin)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -520,3 +520,7 @@ Tareas (tasks.md y, donde aplique, plan.md y contracts/):
 
 **USO:** Implementación de la fase 5 del punto 003
 
+**Prompt:** /speckit-implement Solo la fase 6 (T041 a T043) de specs/003-resolubilidad/tasks.md. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Implementacion de la fase 6 del punto 003
+

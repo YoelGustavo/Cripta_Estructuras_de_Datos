@@ -84,6 +84,14 @@ def crear_argumentos():
     )
 
     parser.add_argument(
+        "--verificar",
+        metavar="CRIPTA",
+        default=None,
+        help="Solo verificar si la cripta es resoluble y terminar "
+             "(0 resoluble, 2 no resoluble, 1 error)"
+    )
+
+    parser.add_argument(
         "--forzar",
         action="store_true",
         help="Jugar aunque la cripta no sea resoluble o no se pueda verificar"
@@ -316,6 +324,29 @@ def guardar_copia_local(args, cripta_id, preparada):
         print(f"No se pudo guardar la copia local: {error}")
 
 
+def verificar(args):
+    """--verificar CRIPTA: solo la verificación, sin vista, sin partida y
+    sin partida.log (FR-328). Código 0 resoluble, 2 no resoluble, 1 si no
+    se pudo verificar (FR-329). --forzar no tiene efecto (FR-336)."""
+    try:
+        preparada = preparar_cripta(args, args.verificar)
+        resultado = preparar_verificacion(
+            preparada.gestor_cripta, args.verificar, preparada.datos_cripta,
+            preparada.mapa)
+
+    except DatosInvalidos as error:
+        print(f"La cripta no se puede jugar: {error}")
+        return 1
+
+    except (RuntimeError, ValueError, OSError) as error:
+        print(f"Error: {error}")
+        return 1
+
+    print(texto_de(resultado))
+    guardar_copia_local(args, args.verificar, preparada)
+    return codigo_de(resultado)
+
+
 def ejecutar_benchmarks():
     """Devuelve el código del --bench: distinto de 0 si alguna sección
     encontró un error, por ejemplo una decisión del cazador distinta del
@@ -332,6 +363,13 @@ def main():
         print("Error: --cache-size debe ser mayor que cero.")
         return 1
 
+    if args.verificar is not None and (args.replay is not None or args.bench):
+        print(
+            "Error: --verificar no puede utilizarse junto con --replay "
+            "ni con --bench."
+        )
+        return 1
+
     if args.bench and args.replay is not None:
         print(
             "Error: --bench y --replay no pueden utilizarse juntos."
@@ -343,6 +381,9 @@ def main():
 
     if args.bench:
         return ejecutar_benchmarks()
+
+    if args.verificar is not None:
+        return verificar(args)
 
     print("=" * 45)
     print("              CRIPTA")
