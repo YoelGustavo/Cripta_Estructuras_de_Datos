@@ -143,6 +143,26 @@ class Inventario:
         """Devuelve el objeto a la vista a `nodo`, uno de esta lista o None."""
         self._actual = nodo
 
+    def poner_actual_por_posicion(self, posicion):
+        """Pone a la vista el objeto en `posicion` del orden real (None: sin
+        objeto a la vista). Lo usa el ajuste por pergamino de la línea de
+        tiempo (capacidad 004, research D6)."""
+        if posicion is None:
+            self._actual = None
+            return
+
+        nodo = self._objetos.primero()
+
+        for _ in range(posicion):
+            if nodo is None:
+                break
+            nodo = self._objetos.siguiente(nodo)
+
+        if nodo is None:
+            raise ValueError(f"No hay objeto en la posición {posicion} del inventario")
+
+        self._actual = nodo
+
     def avanzar(self):
         if self._actual is None:
             return None

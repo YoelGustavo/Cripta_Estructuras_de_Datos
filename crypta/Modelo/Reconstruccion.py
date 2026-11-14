@@ -128,11 +128,12 @@ def consultar(linea, objetivo, partida_viva, reejecutar):
 def _reejecutar(copia, entrada, reejecutar, garantizar, sello):
     """Re-ejecuta una entrada sobre la copia; devuelve 1 si fue una acción
     (dejó un `RegistroAccion` que hay que deshacer) y 0 si no."""
-    if entrada.tipo == AJUSTE:
-        raise ReconstruccionFallida(
-            "La línea tiene un ajuste por pergamino: lo aplica la historia 2")
-
     sello.anotar_sala(copia.sala_actual())
+
+    if entrada.tipo == AJUSTE:
+        _aplicar_ajuste(copia, entrada)
+        return 0
+
     antes = copia.acciones_jugador
 
     try:
@@ -149,6 +150,16 @@ def _reejecutar(copia, entrada, reejecutar, garantizar, sello):
             f"'{entrada.comando}' no dio la misma cantidad de acciones al repetirse")
 
     return hecha
+
+
+def _aplicar_ajuste(copia, entrada):
+    """Lo que un pergamino dejó fuera del historial (research D6; FR-410):
+    pergaminos del inventario, objeto a la vista y pergaminos de la sala
+    actual. El sello ya guardó los valores del punto para devolverlos."""
+    inventario = copia.jugador.inventario
+    inventario.fijar_pergaminos(entrada.pergaminos_inventario)
+    inventario.poner_actual_por_posicion(entrada.posicion_actual)
+    copia.sala_actual().fijar_pergaminos(entrada.pergaminos_sala)
 
 
 def _garantizar_desde_la_viva(punto, partida_viva, sello):

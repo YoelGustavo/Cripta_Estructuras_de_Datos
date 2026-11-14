@@ -515,7 +515,7 @@ class CriptaConPergaminos:
     automático. El jugador tiene vida de sobra. Llamar a `cerrar()` al
     final."""
 
-    def __init__(self, semilla=SEMILLA):
+    def __init__(self, semilla=SEMILLA, inventario_max=10):
         from crypta.Controlador.GestorContenido import GestorContenido
 
         esqueleto = esqueleto_linea()
@@ -529,7 +529,7 @@ class CriptaConPergaminos:
                                  if datos["sala"] == 1])
 
         jugador = nuevo_jugador(vida_max=500, ataque=7, defensa=2,
-                                inventario_max=10)
+                                inventario_max=inventario_max)
         self.partida = Partida(mapa, jugador, 1, fichas.get, semilla=semilla)
         self.gestor = GestorContenido(self.fuente, mapa, CRIPTA_ID)
         self.garantizar = self.gestor.garantizar_sala
@@ -539,9 +539,9 @@ class CriptaConPergaminos:
         self.gestor.cerrar()
 
 
-def partida_con_pergaminos(semilla=SEMILLA):
+def partida_con_pergaminos(semilla=SEMILLA, inventario_max=10):
     """Ver `CriptaConPergaminos`."""
-    return CriptaConPergaminos(semilla)
+    return CriptaConPergaminos(semilla, inventario_max)
 
 
 def comando_al_azar(partida, azar):

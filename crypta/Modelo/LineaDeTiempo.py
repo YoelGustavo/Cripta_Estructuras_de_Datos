@@ -140,12 +140,10 @@ class LineaDeTiempo:
         self.reloj_base = 0
         self.iniciada = False
 
-        # Historia 2: hasta que el pergamino recorte la línea (T026), una
-        # partida que usó uno no se puede consultar.
-        self.con_pergamino_sin_recortar = False
-
         self.puntos_examinados = 0
         self.ultimas_reejecutadas = 0
+        # Entradas y puntos que miró el último pergamino (FR-412).
+        self.ultimas_examinadas = 0
 
     # --- Construcción -----------------------------------------------------
 
@@ -170,7 +168,7 @@ class LineaDeTiempo:
           total llega a a₀ + j·K y ese punto no existe, se crea (una copia).
         - No cambió las acciones (`avanzar`, `retroceder`): entrada
           `NO_ACCION`.
-        - Bajó en 1 (pergamino): lo recorta la historia 2 (T026)."""
+        - Bajó en 1 (pergamino): `revertir`."""
         acciones = partida.acciones_jugador
         diferencia = acciones - acciones_antes
 
@@ -198,10 +196,62 @@ class LineaDeTiempo:
                 f"comando de P1")
 
     def revertir(self, partida):
-        """Recorte por pergamino (historia 2, T026). Mientras no exista, la
-        línea deja de poder consultarse (no muestra estados que ya no
-        pertenecen a la partida, FR-410)."""
-        self.con_pergamino_sin_recortar = True
+        """Recorte por pergamino (research D6; FR-410 a FR-412).
+
+        - Quita del final las entradas hasta la última `ACCION` incluida (las
+          que no son acción y venían después, y los ajustes anteriores, se van
+          con ella) y su fila de `decisiones`: lo revertido deja de existir y
+          `#k` queda numerado con las acciones que quedaron.
+        - Quita los puntos de control cuya ancla supera el nuevo total.
+        - Agrega una entrada `AJUSTE` con lo que el pergamino deja fuera del
+          historial: pergaminos del inventario, posición del objeto actual y
+          pergaminos de la sala actual. El pergamino se gasta en ese punto de
+          la secuencia neta, justo antes de la acción siguiente.
+
+        Solo mira lo que quita: O(lo revertido), nunca toda la historia."""
+        examinadas = 0
+        quito_accion = False
+
+        while len(self.entradas) > 0:
+            entrada = self.entradas.quitar_ultimo()
+            examinadas += 1
+
+            if entrada.tipo == ACCION:
+                self.decisiones.quitar_ultimo()
+                quito_accion = True
+                break
+
+        if not quito_accion or self.cantidad_acciones() != partida.acciones_jugador:
+            # El pergamino revirtió una acción anterior a esta línea (una
+            # línea creada a mitad de partida): se empieza de nuevo desde el
+            # estado actual.
+            self._reiniciar(partida)
+            self.ultimas_examinadas = examinadas
+            return
+
+        n = self.cantidad_acciones()
+
+        while len(self.puntos) > 1 and self.puntos.obtener(len(self.puntos) - 1).ancla > n:
+            self.puntos.quitar_ultimo()
+            examinadas += 1
+
+        inventario = partida.jugador.inventario
+        actual, _, _ = inventario.posiciones()
+
+        self.entradas.agregar(EntradaLinea(
+            AJUSTE, "", partida.reloj, n + 1,
+            pergaminos_inventario=inventario.cantidad_pergaminos(),
+            posicion_actual=None if actual == -1 else actual,
+            pergaminos_sala=partida.sala_actual().cantidad_pergaminos(),
+        ))
+        self.ultimas_examinadas = examinadas
+
+    def _reiniciar(self, partida):
+        self.entradas = Vector()
+        self.decisiones = Vector()
+        self.puntos = Vector()
+        self.iniciada = False
+        self.iniciar(partida)
 
     # --- Consultas ----------------------------------------------------------
 
@@ -281,8 +331,3 @@ class LineaDeTiempo:
     def _exigir_consultable(self):
         if not self.iniciada:
             raise RuntimeError("La línea de tiempo no se inició")
-
-        if self.con_pergamino_sin_recortar:
-            raise ConsultaRechazada(
-                "La historia todavía no se puede consultar después de usar un "
-                "pergamino.")

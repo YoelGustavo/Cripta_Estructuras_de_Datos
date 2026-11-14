@@ -239,6 +239,14 @@ class Sala:
         así que guardar la referencia basta."""
         return (self.objetos, self.pergaminos, self._pergaminos_apartados)
 
+    def fijar_pergaminos(self, cantidad):
+        """Pergaminos en el suelo (ajuste por pergamino de la línea de
+        tiempo, capacidad 004, research D6)."""
+        if cantidad < 0:
+            raise ValueError("La cantidad de pergaminos no puede ser negativa")
+
+        self.pergaminos = cantidad
+
     def restaurar_estado_de_pergaminos(self, estado):
         self.objetos, self.pergaminos, self._pergaminos_apartados = estado
 

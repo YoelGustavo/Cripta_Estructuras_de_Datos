@@ -173,7 +173,7 @@ el oráculo.
   
   Sin `dict` ni `bisect`.
 
-  *Hecho.* `registrar` recibe también `reloj_antes`: el reloj de la decisión, que después del comando ya no se puede leer. Hasta T026, un pergamino (−1) deja la línea marcada, y toda consulta posterior se rechaza con «La historia todavía no se puede consultar después de usar un pergamino.». Así la línea nunca muestra estados revertidos.
+  *Hecho.* `registrar` recibe también `reloj_antes`: el reloj de la decisión, que después del comando ya no se puede leer. Hasta T026, un pergamino (−1) dejaba la línea marcada y toda consulta posterior se rechazaba; T026 quitó ese rechazo.
 - [X] T019 [HU1] Crear `crypta/Modelo/Reconstruccion.py` (D2, D7, D8; FR-401, FR-407, FR-421, FR-423). Función `consultar(linea, objetivo, partida_viva, reejecutar)` → `Resumen`:
   - si `es_actual` es verdadero, `armar_resumen(partida_viva, …)`;
   - si no, punto j = ⌊m/K⌋ y `Sello`: `terminada`, `resultado`, `puerta_de_salida_abierta`, `enemigos_derrotados`, pergaminos del inventario, nodo del objeto actual, largo de la bitácora, `agenda.siguiente_secuencia` y un `Vector` de (sala, pergaminos) de cada sala donde entra el jugador;
@@ -224,24 +224,26 @@ que nunca hizo esas acciones.
 
 ### Pruebas de la historia 2 (escribir primero; deben fallar)
 
-- [ ] T024 [P] [HU2] Escribir `TestPergamino` en `tests/test_linea_tiempo.py` (FR-410 a FR-412):
+- [X] T024 [P] [HU2] Escribir `TestPergamino` en `tests/test_linea_tiempo.py` (FR-410 a FR-412):
   - HU2-1: 30 acciones y 3 pergaminos; ninguna consulta muestra lo revertido; `#28` = estado actual; `#29` se rechaza (Apéndice B);
   - HU2-2: `historia <t>` con t > el reloj que quedó se rechaza;
   - HU2-3: con acciones nuevas después del pergamino, cada resumen es igual al de una partida que hizo directamente las acciones que quedaron, salvo los pergaminos gastados, los pergaminos de las salas y la posición del objeto actual del inventario (se comparan los textos con esas líneas normalizadas), e igual al oráculo sin normalizar;
   - HU2-4: el pergamino quita a lo sumo las entradas y puntos revertidos; con 100 y con 2 000 acciones previas, el contador de entradas examinadas es el mismo;
   - casos borde: pergamino que revierte la acción de un ancla (el punto desaparece y se vuelve a crear al llegar otra vez a ese total); pergamino justo después de crear un punto; consulta inmediatamente después del pergamino; `avanzar` después de la acción revertida.
-- [ ] T025 [P] [HU2] Escribir `tests/test_equivalencia_linea.py` (FR-421; SC-402): al menos 20 partidas por semilla con `partida_con_pergaminos` y `comandos_al_azar` (≥ 150 comandos, con pergaminos), con K = 1, 10, 22 y un K mayor que n (solo el punto 0, como la alternativa sin puntos). El 100 % de las consultas `#k`, y una de cada evento del oráculo por `t`, son iguales al oráculo.
+- [X] T025 [P] [HU2] Escribir `tests/test_equivalencia_linea.py` (FR-421; SC-402): al menos 20 partidas por semilla con `partida_con_pergaminos` y `comandos_al_azar` (≥ 150 comandos, con pergaminos), con K = 1, 10, 22 y un K mayor que n (solo el punto 0, como la alternativa sin puntos). El 100 % de las consultas `#k`, y una de cada evento del oráculo por `t`, son iguales al oráculo.
 
 ### Implementación de la historia 2
 
-- [ ] T026 [HU2] En `crypta/Modelo/LineaDeTiempo.py`, `revertir(partida)`, llamado por `registrar` cuando `acciones_jugador` bajó en 1 (D6; FR-410 a FR-412):
+- [X] T026 [HU2] En `crypta/Modelo/LineaDeTiempo.py`, `revertir(partida)`, llamado por `registrar` cuando `acciones_jugador` bajó en 1 (D6; FR-410 a FR-412):
   - quita del final las entradas hasta la última `ACCION` incluida, y su fila de `decisiones`;
   - quita los puntos cuya `ancla` supera el nuevo total;
   - agrega una entrada `AJUSTE` con `pergaminos_inventario`, `posicion_actual` (índice del objeto actual en `orden_real`, o `None`) y `pergaminos_sala` de la sala actual.
   
   Costo O(lo revertido). Contador de entradas examinadas para HU2-4.
-- [ ] T027 [HU2] En `crypta/Modelo/Reconstruccion.py`, aplicar las entradas `AJUSTE` al re-ejecutar: fija pergaminos del inventario, el objeto actual por posición y los pergaminos de la sala actual. El sello de T019 ya los restaura (D6, D8; FR-410, FR-421).
-- [ ] T028 [HU2] Punto de control (FR-410 a FR-412, FR-421): T024 y T025 pasan, `python -m unittest` en verde y commit «004 HU2: línea de tiempo con pergamino».
+
+  *Hecho.* El contador es `ultimas_examinadas`. Si el pergamino revierte una acción anterior a la línea (una línea creada a mitad de partida, por ejemplo al cargar), la línea se reinicia desde el estado actual, en vez de fallar. Se agregaron a P1, sin cambiar su comportamiento, `Inventario.poner_actual_por_posicion` y `Sala.fijar_pergaminos`.
+- [X] T027 [HU2] En `crypta/Modelo/Reconstruccion.py`, aplicar las entradas `AJUSTE` al re-ejecutar: fija pergaminos del inventario, el objeto actual por posición y los pergaminos de la sala actual. El sello de T019 ya los restaura (D6, D8; FR-410, FR-421).
+- [X] T028 [HU2] Punto de control (FR-410 a FR-412, FR-421): T024 y T025 pasan, `python -m unittest` en verde (899 pruebas, 1 omitida que ya existía) y commit «004 HU2: línea de tiempo con pergamino» (lo hace el grupo). La equivalencia de T025 (20 partidas × 4 K) tarda unos 40 s, casi todo en la variante sin puntos de control.
 
 ---
 

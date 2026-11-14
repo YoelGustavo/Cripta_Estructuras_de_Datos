@@ -6,6 +6,8 @@ los puntos de control (research D3, D9; FR-407, FR-422, FR-426).
 
 Historia 1 (T014, T016): `historia <t>` e `historia #k` contra el oráculo
 tomado de la partida viva (FR-401 a FR-408, FR-423, FR-425).
+
+Historia 2 (T024): la línea respeta el pergamino (FR-410 a FR-412).
 """
 
 import copy
@@ -709,6 +711,231 @@ class TestConsultaNoCambiaNada(unittest.TestCase):
 
         self.assertEqual(resultados[0], resultados[1])
         self.assertNotIn(b"historia", resultados[1][2])
+
+
+# ---------------------------------------------------------------------------
+# Historia 2 (T024)
+# ---------------------------------------------------------------------------
+
+NO_SON_ACCION = ("avanzar", "retroceder")
+
+
+def seguir_netos(partida, comandos, netos):
+    """Deja pasar `comandos` y, mirando la partida entre uno y el siguiente,
+    arma en `netos` la lista de comandos que quedaron (FR-410): una acción
+    que se hizo se agrega; `avanzar`/`retroceder` se agregan; un pergamino
+    que se usó quita la última acción y lo que vino después de ella; lo que
+    el juego rechazó no se agrega. No usa la línea de tiempo."""
+    anterior = None
+    acciones = partida.acciones_jugador
+
+    for comando in comandos:
+        if anterior is not None:
+            _anotar_neto(netos, anterior, acciones, partida.acciones_jugador)
+        anterior = comando
+        acciones = partida.acciones_jugador
+        yield comando
+
+    if anterior is not None:
+        _anotar_neto(netos, anterior, acciones, partida.acciones_jugador)
+
+
+def _anotar_neto(netos, comando, antes, despues):
+    if despues == antes + 1:
+        netos.append((comando, True))
+    elif despues == antes - 1:
+        while netos and not netos[-1][1]:
+            netos.pop()
+        netos.pop()
+    elif comando in NO_SON_ACCION:
+        netos.append((comando, False))
+
+
+def normalizar(texto):
+    """Quita lo que el pergamino no devuelve (HU2-3): pergaminos gastados
+    (también cuentan en los espacios ocupados), los de la sala y la posición
+    del objeto actual del inventario."""
+    lineas = []
+    for linea in texto.split("\n"):
+        if linea.startswith("Inventario ("):
+            linea = "Inventario (*)"
+        if linea.startswith("  Pergaminos:"):
+            continue
+        lineas.append(linea.replace(" <- actual", ""))
+    return "\n".join(lineas)
+
+
+def con_pergaminos_en_mano(cantidad, semilla=SEMILLA_LINEA, inventario_max=10):
+    cripta = partida_con_pergaminos(semilla, inventario_max)
+    cripta.partida.jugador.inventario.fijar_pergaminos(cantidad)
+    return cripta
+
+
+class TestPergamino(unittest.TestCase):
+    """T024: la línea de tiempo después de un pergamino (FR-410 a FR-412)."""
+
+    def comparar_con_oraculo(self, jugada):
+        for i in range(len(jugada.oraculo)):
+            entrada = jugada.oraculo.obtener(i)
+            with self.subTest(pedido=entrada.pedido):
+                self.assertEqual(jugada.consultar(entrada.pedido), entrada.texto)
+
+    def test_fr410_fr411_hu2_1_tres_pergaminos_seguidos(self):
+        """HU2-1 (Apéndice B): 30 acciones y tres pergaminos seguidos: lo
+        revertido no aparece, #28 es el estado actual y #29 se rechaza."""
+        from crypta.Modelo.Resumen import armar_resumen, pedido_accion
+
+        _, ConsultaRechazada, _ = _linea_y_consulta()
+        cripta = con_pergaminos_en_mano(3)
+        partida = cripta.partida
+        comandos = sin_pergamino(comandos_al_azar(partida, random.Random(31), 400))
+        jugada = Jugada(10, cripta=cripta,
+                        comandos=_seguidos(partida, comandos, 30, ["pergamino"] * 3))
+        try:
+            self.assertEqual(partida.acciones_jugador, 27)
+            self.assertEqual(jugada.linea.cantidad_acciones(), 27)
+            self.assertEqual(jugada.consultar("acción #28"),
+                             formatear(armar_resumen(partida, pedido_accion(28))))
+            with self.assertRaises(ConsultaRechazada):
+                jugada.ubicar("acción #29")
+            self.comparar_con_oraculo(jugada)
+        finally:
+            jugada.cerrar()
+
+    def test_fr403_fr410_hu2_2_instante_posterior_al_reloj_que_quedo(self):
+        _, ConsultaRechazada, _ = _linea_y_consulta()
+        cripta = con_pergaminos_en_mano(1)
+        jugada = Jugada(10, cripta=cripta,
+                        comandos=["mover E", "esperar", "esperar", "pergamino"])
+        try:
+            reloj = jugada.partida.reloj
+            self.assertEqual(jugada.partida.acciones_jugador, 2)
+            with self.assertRaises(ConsultaRechazada):
+                jugada.ubicar(f"instante {reloj + 1}")
+        finally:
+            jugada.cerrar()
+
+    def test_fr410_fr411_hu2_3_igual_a_la_partida_sin_lo_revertido(self):
+        """HU2-3: con pergaminos y acciones nuevas después, cada `#k` es igual
+        al de una partida que hizo directamente las acciones que quedaron,
+        salvo pergaminos gastados, pergaminos de las salas y objeto actual; y
+        sin normalizar, igual al oráculo. El inventario de las dos es grande
+        para que la capacidad no las separe: los pergaminos gastados dejan
+        espacio libre solo en la que los gastó."""
+        for semilla in (3, 8, 13):
+            with self.subTest(semilla=semilla):
+                cripta = con_pergaminos_en_mano(4, semilla, inventario_max=30)
+                netos = []
+                comandos = seguir_netos(cripta.partida, comandos_al_azar(
+                    cripta.partida, random.Random(semilla), 160), netos)
+                jugada = Jugada(7, cripta=cripta, comandos=comandos)
+                directa = Jugada(7, cripta=con_pergaminos_en_mano(4, semilla, 30),
+                                 comandos=[c for c, _ in netos])
+                try:
+                    tipos = [jugada.linea.entradas.obtener(i).tipo
+                             for i in range(len(jugada.linea.entradas))]
+                    self.assertIn("ajuste", tipos)          # sí hubo pergaminos
+                    n = jugada.partida.acciones_jugador
+                    self.assertEqual(directa.partida.acciones_jugador, n)
+
+                    for k in range(1, n + 2):
+                        texto = jugada.consultar(f"acción #{k}")
+                        self.assertEqual(normalizar(texto),
+                                         normalizar(directa.consultar(f"acción #{k}")),
+                                         f"#{k}")
+                    self.comparar_con_oraculo(jugada)
+                finally:
+                    jugada.cerrar()
+                    directa.cerrar()
+
+    def test_fr412_hu2_4_el_recorte_no_depende_de_lo_anterior(self):
+        """HU2-4: el pergamino examina las mismas entradas con 100 y con 2 000
+        acciones previas."""
+        examinadas = []
+        for previas in (100, 2000):
+            cripta = con_pergaminos_en_mano(1)
+            jugador = cripta.partida.jugador
+            jugador.vida_max = jugador.vida = 10 ** 9      # que no muera antes
+            comandos = sin_pergamino(
+                comandos_al_azar(cripta.partida, random.Random(5), 10 * previas))
+            jugada = Jugada(22, cripta=cripta,
+                            comandos=_seguidos(cripta.partida, comandos, previas,
+                                               ["avanzar", "esperar", "avanzar",
+                                                "pergamino"]))
+            try:
+                self.assertEqual(jugada.linea.cantidad_acciones(), previas)
+                examinadas.append(jugada.linea.ultimas_examinadas)
+            finally:
+                jugada.cerrar()
+
+        self.assertEqual(examinadas[0], examinadas[1])
+        self.assertLessEqual(examinadas[0], 3)
+
+    def test_fr410_pergamino_que_revierte_el_ancla_de_un_punto(self):
+        """El punto de la acción revertida desaparece y se vuelve a crear al
+        llegar otra vez a ese total; justo después de crearse, y consultando
+        inmediatamente después del pergamino."""
+        cripta = con_pergaminos_en_mano(2)
+        partida = cripta.partida
+        jugada = Jugada(5, cripta=cripta, comandos=["esperar"] * 10)
+        try:
+            linea = jugada.linea
+            self.assertEqual([linea.puntos.obtener(j).ancla for j in range(len(linea.puntos))],
+                             [0, 5, 10])
+            _jugar_y_registrar(jugada, ["pergamino"])
+            self.assertEqual([linea.puntos.obtener(j).ancla for j in range(len(linea.puntos))],
+                             [0, 5])
+            from crypta.Modelo.Resumen import armar_resumen, pedido_accion
+            self.assertEqual(jugada.consultar("acción #10"),
+                             formatear(armar_resumen(partida, pedido_accion(10))))
+
+            _jugar_y_registrar(jugada, ["mover E"])
+            self.assertEqual(linea.puntos.obtener(2).ancla, 10)
+            self.assertIsNot(linea.puntos.obtener(2).partida, partida)
+            self.assertEqual(jugada.consultar("acción #11"),
+                             formatear(armar_resumen(partida, pedido_accion(11))))
+        finally:
+            jugada.cerrar()
+
+    def test_fr410_avanzar_despues_de_la_accion_revertida(self):
+        """`avanzar` después de la acción revertida: su efecto (el objeto a la
+        vista) queda en el ajuste, y las consultas coinciden con el oráculo."""
+        cripta = con_pergaminos_en_mano(2)
+        jugada = Jugada(4, cripta=cripta, comandos=[
+            "recoger 0", "recoger 0", "recoger 0", "esperar", "avanzar", "avanzar",
+            "pergamino", "esperar", "retroceder", "esperar", "pergamino", "esperar"])
+        try:
+            self.assertIn("ajuste", [jugada.linea.entradas.obtener(i).tipo
+                                     for i in range(len(jugada.linea.entradas))])
+            self.comparar_con_oraculo(jugada)
+        finally:
+            jugada.cerrar()
+
+    def test_fr421_consultas_con_pergaminos_contra_el_oraculo(self):
+        """Partidas al azar con pergaminos y varios K: todo el oráculo, y lo
+        que la línea deja en los puntos después de consultar."""
+        for k in (2, 6):
+            cripta = con_pergaminos_en_mano(5, 40 + k)
+            jugada = Jugada(k, cripta=cripta, comandos=comandos_al_azar(
+                cripta.partida, random.Random(40 + k), 150))
+            try:
+                self.comparar_con_oraculo(jugada)
+            finally:
+                jugada.cerrar()
+
+
+def _seguidos(partida, primeros, acciones, despues):
+    """`primeros` hasta tener `acciones` acciones, y después `despues`."""
+    for comando in hasta_acciones(partida, primeros, acciones):
+        yield comando
+    for comando in despues:
+        yield comando
+
+
+def _jugar_y_registrar(jugada, comandos):
+    from crypta.Controlador.Comandos import ejecutar_y_registrar
+    for comando in comandos:
+        ejecutar_y_registrar(jugada.partida, jugada.linea, comando, jugada.garantizar)
 
 
 if __name__ == "__main__":
