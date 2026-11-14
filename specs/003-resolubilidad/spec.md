@@ -249,6 +249,10 @@ y se comprueba la salida, el código de salida y que no se crea nada de la parti
 5. **Cuando** se ejecuta `--verificar <cripta>` en línea, **entonces** las solicitudes que hace
    (esqueleto si no está en la copia local, ubicación de las llaves) cuentan en el presupuesto y lo
    descargado se guarda en la copia local como en un inicio normal. *(FR-322, FR-323, FR-328)*
+6. **Cuando** se ejecuta `--verificar <cripta>` junto con `--replay` o con `--bench`, **entonces**
+   el programa termina con código 1 sin verificar; **y cuando** se agrega `--forzar` a
+   `--verificar` o a `--replay`, **entonces** el resultado es el mismo que sin `--forzar`.
+   *(FR-336)*
 
 ---
 
@@ -429,6 +433,9 @@ para no chocar con las otras capacidades.
 - **FR-329**: `--verificar` DEBE terminar con código 0 si la cripta es resoluble, 2 si no lo es y 1
   si hubo un error que impidió verificar (red, datos inválidos o falta de la ubicación de las llaves
   sin conexión), imprimiendo el motivo.
+- **FR-336**: `--verificar` junto con `--replay` o con `--bench` es un error de uso: el programa
+  termina con código 1 sin verificar. `--forzar` no tiene efecto con `--verificar` ni con
+  `--replay`.
 
 ### Requisitos funcionales — Medición
 
@@ -446,7 +453,9 @@ Medidos en el equipo local, sin red ni renderizado (P2 §6.1; constitución, pri
 
 - **FR-334**: La verificación completa (orden o reporte) DEBE tardar menos de 200 ms con la cripta
   publicada más grande; mientras no se publique, con una cripta sintética de 2 000 salas (el mismo
-  tamaño de referencia de la capacidad 001) y 500 llaves encadenadas.
+  tamaño de referencia de la capacidad 001) y 500 llaves encadenadas. La medición empieza con el
+  esqueleto ya cargado y la ubicación de las llaves en memoria (cargar el esqueleto es de P1 y de la
+  capacidad 001); `--bench` reporta la carga aparte, sin límite.
 - **FR-335**: El costo total de la verificación DEBE crecer aproximadamente de forma lineal con salas
   + salidas + llaves, sin repetir el recorrido por cada llave obtenida. Se verifica con `--bench`
   midiendo tamaños n, 2n y 4n: al duplicar el tamaño, el tiempo no pasa de 3 veces el anterior
