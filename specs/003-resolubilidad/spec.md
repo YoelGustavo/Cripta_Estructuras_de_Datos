@@ -358,7 +358,9 @@ para no chocar con las otras capacidades.
   dirección en el orden N, S, E, O.
 - **FR-311**: Para cada llave distinta que pide alguna puerta de la frontera, ordenadas por id, el
   reporte DEBE indicar todas sus ubicaciones (sala, y enemigo si la suelta uno), ordenadas por sala y
-  luego por id de enemigo, o que la llave no está en la cripta si no tiene ninguna ubicación.
+  luego por id de enemigo, o que la llave no está en la cripta si no tiene ninguna ubicación. Dentro
+  de la misma sala, primero la ubicación sin enemigo y después las que tienen enemigo, por id de
+  enemigo.
 - **FR-312**: El reporte DEBE indicar, para cada llave no obtenible, de qué llave depende según
   FR-314, o que no depende de ninguna y por qué (no está en la cripta, o su sala no se alcanza ni
   abriendo todas las puertas).
