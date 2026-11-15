@@ -40,6 +40,27 @@ La ubicación de las llaves se pide una vez al servicio (`/criptas/<id>/llaves`,
 python -m crypta.main --offline --cripta cripta-01 --forzar
 ```
 
+## Segunda parte: línea de tiempo
+
+La especificación, el plan y las tareas están en `specs/004-linea-de-tiempo/`; las decisiones, en `DECISIONES.md` (sección 5.5).
+
+- **`historia <t>`** muestra cómo estaba la partida en el instante t, y **`historia #k`**, justo antes de la acción #k del jugador (de `#1` a `#<n+1>`, que es el estado actual). Muestra reloj, sala, vida, estadísticas, efectos, inventario, pergaminos y enemigos de la sala. No cambia la partida ni se anota en `partida.log`.
+- Un instante mayor que el reloj o una acción que no existe se rechazan con un mensaje y no cambian nada; `historia`, `historia abc` o `historia -5` son comandos inválidos. Con la partida terminada, hay que usar `--replay … --hasta`.
+- Después de un `pergamino`, `#k` se numera con las acciones que quedaron.
+
+```text
+historia 0
+historia #5
+```
+
+- **`--checkpoint-cada K`** fija cada cuántas acciones del jugador se guarda una copia de la partida (un punto de control); K es un entero ≥ 1. **Por defecto, K = 22**: es el menor valor con el que las copias caen en menos del 5 % de las acciones, así el p95 del ciclo sigue bajo 20 ms, y la consulta queda en 27 ms de p95, bajo el límite de 50 ms (`DECISIONES.md` §5.5). Si se carga una partida guardada con otro K, se avisa y se usa el guardado.
+- **`--replay <log> --hasta t`** reproduce el log sin abrir la vista e imprime el estado en el instante t. Si el log termina antes de t, muestra el último estado con un aviso (código 0). `--hasta` sin `--replay` es un error de argumentos.
+
+```powershell
+python -m crypta.main --checkpoint-cada 10
+python -m crypta.main --offline --replay partida.log --hasta 500
+```
+
 ## Requisitos
 
 - Python 3.11 o superior.
@@ -148,7 +169,7 @@ cargar
 
 Ambos archivos deben mantenerse juntos y ser compatibles con la cripta y el catálogo activos.
 
-El archivo usa la versión 2 del formato, que guarda el costo de cada salida. Las partidas guardadas con la primera parte (versión 1) no se cargan: el programa avisa que el formato no coincide.
+El archivo usa la versión 3 del formato, que guarda el costo de cada salida y la línea de tiempo (los comandos y los puntos de control), así `historia` sigue funcionando después de cargar. Las partidas guardadas con versiones anteriores (1 de la primera parte, 2 del terreno y cazador) no se cargan: el programa avisa que el formato es incompatible y la partida en curso no cambia.
 
 El guardado se reemplaza al ejecutar `guardar` nuevamente.
 
@@ -251,6 +272,23 @@ Secciones de la verificación de resolubilidad (criptas sintéticas con llaves e
 python -m crypta.bench.bench resol_ingenua resol_limite resol_crecimiento resol_igualdad resol_numeracion --guardar docs/resultados_bench_003.txt
 ```
 
+Secciones de la línea de tiempo (criptas sintéticas de 300 salas con 20 enemigos y de 2000 salas con 50 cazadores):
+
+- `linea_l1`: L1, consulta `historia` con K = 10, 16, 22, 32 y 64 y sin puntos de control (p95 menor que 50 ms con el K por defecto).
+- `linea_l2`: L2, reconstruir hacia adelante frente a hacia atrás.
+- `linea_l3`: L3, compara los resúmenes con los de la partida viva. Si alguno difiere, imprime `ERROR` y el programa termina con código 1.
+- `linea_l4`: L4, ciclo con 50 cazadores y la línea activa (p95 menor que 20 ms).
+- `linea_l5`: L5, memoria con 2500 y 5000 acciones.
+- `linea_l6`: L6, puntos de control examinados por consulta.
+- `linea_l7`: L7, cómo se copia un punto de control.
+- `linea_l8`: L8, guardar y cargar con la línea de tiempo.
+
+Estas ocho secciones tardan cerca de media hora (L1 y L7 son las más largas); con `--rapido`, unos minutos. `--guardar` escribe cada sección al terminarla, así un fallo no pierde las anteriores.
+
+```powershell
+python -m crypta.bench.bench linea_l1 linea_l2 linea_l3 linea_l4 linea_l5 linea_l6 linea_l7 linea_l8 --guardar docs/resultados_bench_004.txt
+```
+
 La sección `guardado` compara los formatos binario y JSON con criptas sintéticas de 100, 1000 y 5000 salas.
 
 Con `--rapido` se utiliza únicamente una cripta de 100 salas.
@@ -289,6 +327,14 @@ Solo las de la verificación de resolubilidad:
 ```powershell
 python -m unittest -v tests.test_resolubilidad tests.test_equivalencia_resolubilidad tests.test_numeracion_llaves tests.test_verificacion_inicio
 ```
+
+Solo las de la línea de tiempo (pruebas de aceptación de HU1 a HU4; las de HU5 están en `tests.test_bench`):
+
+```powershell
+python -m unittest -v tests.test_linea_tiempo tests.test_equivalencia_linea tests.test_replay_hasta tests.test_persistencia
+```
+
+`tests.test_equivalencia_linea` compara cada consulta con el resumen tomado de la partida viva mientras se jugaba, en al menos 20 partidas por semilla con pergaminos y varios K.
 
 ## Archivos generados y persistencia
 

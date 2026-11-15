@@ -380,17 +380,17 @@ por defecto (contracts/bench.md).
 
 ## Fase 8: Cierre (documentación y revisión)
 
-- [ ] T052 [P] Escribir `DECISIONES.md` §5.5 «Línea de tiempo» desde research.md (principio X; FR-420, FR-432 a FR-434): problema, alternativas (D1–D3), decisión, complejidad, evidencia de L1–L8 de `docs/resultados_bench_004.txt`, enlaces a spec y plan, y si el K final coincide con el plan (22) y, si no, qué medición lo cambió. En **Límites**:
+- [X] T052 [P] Escribir `DECISIONES.md` §5.5 «Línea de tiempo» desde research.md (principio X; FR-420, FR-432 a FR-434): problema, alternativas (D1–D3), decisión, complejidad, evidencia de L1–L8 de `docs/resultados_bench_004.txt`, enlaces a spec y plan, y si el K final coincide con el plan (22) y, si no, qué medición lo cambió. En **Límites**:
   - la partida de escala (p95 de L1 (b), pausa de la copia de L4, memoria);
   - el margen de FR-433;
   - que las salas cargadas durante una consulta quedan cargadas en el punto (D7);
   - que, por eso, el archivo guardado de una partida con consultas no es igual byte por byte al de la misma partida sin consultas; el estado, el log y el resultado sí (D11; FR-408).
   
   Volver a medir el historial de retroceso de P1 con la carga nueva (principio XI) con los números de deshacer de L1 y L2.
-- [ ] T053 [P] Actualizar `README.md` (principio X; FR-403, FR-404, FR-413 a FR-416, FR-419, FR-420): `historia <t>` e `historia #k`, `--checkpoint-cada K` con el K por defecto y por qué, `--replay … --hasta`, el formato 3 del archivo de partida (los anteriores se rechazan) y cómo correr las pruebas de aceptación de la 004.
+- [X] T053 [P] Actualizar `README.md` (principio X; FR-403, FR-404, FR-413 a FR-416, FR-419, FR-420): `historia <t>` e `historia #k`, `--checkpoint-cada K` con el K por defecto y por qué, `--replay … --hasta`, el formato 3 del archivo de partida (los anteriores se rechazan) y cómo correr las pruebas de aceptación de la 004.
 - [ ] T054 [P] **La hace el grupo.** Registrar en `PROMPTS_LLM.md` las invocaciones de `/speckit-plan` (con sus ajustes), `/speckit-tasks` y `/speckit-analyze` de la 004 y sus arreglos, con fecha, herramienta, texto y uso (principio X; trazabilidad de FR-401 a FR-434).
-- [ ] T055 (FR-422, FR-424, FR-426) Revisar imports prohibidos en los archivos nuevos y cambiados (`grep` de `dict(`, `set(`, `{}` como estructura, `bisect`, `heapq`, `collections`, `sorted(`, `.sort(`) y que no haya ids ni números de cripta en el código (principios I y IV). Recorrer `quickstart.md` de punta a punta. Confirmar que `spec.md` sigue coincidiendo con el programa (principio VIII).
-- [ ] T056 Punto de control final (FR-426; SC-408): `python -m unittest` completo en verde y commit «004 cierre: DECISIONES §5.5 y README».
+- [X] T055 (FR-422, FR-424, FR-426) Revisar imports prohibidos en los archivos nuevos y cambiados (`grep` de `dict(`, `set(`, `{}` como estructura, `bisect`, `heapq`, `collections`, `sorted(`, `.sort(`) y que no haya ids ni números de cripta en el código (principios I y IV). Recorrer `quickstart.md` de punta a punta. Confirmar que `spec.md` sigue coincidiendo con el programa (principio VIII).
+- [X] T056 Punto de control final (FR-426; SC-408): `python -m unittest` completo en verde (932 pruebas, 1 omitida que ya existía) y commit «004 cierre: DECISIONES §5.5 y README» (el commit lo hace el grupo).
 
 ---
 

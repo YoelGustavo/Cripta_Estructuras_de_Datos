@@ -609,3 +609,10 @@ Plan, contratos y tareas:
 **Prompt:** /speckit-implement Solo la fase 7 (T040 a T051) de specs/004-linea-de-tiempo/tasks.md. T050 no la hagas: la corro yo. Detente en su punto de control, marca las tareas hechas y no hagas commit.
 
 **USO:** implementacion de la fase 7 de la parte 004
+
+**Prompt:** /speckit-implement Haz la fase 8 de specs/004-linea-de-tiempo/tasks.md (T052, T053, T055, T056). No hagas T054 (PROMPTS lo llevo yo) ni T057 (está bloqueada por la 002).
+- T052: §5.5 en DECISIONES.md con el mismo formato que las otras secciones (sin introducción, los 6 puntos en negrita, viñetas cortas y una o dos tablas pequeñas) y números de docs/resultados_bench_004.txt. El Problema dice cada cuánto pasa (una consulta cuando el jugador la pide; una copia cada 22 acciones). En Evidencia incluye: L1 (por qué K = 22 y no 16 ni 32), L2 (adelante frente a atrás) y L4. Di con honestidad que en L7 el recorrido de EstadoPartida (40 ms) salió un poco más rápido que deepcopy con ganchos (46 ms), al revés de lo que suponía el plan, y por qué igual se mantuvo deepcopy. En Límites: escala (p95 de 90 ms), la pausa de hasta ~315 ms al crear un punto (el p95 no la ve, la media sí), la memoria (~210 MB con 5 000 acciones), el guardado (14 MB, 2,4 s y 6,5 s), que el archivo guardado con consultas no es idéntico byte por byte (D7), y que el mapa conocido del resumen depende de la 002.
+- T053: en el README di también que las secciones de la línea de tiempo del --bench tardan cerca de media hora.
+Marca las tareas hechas y no hagas commit.
+
+**USO:** Cierre de deciones del punto 004

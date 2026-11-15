@@ -29,8 +29,11 @@ capacidad:
 ## 2. Consultar durante la partida
 
 ```text
-python -m crypta.main --offline --semilla 7
+python -m crypta.main --offline --semilla 7 --forzar
 ```
+
+(`--forzar` porque la copia local de `cripta-01` no trae la ubicación de las llaves y sin conexión
+no se puede verificar; ver README.)
 
 Juega unas cuantas acciones y escribe:
 

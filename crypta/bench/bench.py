@@ -253,10 +253,13 @@ SECCIONES = (
 )
 
 
-def ejecutar(nombres=None, rapido=False, salida=print):
+def ejecutar(nombres=None, rapido=False, salida=print, al_terminar_seccion=None):
     """Corre las secciones pedidas (todas si no se pide ninguna). Una
     sección devuelve su texto, o (texto, errores) si comprueba algo (B6).
-    Devuelve 0, o 1 si alguna sección reportó errores (FR-033)."""
+    Devuelve 0, o 1 si alguna sección reportó errores (FR-033).
+
+    `al_terminar_seccion()`, si se da, se llama cada vez que una sección
+    termina de salir y al final: ahí `--guardar` escribe lo que lleva."""
     
     validos = [nombre for nombre, _, _ in SECCIONES]
 
@@ -287,13 +290,18 @@ def ejecutar(nombres=None, rapido=False, salida=print):
         salida(resultado)
         salida(f"(sección medida en {formato_tiempo(time.perf_counter() - inicio)})")
 
+        if al_terminar_seccion is not None:
+            al_terminar_seccion()
+
     salida(f"\n(bench completo en {formato_tiempo(time.perf_counter() - inicio_total)})")
 
     if errores:
         salida(f"\nERROR: el --bench encontró {errores} diferencias (ver arriba).")
-        return 1
 
-    return 0
+    if al_terminar_seccion is not None:
+        al_terminar_seccion()
+
+    return 1 if errores else 0
 
 
 def principal(argumentos):
@@ -314,24 +322,38 @@ def principal(argumentos):
             nombres.append(argumentos[i])
         i += 1
 
-    lineas = []
+    pendientes = []
 
     def mostrar_y_juntar(texto):
         print(texto, flush=True)
-        lineas.append(str(texto))
+        pendientes.append(str(texto))
 
-    try:
-        codigo = ejecutar(nombres or None, rapido, mostrar_y_juntar)
-    except ValueError as error:
-        print(error)
-        return 1
+    def escribir_lo_que_lleva():
+        """Agrega al archivo lo que salió desde la última vez: si una sección
+        falla, las que ya terminaron quedaron escritas."""
+        if ruta is None or not pendientes:
+            return
+        with open(ruta, "a", encoding="utf-8") as archivo:
+            archivo.write("\n".join(pendientes) + "\n")
+        pendientes.clear()
 
     if ruta is not None:
         carpeta = os.path.dirname(ruta)
         if carpeta:
             os.makedirs(carpeta, exist_ok=True)
-        with open(ruta, "w", encoding="utf-8") as archivo:
-            archivo.write("\n".join(lineas) + "\n")
+        with open(ruta, "w", encoding="utf-8"):
+            pass
+
+    try:
+        codigo = ejecutar(nombres or None, rapido, mostrar_y_juntar, escribir_lo_que_lleva)
+    except ValueError as error:
+        print(error)
+        return 1
+    finally:
+        # También lo que alcanzó a salir de la sección que falló.
+        escribir_lo_que_lleva()
+
+    if ruta is not None:
         print(f"\nResultados guardados en {ruta}")
 
     return codigo

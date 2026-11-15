@@ -112,6 +112,30 @@ class TestEjecutarBench(unittest.TestCase):
         self.assertIn("BITÁCORA (§4.8)", texto)
         self.assertIn("bench completo en", texto)
 
+    def test_guardar_conserva_las_secciones_anteriores_a_un_fallo(self):
+        """--guardar escribe cada sección al terminarla: si una falla, las
+        anteriores ya están en el archivo."""
+        def falla(rapido):
+            raise IndexError("sección rota")
+
+        secciones = (("ciclo", "Ciclo entre dos decisiones", lambda rapido: "TABLA DEL CICLO"),
+                     ("rota", "Sección rota", falla))
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "resultados.txt")
+
+            with patch.object(bench, "SECCIONES", secciones), \
+                    redirect_stdout(io.StringIO()), \
+                    self.assertRaises(IndexError):
+                bench.principal(["--rapido", "--guardar", ruta])
+
+            with open(ruta, encoding="utf-8") as archivo:
+                texto = archivo.read()
+
+        self.assertIn("TABLA DEL CICLO", texto)
+        self.assertIn("sección medida en", texto)
+        self.assertIn("=== Sección rota ===", texto)
+
 
 # ======================================================================
 # B1: la agenda contra las alternativas descartadas (§4.1)
@@ -1024,6 +1048,66 @@ class TestGeneradorLinea(unittest.TestCase):
         self.assertFalse(jugada.partida.terminada)
         self.assertEqual(jugada.enemigos_activos, bench_linea.ENEMIGOS_REFERENCIA)
         self.assertEqual(jugada.salas, bench_linea.SALAS_REFERENCIA)
+
+
+class TestHaciaAtrasRepetida(unittest.TestCase):
+    """L2 falló en la corrida completa: la variante hacia atrás dejaba B_j
+    distinto después de una consulta (el `Sello` devolvía la referencia al
+    `Vector` de objetos de la sala que la `_Foto` ya había reemplazado) y el
+    deshacer de un `soltar` en la consulta siguiente daba IndexError."""
+
+    def test_consultas_repetidas_sobre_el_mismo_tramo_igual_al_oraculo(self):
+        from crypta.bench import bench_linea
+        from crypta.Modelo.Jugador import Jugador
+        from crypta.Vista.FormatoResumen import formatear_resumen
+
+        def jugador_de_inventario_chico():
+            # Con 2 lugares el inventario se llena y el generador suelta.
+            return Jugador("Bench", vida_max=10 ** 9, ataque=8, defensa=3,
+                           velocidad=100, inventario_max=2)
+
+        with tempfile.TemporaryDirectory() as carpeta, \
+                patch.object(bench_linea, "CARPETA_COPIAS", carpeta), \
+                patch.object(bench_linea, "_jugador", jugador_de_inventario_chico):
+            jugada = bench_linea.partida_linea("a", bench_linea.SEMILLA, 120, 22,
+                                               con_oraculo=True)
+
+        linea = jugada.linea
+        comandos = [jugada.comandos.obtener(i).split()[0]
+                    for i in range(len(jugada.comandos))]
+        for nombre in ("soltar", "recoger", "pergamino"):
+            self.assertIn(nombre, comandos)
+
+        # Un tramo con un `soltar`, entre el punto j y el siguiente.
+        j = None
+        for indice in range(len(linea.puntos)):
+            inicio = linea.puntos.obtener(indice).posicion
+            fin = (linea.puntos.obtener(indice + 1).posicion
+                   if indice + 1 < len(linea.puntos) else len(linea.entradas))
+            if any(linea.entradas.obtener(i).comando.startswith("soltar")
+                   for i in range(inicio, fin)):
+                j = indice
+                break
+        self.assertIsNotNone(j)
+
+        desde = linea.accion_base + j * linea.k
+        hasta = desde + linea.k
+        elegidas = []
+        for i in range(len(jugada.oraculo)):
+            entrada = jugada.oraculo.obtener(i)
+            objetivo = jugada.ubicar(bench_linea._pedido_de(entrada))
+            if not objetivo.es_actual and desde <= objetivo.acciones_completas < hasta:
+                elegidas.append((entrada, objetivo))
+        self.assertGreater(len(elegidas), linea.k)
+
+        finales = bench_linea.puntos_finales(jugada)
+
+        for vuelta in range(3):
+            for entrada, objetivo in elegidas:
+                resumen = bench_linea.consultar_hacia_atras(finales, linea, objetivo,
+                                                            jugada.partida)
+                self.assertEqual(formatear_resumen(resumen), entrada.texto,
+                                 f"vuelta {vuelta}, {entrada.pedido}")
 
 
 class TestBenchLinea(unittest.TestCase):

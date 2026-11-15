@@ -65,7 +65,7 @@ ACCIONES_L4 = 500
 CALENTAMIENTO_L4 = 20
 INTERVALO_PERGAMINO = 50
 CONSULTAS = 200
-CONSULTAS_SIN_PUNTOS = 20
+CONSULTAS_SIN_PUNTOS = 10
 COMPARADAS_L3 = 300
 VALORES_K = (10, 16, 22, 32, 64)
 VALORES_K_RAPIDO = (5, K_POR_DEFECTO)
@@ -530,6 +530,15 @@ def memoria_de_la_linea(linea):
                                              linea.puntos)))
 
 
+def memoria_estimada_de_la_linea(linea, copia_una):
+    """Memoria de la línea para L1 sin copiar todos sus puntos con
+    `tracemalloc` encendido (con K = 10 eran cientos de copias): puntos ×
+    `copia_una` (lo que ocupa una copia de la partida, medido una vez) más
+    las entradas y las decisiones, medidas con `tracemalloc`."""
+    entradas = memoria_de(lambda: copy.deepcopy((linea.entradas, linea.decisiones)))
+    return len(linea.puntos) * copia_una + entradas
+
+
 def _mb(bytes_):
     return f"{bytes_ / 1e6:.1f} MB"
 
@@ -589,6 +598,9 @@ def ejecutar_l1(rapido=False):
     sin_limite = []
 
     casos = [("a", k) for k in p["ks"]] + [("a", None), ("b", K_POR_DEFECTO)]
+    # Lo que ocupa una copia de la partida: se mide una vez por cripta (los
+    # casos de una misma cripta van seguidos).
+    copia_de, copia_una = None, 0
 
     for cripta, k in casos:
         acciones = p["acciones"] if cripta == "a" else p["escala"]
@@ -596,7 +608,9 @@ def ejecutar_l1(rapido=False):
         jugada = partida_linea(cripta, SEMILLA, acciones, k_real)
         cantidad = p["consultas"] if k is not None else p["sin_puntos"]
         tiempos = _tiempos_de_consulta(jugada, cantidad)
-        memoria = memoria_de_la_linea(jugada.linea)
+        if copia_de != cripta:
+            copia_de, copia_una = cripta, memoria_de(lambda: copy.deepcopy(jugada.partida))
+        memoria = memoria_estimada_de_la_linea(jugada.linea, copia_una)
         p95 = _percentil(tiempos, 95)
 
         if cripta == "a" and k == K_POR_DEFECTO:
@@ -618,8 +632,10 @@ def ejecutar_l1(rapido=False):
 
     nota = ("«¿cumple?» solo aplica a la cripta del tamaño de la de referencia con el K "
             f"por defecto ({K_POR_DEFECTO}). La de escala se reporta sin límite; si pasa "
-            "de 50 ms va a Límites. Tiempos sin tracemalloc; memoria aparte, con "
-            "tracemalloc, de una copia de la línea.")
+            "de 50 ms va a Límites. Tiempos sin tracemalloc. Memoria, aparte: puntos × lo "
+            "que ocupa una copia de la partida (medida una sola vez por cripta con "
+            "tracemalloc) más las entradas (medidas con tracemalloc); no se copian "
+            f"todos los puntos. Sin puntos de control: {p['sin_puntos']} consultas.")
     if sin_limite:
         nota += " Para Límites: " + "; ".join(sin_limite) + "."
 
@@ -748,9 +764,18 @@ def consultar_hacia_atras(finales, linea, objetivo, partida_viva):
     final = finales.obtener(j)
     b = final.partida
     siguiente = linea.posicion_de_accion(m + 1)
+
+    # El final del tramo, para dejar B_j exactamente como estaba. Las salas y
+    # el objeto a la vista no van en el `Sello`: el sello guarda la
+    # *referencia* al `Vector` de objetos de cada sala y el nodo actual (le
+    # basta a la consulta hacia adelante, que solo deshace), pero aquí
+    # `_Foto.devolver` reemplaza esos vectores por copias y re-ejecutar
+    # `recoger` crea nodos nuevos. Devolver la referencia vieja dejaba la sala
+    # con lo que tenía en el objetivo (sin lo soltado después) y el próximo
+    # deshacer de `soltar` fallaba. La foto copia los objetos y guarda la
+    # posición del objeto a la vista.
     sello = Sello(b)
-    for i in range(len(final.salas)):
-        sello.anotar_sala(final.salas.obtener(i))
+    al_final = _Foto(b, final.salas)
 
     for _ in range(final.acciones_fin - m):
         b.estado.historial.deshacer_ultima()
@@ -781,6 +806,7 @@ def consultar_hacia_atras(finales, linea, objetivo, partida_viva):
     # (más altos, en el mismo orden relativo): no se rebobina.
     sello.secuencia = b.agenda.siguiente_secuencia
     sello.restaurar()
+    al_final.devolver(b, Vector())
     return resumen
 
 

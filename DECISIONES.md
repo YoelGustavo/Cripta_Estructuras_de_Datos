@@ -563,3 +563,83 @@ Límite de 200 ms (R2), desde el esqueleto cargado hasta el texto
 - R1 y R3 reportan el mejor de 3 mediciones; la ingenua de 2000 salas, una sola.
 - Se confía en la ubicación de las llaves del servicio: no se comprueba que el enemigo que suelta una llave exista ni que inicie en esa sala, porque eso exigiría pedir contenido (FR-321).
 Se hace una vez por partida, antes de crear partida.log, y con --verificar.
+
+5.5 Línea de tiempo
+
+**Problema:**
+- Con historia <t> o historia #k el jugador ve cómo estaba la partida en un instante o justo antes de una acción. Pasa solo cuando el jugador la pide: una consulta por pedido, que no puede cambiar la partida (FR-407).
+- El resumen tiene que ser igual al que se veía en ese momento (FR-421), también después de usar pergaminos, guardar y cargar, y en --replay … --hasta.
+- Para responder a tiempo hay que guardar copias de la partida mientras se juega: con K = 22, una copia cada 22 acciones del jugador.
+- Límites: p95 de la consulta < 50 ms en la cripta del tamaño de la de referencia (FR-432); con la línea activa, el ciclo entre dos decisiones sigue con p95 < 20 ms (FR-433); la memoria crece lineal y queda por debajo de un tercio de copiar el estado en cada acción (FR-434).
+
+**Alternativas:**
+- Una copia por acción: la consulta sería inmediata, pero 5000 acciones ocupan unos 4.7 GB (L5). La prohíbe el principio VII; es la referencia de FR-434.
+- Sin puntos de control (solo el estado inicial, re-simular todo): 4.82 s de media por consulta con 5000 acciones (L1). Se descartó.
+- Hacia atrás: una copia al final de cada tramo con sus cambios registrados; la consulta deshace hasta el objetivo y vuelve al final re-ejecutando, porque Cambio no sabe rehacer. La medimos (L2).
+- Copiar el punto de control en cada consulta y re-simular sobre la copia: la copia sola ya cuesta 46 ms (L7). Se descartó.
+- Rehacer con los cambios registrados: exige que cada Cambio de P1 sepa rehacer y traducir sus referencias a la copia. Se analizó y no se implementó.
+- Cómo copiar un punto: deepcopy sin ganchos, deepcopy con ganchos y el recorrido de EstadoPartida (escribir y armar). Las medimos (L7).
+- dict, set, bisect y collections: prohibidos (§6.2).
+
+**Decisión:**
+- La línea (Modelo/LineaDeTiempo.py) guarda en Vector la secuencia neta de comandos (sin los que revirtió un pergamino), con el reloj de cada decisión y su número de acción, y un punto de control (una copia completa de la partida) cada K acciones (research D1).
+- Consulta hacia adelante (Modelo/Reconstruccion.py): sobre el punto anterior al objetivo se re-ejecutan a lo sumo K acciones con ejecutar_comando, se arma el resumen y se deshacen con Historial.deshacer_ultima, el mecanismo del pergamino. Lo que el historial no restaura lo guarda y lo devuelve un sello (D2, D8). La partida viva solo se lee.
+- historia #k se ubica en O(1); historia <t>, con la búsqueda binaria propia (estructuras/BusquedaBinaria.py). El punto se calcula (j = ⌊(m − a₀) / K⌋): se examina uno solo (D5).
+- El pergamino quita del final lo revertido y agrega una entrada de ajuste con lo que queda fuera del historial: pergaminos y objeto a la vista (D6).
+- La copia es deepcopy con ganchos __deepcopy__: comparte lo de solo lectura (contenido de las salas, fichas), deja fuera lo que no es estado (búsqueda del cazador, bitácora) y le da un historial sin límite (D3).
+- Guardado en formato 3: la línea y cada punto se escriben con el mismo recorrido de EstadoPartida; los formatos 1 y 2 se rechazan (D11).
+- K = 22, el que proponía el plan (research D4); las mediciones lo confirmaron. Se cambia con --checkpoint-cada K.
+- Requisitos: specs/004-linea-de-tiempo/spec.md, FR-401 a FR-434. Plan: specs/004-linea-de-tiempo/plan.md y research.md.
+
+**Complejidad:**
+- Registrar un comando: O(1); una vez cada K acciones, además la copia: O(tamaño de la partida).
+- Pergamino: O(lo revertido), a lo sumo 5 acciones.
+- Ubicar: #k en O(1); un instante en O(log n).
+- Consulta: a lo sumo K acciones re-ejecutadas y deshechas, O(K (a + u)), sin importar n.
+- Memoria: n/K copias más n entradas.
+
+**Evidencia:**
+Se mide con: python -m crypta.bench.bench linea_l1 linea_l2 linea_l3 linea_l4 linea_l5 linea_l6 linea_l7 linea_l8
+Criptas sintéticas deterministas por semilla: 300 salas con 20 enemigos activos (la copia local de la de referencia no tiene contenidos) y 2000 salas con 50 cazadores (docs/resultados_bench_004.txt).
+
+Consulta por K (L1), 300 salas, 5000 acciones, 200 consultas
+  K    puntos   p95 consulta     máximo   crear puntos    memoria
+  10      501       12.02 ms   14.84 ms        35.68 s   471.0 MB
+  16      313       18.44 ms   23.23 ms        20.03 s   298.6 MB
+  22      228       26.76 ms   33.09 ms        15.25 s   222.8 MB
+  32      157       45.28 ms   66.04 ms        12.23 s   159.6 MB
+  64       79       85.71 ms  104.37 ms         4.78 s    95.3 MB
+
+- Por qué K = 22:
+  - No 32: el p95 (45.28 ms) queda a menos de 5 ms del límite y el máximo (66.04 ms) ya lo pasa. Con 64 no cumple.
+  - No 16: la consulta es más rápida, pero copia en el 6.3 % de las acciones, más que el 5 % que el p95 del ciclo puede esconder (FR-433, research D4), y ocupa 298.6 MB contra 222.8.
+  - 22 es el menor K con menos del 5 % de acciones que copian (4.5 %) y deja 23 ms de margen en la consulta.
+- Sin puntos de control: media 4.82 s y p95 9.51 s (20 consultas).
+
+Hacia adelante frente a hacia atrás (L2), 300 salas, 5000 acciones, K = 22, 200 consultas
+  variante                     media        p95   crear un punto    memoria
+  hacia adelante (elegida)  13.43 ms   27.38 ms         63.88 ms   210.1 MB
+  hacia atrás               19.02 ms   39.32 ms        108.10 ms   467.1 MB
+
+- L2: hacia atrás no gana en la consulta (tiene que volver al final re-ejecutando), crear cada punto cuesta 1.7 veces más y ocupa más del doble.
+- L3: 1873 resúmenes comparados con el oráculo (la partida viva mientras se jugaba), con los cinco K, sin puntos de control y hacia atrás: 0 diferencias.
+- L4 (escenario B7 de la 001: 2000 salas, 50 cazadores, 500 acciones): sin línea p95 5.04 ms; con línea p95 13.55 ms, media 16.87 ms y máximo 315.38 ms. Copiaron 23 acciones (4.6 %). Cumple los 20 ms.
+- L5: 106.4 MB con 2500 acciones y 212.8 MB con 5000 (cociente 2.00, límite 2.5); 0.046 de la copia por acción (4673.4 MB; límite 1/3).
+- L6: un solo punto examinado por consulta, con 114 y con 228 puntos.
+- L7: el recorrido de EstadoPartida salió un poco más rápido que deepcopy con ganchos: 40.13 contra 45.84 ms con 300 salas, y 246.38 contra 297.47 ms con 2000. Es al revés de lo que suponía el plan (research D3: armar costaría lo mismo que una copia). Igual se mantuvo deepcopy:
+  - la diferencia es de 6 ms por copia, una vez cada 22 acciones (unos 0.3 ms por acción), y no cambia el K ni ningún límite;
+  - con 2000 salas el recorrido ocupa más (6.0 contra 5.7 MB por copia), y la memoria es lo que más crece con los puntos;
+  - las pruebas de equivalencia y del sello se hicieron con puntos copiados con deepcopy; cambiar la copia en el cierre obligaba a repetir esa validación.
+  - deepcopy sin ganchos tarda más (58.61 ms, 1.2 MB) y es incorrecta: copia las fichas con su fuente, la búsqueda del cazador y la bitácora.
+- L8: 228 puntos de control en 14.2 MB; guardar 2.43 s, cargar 6.48 s.
+- Historial de retroceso de P1 con la carga nueva (principio XI): la consulta deshace hasta 22 acciones con el mismo Historial (ListaDoble) del pergamino, sin límite en los puntos de control, y el p95 queda en 26.76 ms (L1) y 27.38 ms (L2). La partida viva sigue con el límite de 5. Sigue siendo adecuado y no se cambió.
+
+**Límites:**
+- Escala (L1 b: 2000 salas, 50 cazadores, 1000 acciones): p95 de la consulta 90.00 ms (media 49.83 ms, máximo 181.10 ms). Pasa de 50 ms; ese escenario no tiene límite en la spec. El plan estimaba 100 a 210 ms.
+- Pausa al crear un punto: con 2000 salas, copiar la partida detiene el ciclo hasta ~315 ms (máximo de L4), una vez cada 22 acciones. El p95 no la ve (13.55 ms), la media sí (16.87 contra 2.98 ms sin línea).
+- Margen de FR-433: copian el 4.6 % de las acciones, contra el 5 % que el p95 puede esconder. Con K menor que 21 las copias entrarían al p95.
+- Memoria: ~210 MB con 5000 acciones en 300 salas (L2 y L5), lineal en las acciones. Con 2000 salas, 286.2 MB con solo 1000 acciones (L1 b); con 5000 serían unos 1.4 GB.
+- Guardado: con 5000 acciones el archivo ocupa 14 MB, guardar tarda 2.4 s y cargar 6.5 s (L8).
+- Las salas que una consulta carga en un punto de control quedan cargadas (decisión del grupo, research D7). Por eso el archivo guardado de una partida con consultas no es igual byte por byte al de la misma partida sin consultas; el estado, el log y el resultado sí (D11, FR-408).
+- El mapa conocido del resumen depende de la 002: mientras no exista, el resumen dice «no disponible (capacidad 002)».
+- La copia local de la cripta de referencia no tiene contenidos: todo se midió con criptas sintéticas.
