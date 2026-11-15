@@ -616,3 +616,30 @@ Plan, contratos y tareas:
 Marca las tareas hechas y no hagas commit.
 
 **USO:** Cierre de deciones del punto 004
+
+**Prompt:** /speckit-plan SPECIFY_FEATURE_DIRECTORY=specs/002-niebla-ir-a (actualiza .specify/feature.json). Plan de la capacidad 002 según su spec y la constitución. Indicaciones del grupo:
+- Solo TDA del curso (sin dict, set, heapq, bisect ni collections).
+- Mapa conocido: estado de cada sala (desconocida/avistada/explorada) en un Vector por el índice denso de la 001, y el estado recordado de cada puerta junto a su EstadoPuerta compartido, para que consultar sea O(1) (FR-235). Todo cambio de conocimiento se anota en el historial de P1 solo cuando cambia de valor, así el pergamino lo revierte (FR-224) y la línea de tiempo de la 004 lo trae gratis (la copia del punto de control lo incluye).
+- Guardado: el conocimiento entra al archivo de partida; sube el número de formato y el anterior se rechaza (FR-227), igual que en la 004.
+- ir a: la ruta se calcula con las distancias DESDE el destino por las salidas recordadas abiertas entre salas exploradas (como el cazador de la 001, reutilizando DistanciasLimitadas o algo equivalente) y se reutiliza entre pasos; solo se recalcula si el conocimiento cambió de una forma que afecte la ruta (invalidación, como la 001). Con 2 000 salas, recalcular desde cero en cada paso tarda varios ms (medido: media 6,4 ms y p95 11 ms en otra máquina). El bench compara reutilizar contra recalcular en cada paso, y reporta el primer paso aparte (FR-234). Agrega una fila con una cripta del tamaño de la de referencia (cripta-06, 300 salas).
+- partida.log: la orden ir a va como línea de comentario antes de sus mover; RegistroPartida y el Reproductor ignoran los comentarios, y los logs de P1 se siguen leyendo (FR-222, FR-223).
+- Bitácora: solo lo que pasa en la sala del jugador o le pasa al jugador (FR-208).
+- Incluye la tarea pendiente T057 de specs/004-linea-de-tiempo/tasks.md: la prueba de HU1-11 (historia muestra el mapa conocido de ese instante) y la línea «Mapa conocido» del resumen de la 004.
+- No implementes nada. No hagas commit.
+
+**USO:** Creación del directorio del plan.md del punto 002 y afines.
+
+**Prompt:** Ajustes al plan de la 002 (solo documentos de specs/002-niebla-ir-a; no implementes nada ni hagas commit):
+
+1. MapaConocido anota con partida._anotar (el método de la Partida, que busca estado.historial en cada llamada), nunca con un historial.registrar_cambio guardado. Razón: leer_linea le pone a cada punto de control un historial nuevo por asignación (partida.estado.historial = Historial(limite=None)); con el método del historial viejo, historia sobre una partida cargada no desharía el conocimiento y dañaría el punto. En la copia de la 004 el método se reubica solo por el memo. Ponlo en data-model y research D3, con una prueba: guardar con línea de tiempo, cargar, consultar dos veces el mismo instante → mismo resumen y el conocimiento del punto sin cambios. En el bench, MapaConocido recibe la función de anotar que corresponda.
+2. Cada paso de ir a hace exactamente lo que el Controlador hace con un comando escrito a mano: _asegurar_linea antes, y después de cada mover la línea de tiempo, registro.anotar, _actualizar_fichas_en_uso y precargar_async. Sepáralo en un método del Controlador que usen los dos caminos, y que ejecutar_ir_a lo reciba como función por paso. Prueba con fuente que cuenta: un viaje de 3 pasos hace las mismas solicitudes que los 3 mover escritos a mano (principio V).
+3. PASO_IMPOSIBLE sale solo de un RuntimeError de garantizar_sala, que se llama antes del mover. Un error dentro del mover no se convierte en parada.
+4. N1: la alternativa ArbolBusqueda se arma con desde_ordenados (el árbol no se balancea solo; insertar en orden lo degenera). Anota en research que la alternativa también puede cumplir el cociente ≤ 2 (crece como log n); se descarta por el costo por consulta y por escribir los dos lados de cada puerta.
+5. N2: las salas de las entradas con antorcha quedan a más de 2 pasos de la región de 2 000, así revelan lo mismo en los dos mapas; si los cambios registrados por entrada no son iguales en los dos mapas, la sección da ERROR.
+6. N3 (c): la carpeta de copias locales es un parámetro; las pruebas pasan una carpeta vacía y usan la sintética de 300 salas (nunca leen cache/).
+7. FR-219 (HU3-8): dos pruebas, el rechazo al inicio (la única ruta cruza una puerta recordada cerrada y el jugador tiene la llave) y la parada a medio camino (la puerta se descubre cerrada al llegar). En las dos la puerta sigue cerrada y no hay abrir en el log.
+8. SC-207: además del formato y del resumen, cambian las pruebas que esperaban avisos de la bitácora de otras salas (FR-208). Cada prueba ajustada lleva un comentario con FR-208 y SC-207. Corrige quickstart §1.
+9. Puntos para el grupo, ya decididos: la llave se sigue mostrando en las puertas de la sala actual (es parte de la sala del jugador, FR-207); el riesgo de FR-234 se acepta y, si no cumple, va a Límites con los números de N3; las salidas a salas que no existen no avistan nada. Pásalos de «puntos para el grupo» a decisiones.
+
+**USO:** Ajuste del plan del punto 002
+
