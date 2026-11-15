@@ -267,8 +267,10 @@ copia crean la suya si hace falta. El viaje vive dentro de una orden `ir a`; el 
 las de un `mover` escrito a mano. Un error que salga de `ejecutar_paso` sale de `ejecutar_ir_a` y lo
 atiende `procesar_comando` como a cualquier comando; los pasos ya hechos quedan hechos y anotados.
 
-Prueba (principio V): con una fuente que cuenta solicitudes, un viaje de 3 pasos hace las mismas
-solicitudes, en el mismo orden, que los 3 `mover` escritos a mano en la misma partida.
+Prueba (principio V): en la misma partida, un viaje de 3 pasos y los 3 `mover` escritos a mano dan
+la misma secuencia de llamadas a `garantizar_sala` y `precargar_async` (registrada por un gestor de
+contenido espía) y las mismas solicitudes por operación según `FuenteContadora`. No se compara el
+orden de las solicitudes: `FuenteContadora` no lo guarda y la precarga corre en otro hilo.
 
 **Paradas** (FR-221), evaluadas por `Viaje` después de cada paso:
 
@@ -299,9 +301,11 @@ escritor abstracto:
   (`sala`, `estado`) en orden de índice.
 
 Al leer, `Puerta.compartir_estado_con` exige que los dos lados digan lo mismo (si no,
-`DatosInvalidos` → `ErrorGuardado`), y `MapaConocido.restaurar` valida ids, estados y las reglas de
-FR-201 y FR-202 (sala inicial explorada, avistadas = destinos no explorados de salidas exploradas)
-en O(V + E). Como la 004 guarda sus puntos de control con `escribir_general` y `escribir_sala`, los
+`DatosInvalidos` → `ErrorGuardado`), y `MapaConocido.restaurar` fija los estados y llama a
+`MapaConocido.validar()`, que comprueba en O(V + E) las reglas de FR-201 a FR-204 (sala inicial
+explorada, avistadas = destinos no explorados de salidas exploradas, salidas de salas exploradas
+observadas). `validar()` es un método aparte porque también lo usa la prueba de equivalencia
+(T041) después de cada comando. Como la 004 guarda sus puntos de control con `escribir_general` y `escribir_sala`, los
 puntos llevan el conocimiento sin código nuevo.
 
 Los formatos 1, 2 y 3 se rechazan con el mensaje que ya existe (FR-227, igual que FR-419). Nunca se
@@ -327,8 +331,10 @@ confunde al depurar).
 
 **Decisión**:
 
-- Bitácora (FR-208): `_cerrar_puerta` avisa solo si uno de los `extremos` de la puerta es la sala
-  del jugador; `_regenerar`, solo si el enemigo está en la sala del jugador; `_rearmar_trampa`, solo
+- Bitácora (FR-208): `_cerrar_puerta` avisa solo si la puerta es una **salida de la sala del
+  jugador**: alguna salida de `sala_actual()` comparte su `EstadoPuerta` (O(4)). No basta con que la
+  sala del jugador sea uno de sus `extremos`: una salida sin vuelta que llega a la sala del jugador
+  tiene esa sala como extremo, pero el jugador no la observa (FR-205), así que no avisa; `_regenerar`, solo si el enemigo está en la sala del jugador; `_rearmar_trampa`, solo
   si la trampa está en la sala del jugador (se busca entre las trampas de esa sala, O(trampas de la
   sala)). Los demás avisos no cambian.
 - Vista (FR-207): `mostrar_estado` lee el estado de cada salida de la sala actual de

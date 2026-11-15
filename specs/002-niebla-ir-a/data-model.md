@@ -53,7 +53,8 @@ Operaciones:
 | `avistar(sala)` | desconocida → avistada | O(1) |
 | `restaurar_sala((indice, anterior))` | deshacer de `explorar`/`avistar`; avisa al observador | O(1) |
 | `restaurar_puerta((estado, anterior))` | deshacer de `observar`; avisa al observador | O(1) |
-| `restaurar(lista)` | al cargar: fija los estados y valida FR-201 y FR-202 | O(V + E) |
+| `restaurar(lista)` | al cargar: valida ids y estados de la lista, fija los estados y llama a `validar()` | O(V + E) |
+| `validar(id_sala_inicial)` | `ValueError` si la sala inicial no está explorada (FR-201), si una sala es avistada sin ser destino de una salida explorada o un destino de una salida explorada quedó desconocido (FR-202), o si una salida de una sala explorada tiene `recordada is None` (FR-203, FR-204). La usan `restaurar` y la prueba de equivalencia (T041) | O(V + E) |
 | `salas_conocidas()` | recorre `_estados` en orden de índice (= orden de id) | O(V) |
 
 Reglas:
@@ -79,7 +80,10 @@ Cambios de comportamiento (research D4, D11):
 - `_poner_jugador_en(sala)` → `explorar(sala)` y, con antorcha, `explorar` cada vecina.
 - `_correr_hasta_el_jugador` → al sacar `TURNO_JUGADOR`, `observar(sala actual)` antes de volver.
 - `usar_pergamino` → también `_ruta_conocida.invalidar()`.
-- `_cerrar_puerta`, `_regenerar`, `_rearmar_trampa` → avisan solo si pasa en la sala del jugador.
+- `_cerrar_puerta` → avisa solo si la puerta es una salida de la sala del jugador (alguna salida de
+  `sala_actual()` comparte su `EstadoPuerta`, O(4)); una salida sin vuelta que llega a la sala del
+  jugador no avisa (FR-205, FR-208).
+- `_regenerar`, `_rearmar_trampa` → avisan solo si pasa en la sala del jugador.
 
 ## RutaConocida (nuevo, Modelo)
 

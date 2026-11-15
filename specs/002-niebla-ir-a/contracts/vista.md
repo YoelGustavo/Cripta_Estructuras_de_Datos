@@ -17,8 +17,7 @@ SALIDAS
 - El destino se muestra solo por su id (FR-207).
 - Como el jugador observa su sala antes de cada decisión (FR-204), en pantalla coincide con el
   estado real. Las pruebas de la 001 sobre este texto siguen valiendo.
-- «necesita <llave>» se mantiene: es parte de la sala del jugador (FR-207; decidido por el grupo,
-  research D11 y D14).
+- «necesita <llave>» se mantiene en las salidas cerradas con llave, como en P1 (FR-207).
 
 ## Mapa
 
@@ -57,11 +56,12 @@ Reglas:
 
 ## Bitácora (FR-208)
 
-Solo lo que pasa en la sala del jugador o le pasa al jugador. Cambian tres avisos:
+Solo lo que pasa en la sala del jugador o le pasa al jugador. El pergamino no borra los mensajes ya
+mostrados, como en P1 (caso borde de la spec). Cambian tres avisos:
 
 | Aviso | Antes | Ahora |
 |---|---|---|
-| «Una puerta se cierra automáticamente.» | siempre | solo si un extremo de la puerta es la sala del jugador |
+| «Una puerta se cierra automáticamente.» | siempre | solo si la puerta es una salida de la sala del jugador (alguna salida de la sala comparte su estado); una salida sin vuelta que llega a la sala del jugador no avisa |
 | «<enemigo> regenera vida.» | siempre | solo si el enemigo está en la sala del jugador |
 | «Una trampa vuelve a estar armada.» | siempre | solo si la trampa está en la sala del jugador |
 

@@ -643,3 +643,42 @@ Marca las tareas hechas y no hagas commit.
 
 **USO:** Ajuste del plan del punto 002
 
+**Prompt:** /speckit-tasks Tareas de la 002 según el plan ajustado. Indicaciones:
+- Fases con punto de control y todas las pruebas en verde al final de cada una:
+  1. Estructura: EstadoPuerta.recordada, MapaConocido y sus pruebas.
+  2. Niebla en la partida (HU1, HU2): explorar/observar, antorcha, bitácora, vista, comando mapa.
+  3. ir a (HU3): RutaConocida, Viaje, Comandos, Controlador, partida.log y replay.
+  4. Estado del juego (HU4): pergamino, formato 4, línea de tiempo y la T057 de la 004 (al terminar, márcala hecha en specs/004-linea-de-tiempo/tasks.md).
+  5. Equivalencia (SC-202, SC-203).
+  6. Bench N1–N4, y volver a correr B7 de la 001 y L1 y L4 de la 004.
+  7. Cierre: DECISIONES §5.3, README y revisión de trazabilidad.
+- Cada tarea cita sus FR o escenarios. Dentro de cada fase, las pruebas van antes del código.
+- El bench escribe en docs/resultados_bench_002.txt; no toca resultados_bench_p2.txt, _003 ni _004.
+- No implementes nada. No hagas commit.
+
+**USO:** Tareas del speckit que debe realizar la IA.
+
+**Prompt:** /speckit-analyze
+
+**USO:** Realizacion de analisis de problemas por parte de la maquina.
+
+**Prompt:** Ediciones por el análisis de la 002 (solo documentos; no implementes nada ni hagas commit):
+
+spec.md (va en su propio commit):
+- «Estado: Confirmada» (T001 a).
+- SC-207 (I1): además de las pruebas que mostraban información de salas no conocidas, se ajustan las del formato del archivo de partida (pasa a 4, FR-227) y la línea «Mapa conocido» del resumen de la 004 (FR-228).
+- FR-207 (I3): de las salidas de la sala actual cerradas con llave también se muestra qué llave necesitan (como en P1).
+- Pergamino y bitácora: el pergamino no borra los mensajes que la bitácora ya mostró (como en P1). Agrégalo a los casos borde y a SC-202: SC-202 se comprueba sobre lo que se muestra en cada momento, sin contar los mensajes viejos de la bitácora (por ejemplo «Entras en <nombre>» de una sala que el pergamino volvió a avistada).
+
+research.md, data-model.md, contracts/vista.md y tasks.md:
+- I2: _cerrar_puerta avisa solo si la puerta es una salida de la sala del jugador (alguna salida de sala_actual() comparte su EstadoPuerta, O(4)); una salida sin vuelta que llega a la sala del jugador no avisa. Actualiza D11, data-model, la tabla de bitácora de vista.md y T012, y agrega ese caso a T007.
+- U1, T041: no buscar números en el texto crudo. Comprobar que cada «sala <id>» de SALIDAS es una sala explorada, avistada o que no existe en la cripta; las líneas de formatear_mapa; y que ningún nombre de sala no explorada aparece en SALIDAS, en el mapa ni en los mensajes nuevos de la bitácora de ese comando. Quitar la excepción. En T040, nombres de sala que no estén contenidos uno en otro («Sala 1» dentro de «Sala 10»).
+- T041, además, después de cada comando: las salidas de la sala actual tienen recordada igual a su estado real (FR-204) y el conocimiento pasa las validaciones de restaurar (FR-201, FR-202). Separa esa validación en MapaConocido.validar(), que usan restaurar y la prueba.
+- T023 y T009: FuenteContadora no guarda el orden y la precarga corre en otro hilo. T023 compara la secuencia de llamadas a garantizar_sala y precargar_async (con un gestor espía) en los dos caminos, y las solicitudes por operación; T009 compara las solicitudes por operación. Quita «en el mismo orden».
+- G1, T021: ir a desde una sala con enemigos se permite y no se detiene antes del primer paso; las paradas se revisan solo después de cada paso.
+- G2, T009: la antorcha que revela una sala ya explorada la deja explorada y vuelve a observar sus salidas.
+- U2: saca de T051 la variante de D12 a una tarea condicional T050a (crypta/Modelo/RutaConocida.py y N3), que solo se hace si el p95 de N3 no cumple.
+- U3: quita [P] de T014 (depende de T013).
+- Calendario: domingo, T001 y fase 1 (y la 2 si da tiempo); lunes, fases 2 a 4; martes en la mañana, fases 5 y 6; martes en la tarde, fase 7. El miércoles queda solo para entregar.
+
+**USO:** Pequeñas correcciones de ciertos sesgos en el task.md. y el analisis.
