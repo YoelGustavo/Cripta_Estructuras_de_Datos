@@ -4,7 +4,7 @@
 
 **Creada**: 2026-11-12
 
-**Estado**: Borrador
+**Estado**: Confirmada
 
 **Fuentes**: P2 §3.3, §3.4, §5.3, §6.1, §6.3, §7.3 y Apéndice B («Niebla de guerra e ir a»).
 Reglas heredadas de P1 (§2.3, §2.4, §2.7, §2.11, §4.2, §4.10, §4.11), de la capacidad 001 (costo de
@@ -289,6 +289,9 @@ secciones y resultados.
 - **Victoria durante un viaje** (por una puerta ya abierta hacia la salida): la partida termina y el
   viaje se detiene (FR-221).
 - **Pergamino después de un viaje**: revierte solo el último paso; el viaje no continúa (FR-225).
+- **Pergamino y bitácora**: el pergamino no borra los mensajes que la bitácora ya mostró, como en
+  P1. Por ejemplo, «Entras en <nombre>» de una sala que el pergamino volvió a avistada sigue en la
+  bitácora; lo que se muestra de ahí en adelante sale del mapa conocido revertido (FR-207, FR-224).
 - **Reporte de resolubilidad al iniciar**: muestra salas no exploradas como excepción declarada en
   la 003; no cambia el mapa conocido (FR-209).
 
@@ -321,7 +324,8 @@ para no chocar con las otras capacidades.
 
 - **FR-207**: Todo lo que muestra la vista DEBE salir solo del mapa conocido y de lo que hay en la
   sala del jugador: de las salidas de la sala actual, su dirección, destino, costo y estado
-  recordado; de las salas no exploradas, a lo sumo su id.
+  recordado, y de las que están cerradas con llave, qué llave necesitan (como en P1); de las salas
+  no exploradas, a lo sumo su id.
 - **FR-208**: La bitácora DEBE mostrar solo lo que pasa en la sala del jugador o le pasa al jugador.
   NO DEBE avisar de lo que ocurre en otras salas (por ejemplo, enemigos que se regeneran, trampas que
   se rearman, puertas que se cierran o enemigos que se mueven fuera de la sala del jugador).
@@ -445,7 +449,9 @@ Medidos en el equipo local, sin red ni vista (P2 §6.1; constitución, principio
   pasa.
 - **SC-202**: En partidas sintéticas generadas por semilla (al menos 20, con antorcha, puertas que
   cambian y pergaminos), nada de lo que muestra la vista ni de lo que usa «ir a» se refiere a una sala
-  desconocida, ni a una sala avistada más que por su id.
+  desconocida, ni a una sala avistada más que por su id. Se comprueba sobre lo que se muestra en cada
+  momento, sin contar los mensajes viejos de la bitácora, que el pergamino no borra (por ejemplo,
+  «Entras en <nombre>» de una sala que el pergamino volvió a avistada).
 - **SC-203**: En esas partidas, cada paso de «ir a» coincide con el de un cálculo desde cero sobre el
   mapa conocido de ese instante.
 - **SC-204**: Según `--bench`, el p95 de un paso de «ir a», sobre todos los pasos de al menos 20
@@ -456,8 +462,9 @@ Medidos en el equipo local, sin red ni vista (P2 §6.1; constitución, principio
 - **SC-206**: Los `partida.log` de la primera parte y de la 001 se reproducen con el mismo resultado,
   y los nuevos con viajes también.
 - **SC-207**: Todas las pruebas de la primera parte, de la 001, de la 003 y de la 004 siguen pasando,
-  salvo las que comprobaban que la vista o la bitácora mostraban información de salas no conocidas,
-  que se ajustan a la niebla.
+  salvo estas, que se ajustan: las que comprobaban que la vista o la bitácora mostraban información
+  de salas no conocidas (niebla); las del formato del archivo de partida, que pasa a 4 (FR-227); y
+  las de la línea «Mapa conocido» del resumen de la 004 (FR-228).
 
 ## Supuestos
 
