@@ -1,0 +1,82 @@
+CRIPTA --bench | Python 3.14.7 | Windows AMD64
+
+=== B7 Ciclo con cazadores (FR-035) ===
+B7 CICLO CON CAZADORES (FR-035, SC-004: p95 menor que 20 ms). 60 acciones del jugador (cada una, la mejor de 3 vueltas), con 20 de calentamiento
+  cripta                 cazadores     media       p95     máximo   ¿cumple?
+  sintética 2000 salas          50   3.20 ms   7.90 ms   12.46 ms         sí
+  El jugador se mueve por un recorrido fijo, sin atacar ni esperar. Con la cripta oficial publicada se agrega su fila.
+(sección medida en 2.66 s)
+
+=== L1 Consulta de historia por K (FR-428, FR-432) ===
+L1 CONSULTA DE HISTORIA POR K (FR-428, FR-432, SC-404: p95 menor que 50 ms). (a) 5000 acciones, (b) 1000 acciones; un pergamino cada 50
+  cripta                                        K   puntos   consultas      media         p95      máximo   crear puntos    memoria     ¿cumple?
+  sintética 300 salas                          10      501         200    8.02 ms    14.77 ms    31.28 ms        37.80 s   472.7 MB            —
+  sintética 300 salas                          16      313         200   10.88 ms    22.59 ms    41.92 ms        19.51 s   295.9 MB            —
+  sintética 300 salas                          22      228         200   15.83 ms    32.66 ms    58.35 ms        16.37 s   215.9 MB           sí
+  sintética 300 salas                          32      157         200   21.54 ms    44.14 ms    67.75 ms        11.37 s   149.2 MB            —
+  sintética 300 salas                          64       79         200   50.67 ms    96.58 ms   124.62 ms         5.22 s    75.8 MB            —
+  sintética 300 salas                  sin puntos        1          10     4.62 s      8.15 s      8.15 s         0.0 µs     2.4 MB            —
+  sintética 2000 salas, 50 cazadores           22       46         200   55.33 ms   107.94 ms   204.22 ms        24.80 s   268.9 MB   sin límite
+  «¿cumple?» solo aplica a la cripta del tamaño de la de referencia con el K por defecto (22). La de escala se reporta sin límite; si pasa de 50 ms va a Límites. Tiempos sin tracemalloc. Memoria, aparte: puntos × lo que ocupa una copia de la partida (medida una sola vez por cripta con tracemalloc) más las entradas (medidas con tracemalloc); no se copian todos los puntos. Sin puntos de control: 10 consultas. Para Límites: sintética 2000 salas, 50 cazadores: p95 107.94 ms.
+(sección medida en 288.07 s)
+
+=== L4 Ciclo con la línea activa (FR-433) ===
+L4 CICLO CON LA LÍNEA ACTIVA (FR-433, SC-405: p95 menor que 20 ms). Escenario B7 de la 001 (2000 salas, 50 cazadores), K = 22, 500 acciones medidas
+  ciclo       acciones   copiaron      media        p95      máximo   ¿cumple?
+  sin línea        500          —    3.23 ms    6.31 ms    30.78 ms         sí
+  con línea        500         23   18.44 ms   15.99 ms   378.34 ms         sí
+  Cada ciclo es ejecutar el comando y anotarlo en la línea: incluye las copias (1 de cada 22 acciones). El máximo y la media sí las ven.
+(sección medida en 16.83 s)
+
+=== N1 Consultas al mapa conocido (FR-230, FR-235, SC-205) ===
+N1 CONSULTAS AL MAPA CONOCIDO (FR-230, FR-235). 2000 salas, 100000 consultas de cada tipo
+  estructura              exploradas   estado: media   recordada: media
+  Vector + EstadoPuerta          200          0.5 µs             0.3 µs
+  ArbolBusqueda                  200          1.0 µs             1.7 µs
+  Vector + EstadoPuerta         2000          0.5 µs             0.3 µs
+  ArbolBusqueda                 2000          1.3 µs             2.3 µs
+  cociente 2000 / 200: elegida 1.12, ArbolBusqueda 1.33 (límite de la elegida <= 2). ¿cumple? sí. El árbol también crece poco (log n); se descarta por el costo por consulta y porque cada puerta tendría que escribirse por los dos lados (research D1).
+(sección medida en 2.31 s)
+
+=== N2 Exploración con antorcha y su reversión (FR-230, FR-236, SC-205) ===
+N2 EXPLORACIÓN CON ANTORCHA Y SU REVERSIÓN (FR-230, FR-236). 20000 salas, 1000 entradas a más de 2 pasos de lo conocido
+  conocidas   explorar   deshacer   copia por acción: explorar   copia por acción: deshacer   cambios por entrada
+  200         155.7 µs    38.6 µs                      1.72 ms                     571.3 µs                  28.6
+  2000        186.1 µs    35.5 µs                     15.46 ms                      4.50 ms                  28.6
+  cociente 2000 / 200: explorar 1.19, deshacer 0.92; copia por acción: explorar 8.99, deshacer 7.87 (límite de la elegida <= 2). ¿cumple? sí. La copia por acción está prohibida por el principio VII: solo se mide para mostrar que crece con lo conocido.
+(sección medida en 26.02 s)
+
+=== N3 Paso de «ir a» (FR-231, FR-234, SC-204) ===
+N3 PASO DE «IR A» (FR-231, FR-234): todos los pasos
+  caso                                            variante   pasos      media        p95     máximo   ¿cumple?
+  (a) 2000 salas, completo                       selectiva     601   515.0 µs    14.6 µs   39.58 ms         sí
+  (a) 2000 salas, completo              recalcular siempre     601    8.44 ms   29.91 ms   48.52 ms          -
+  (b) 2000 salas, desactualizado                 selectiva     603   552.4 µs    16.6 µs   42.74 ms          -
+  (b) 2000 salas, desactualizado        invalidación total     603   529.3 µs    17.5 µs   42.78 ms          -
+  (b) 2000 salas, desactualizado        recalcular siempre     603    8.30 ms   27.37 ms   63.23 ms          -
+  (c) cripta-06 (300 salas), completo            selectiva     207    53.8 µs   475.2 µs   902.1 µs         sí
+  (c) cripta-06 (300 salas), completo   recalcular siempre     207   287.7 µs   715.1 µs   900.6 µs          -
+  Límite: p95 < 5 ms con la selectiva en (a) y (c). El p95 incluye los pasos que buscan; el criterio se cumple si esos pasos son menos del 5 % del total (research D6).
+N3 primer paso de cada viaje y búsquedas
+  caso                                            variante   primer paso: media        p95     máximo   pasos por viaje (mín / media / máx)   buscaron   búsquedas   invalidaciones   asentadas
+  (a) 2000 salas, completo                       selectiva             15.15 ms   35.08 ms   39.58 ms                         8 / 30.1 / 56      3.2 %          19                0       15104
+  (a) 2000 salas, completo              recalcular siempre             16.96 ms   35.17 ms   35.58 ms                         8 / 30.1 / 56    100.0 %         601                0      250044
+  (b) 2000 salas, desactualizado                 selectiva             15.98 ms   35.86 ms   42.74 ms                         8 / 30.1 / 56      3.6 %          22                3       15463
+  (b) 2000 salas, desactualizado        invalidación total             15.27 ms   34.86 ms   42.78 ms                         8 / 30.1 / 56      3.6 %          22                3       15463
+  (b) 2000 salas, desactualizado        recalcular siempre             16.76 ms   34.24 ms   35.97 ms                         8 / 30.1 / 56    100.0 %         603                3      248510
+  (c) cripta-06 (300 salas), completo            selectiva             466.6 µs   863.4 µs   902.1 µs                         3 / 10.3 / 20      9.2 %          19                0         729
+  (c) cripta-06 (300 salas), completo   recalcular siempre             497.1 µs   890.6 µs   900.6 µs                         3 / 10.3 / 20    100.0 %         207                0        4812
+  Solo se cronometra siguiente_paso; la observación y el movimiento no. Hubo un viaje de calentamiento que no se reporta.
+Para Límites (FR-234): (a) 2000 salas, completo: el primer paso llega a 39.58 ms (más de 5 ms).
+(sección medida en 14.09 s)
+
+=== N4 Igualdad con la alternativa (FR-232, SC-203) ===
+N4 IGUALDAD CON LA ALTERNATIVA (FR-232, SC-203)
+  sección                                            qué se compara   comparadas   diferencias
+  N1               consultas: Vector + EstadoPuerta / ArbolBusqueda       400000             0
+  N2                           entradas: elegida / copia por acción         2000             0
+  N3        pasos: reutilizando / paso_desde_cero y entre variantes         3425             0
+  Total: 405425 comparaciones, 0 diferencias.
+(sección medida en 80.11 s)
+
+(bench completo en 430.14 s)
