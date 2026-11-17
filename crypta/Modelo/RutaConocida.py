@@ -56,6 +56,11 @@ class RutaConocida:
         """Búsquedas empezadas desde el destino."""
         return self._distancias.busquedas
 
+    @property
+    def asentadas(self):
+        """Salas asentadas en todas las búsquedas (para el --bench, N3)."""
+        return self._distancias.asentados
+
     # -- el grafo conocido ---------------------------------------------------
 
     def _conocida(self, puerta, origen, destino):

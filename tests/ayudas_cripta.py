@@ -622,3 +622,188 @@ def controlador_desde_linea(carpeta, comandos, semilla=SEMILLA):
                              catalogo(*FICHAS_LINEA),
                              generales=datos_generales(esqueleto, presupuesto=1000))
     return controlador_sintetico(fuente, carpeta, comandos, semilla)
+
+
+# ---------------------------------------------------------------------------
+# Niebla de guerra e «ir a» (capacidad 002, T040; SC-202, SC-203)
+# ---------------------------------------------------------------------------
+
+LADO_NIEBLA = 5                     # cuadrícula de 5 × 5: salas 1 a 25
+SALA_INEXISTENTE_NIEBLA = 999       # destino de una salida que no lleva a nada
+
+FICHAS_NIEBLA = (
+    {"id": "itm_antorcha", "clase": "antorcha", "nombre": "Antorcha",
+     "peso": 1, "valor": 1, "duracion": 400},
+    {"id": "itm_pergamino", "clase": "pergamino_retroceso",
+     "nombre": "Pergamino", "peso": 0, "valor": 1},
+    {"id": "itm_pocion", "clase": "pocion", "nombre": "Poción", "peso": 1,
+     "valor": 1, "cura": 5},
+    {"id": "trp_aguja", "clase": "trampa", "nombre": "Aguja", "daño": 1,
+     "rearme": 250},
+    ficha_errante("ent_errante", velocidad=110, vida_max=8, ataque=3),
+)
+
+
+def nombre_niebla(id_sala):
+    """Nombres únicos y ninguno contenido en otro: el id va entre un prefijo
+    y un sufijo fijos («Cámara-1-fin» no está dentro de «Cámara-11-fin»)."""
+    return f"Cámara-{id_sala}-fin"
+
+
+def esqueleto_niebla(azar):
+    """Cuadrícula de 5 × 5 con costos variables; algunas salidas empiezan
+    cerradas (sin llave) con cierre automático. Además, una salida sin
+    vuelta de la 25 a la 1 (FR-202, FR-205) y una de la 5 hacia una sala que
+    no existe (research D4)."""
+    lado = LADO_NIEBLA
+    salidas = [dict() for _ in range(lado * lado + 1)]
+
+    def unir(a, dir_a, b, dir_b):
+        costo = azar.choice((50, 100, 150, 250, 400))
+        cerrada = azar.random() < 0.3
+        cierre = azar.choice((150, 300)) if cerrada else None
+        salidas[a][dir_a] = salida(b, costo=costo, cerrada=cerrada,
+                                   cierre_automatico=cierre)
+        salidas[b][dir_b] = salida(a, costo=costo, cerrada=cerrada,
+                                   cierre_automatico=cierre)
+
+    for i in range(1, lado * lado + 1):
+        fila, columna = (i - 1) // lado, (i - 1) % lado
+
+        if columna < lado - 1:
+            unir(i, "E", i + 1, "O")
+        if fila < lado - 1:
+            unir(i, "S", i + lado, "N")
+
+    ultima = lado * lado
+    salidas[ultima]["S"] = salida(1, costo=100)
+    salidas[lado]["N"] = salida(SALA_INEXISTENTE_NIEBLA, costo=100)
+
+    return [sala(i, salidas[i], nombre=nombre_niebla(i))
+            for i in range(1, ultima + 1)]
+
+
+def contenidos_niebla(azar):
+    """Antorchas y pergaminos en el suelo (dos de cada uno en la sala 1),
+    pociones, una trampa y tres errantes lejos de la sala 1."""
+    total = LADO_NIEBLA * LADO_NIEBLA
+    con_enemigo = azar.sample(range(2, total + 1), 3)
+    con_trampa = azar.randrange(2, total + 1)
+    resultado = []
+
+    for i in range(1, total + 1):
+        objetos = []
+
+        if i == 1:
+            objetos = ["itm_antorcha", "itm_antorcha", "itm_pergamino",
+                       "itm_pergamino"]
+        else:
+            for id_objeto, probabilidad in (("itm_antorcha", 0.2),
+                                            ("itm_pergamino", 0.2),
+                                            ("itm_pocion", 0.15)):
+                if azar.random() < probabilidad:
+                    objetos.append(id_objeto)
+
+        enemigos = ()
+        if i in con_enemigo:
+            enemigos = ((f"e-{i}", "ent_errante"),)
+
+        trampas = ((f"t-{i}", "trp_aguja"),) if i == con_trampa else ()
+        resultado.append(contenido(i, enemigos=enemigos, objetos=objetos,
+                                   trampas=trampas))
+
+    return resultado
+
+
+def partida_niebla(semilla):
+    """Partida de la 002 para las pruebas de equivalencia (SC-202, SC-203):
+    cripta sintética pequeña sin red, con todo el contenido cargado, armada
+    con `semilla`. El jugador empieza en la sala 1 con vida de sobra y dos
+    pergaminos."""
+    import random
+
+    azar = random.Random(semilla)
+    esqueleto = esqueleto_niebla(azar)
+    contenidos = contenidos_niebla(azar)
+    jugador = nuevo_jugador(vida_max=400, ataque=7, pergaminos=2)
+    return partida_sintetica(esqueleto, contenidos,
+                             catalogo(*FICHAS_NIEBLA), semilla=semilla,
+                             jugador=jugador)
+
+
+def _comando_antorcha(partida, azar):
+    """Recoger una antorcha del suelo, ponerla como actual o encenderla; o
+    None si no hay ninguna a mano."""
+    sala_actual = partida.sala_actual()
+
+    for i in range(sala_actual.cantidad_objetos()):
+        if sala_actual.objeto_en(i) == "itm_antorcha":
+            return f"recoger {i}"
+
+    inventario = partida.jugador.inventario
+    actual = inventario.actual()
+
+    if actual is not None and actual.get("id") == "itm_antorcha":
+        return "usar"
+
+    if inventario.buscar_por_id("itm_antorcha") is not None:
+        return azar.choice(("avanzar", "retroceder"))
+
+    return None
+
+
+def _comando_ir_a(partida, azar, anterior=None):
+    """`ir a` hacia una sala explorada elegida al azar (puede ser la actual
+    o no tener ruta: el juego la rechaza). Más de la mitad de las veces
+    repite el destino `anterior`: así la ruta conocida se reutiliza entre
+    viajes y se prueba su invalidación cuando, entre los dos, cambió alguna
+    puerta recordada (SC-203; research D6)."""
+    if anterior is not None and azar.random() < 0.6:
+        return f"ir a {anterior}"
+
+    exploradas = [s.id for s, estado in partida.conocimiento.salas_conocidas()
+                  if estado == 2]
+    return f"ir a {azar.choice(exploradas)}"
+
+
+def comando_niebla(partida, azar, destino_anterior=None):
+    """Un comando de `comando_al_azar`, de antorcha o `ir a`. Nunca mueve
+    hacia una salida que lleva a una sala que no existe.
+    `destino_anterior`: el id del último `ir a`, o None."""
+    r = azar.random()
+
+    if r < 0.15:
+        return _comando_ir_a(partida, azar, destino_anterior)
+
+    if r < 0.30:
+        comando = _comando_antorcha(partida, azar)
+
+        if comando is not None:
+            return comando
+
+    comando = comando_al_azar(partida, azar)
+
+    if comando.startswith("mover "):
+        puerta = partida.sala_actual().obtener_puerta(comando[-1])
+
+        if puerta.sala_destino_ref is None:
+            return "esperar"
+
+    return comando
+
+
+def comandos_niebla(partida, azar, cantidad):
+    """Generador de `cantidad` comandos (ver `comando_niebla`), elegidos
+    cuando se piden, como `comandos_al_azar`."""
+    destino_anterior = None
+
+    for _ in range(cantidad):
+        if partida.terminada:
+            return
+
+        comando = comando_niebla(partida, azar, destino_anterior)
+
+        if comando.startswith("ir a "):
+            destino_anterior = int(comando[len("ir a "):])
+
+        yield comando

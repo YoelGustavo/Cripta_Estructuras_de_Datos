@@ -699,3 +699,7 @@ research.md, data-model.md, contracts/vista.md y tasks.md:
 
 **USO:** Fase 4 del punto 002.
 
+**Prompt:** /speckit-implement Fases 5 y 6 de specs/002-niebla-ir-a/tasks.md (T040 a T050). No corras T051 ni hagas T050a: el bench lo corro yo después. Primero las pruebas, que deben fallar; después el código. Detente al final de la fase 6, marca las tareas hechas y no hagas commit.
+
+**USO:** Fase 5 y 6 del punto 002.
+

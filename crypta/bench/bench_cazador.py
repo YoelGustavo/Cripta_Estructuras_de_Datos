@@ -39,7 +39,9 @@ SEMILLA = 2026
 # (salas, ancho, alto) de cada tamaño. Es una tupla y se busca con un for
 # (§6.2: nada de dict). El jugador está en las mismas coordenadas en todas,
 # lejos de los bordes, así que la región que lo rodea es la misma.
-TAMANOS = ((2000, 50, 40), (20000, 200, 100))
+# (300, 20, 15): la cripta del tamaño de la de referencia cuando no hay copias
+# locales (capacidad 002, N3 (c); FR-234 c).
+TAMANOS = ((2000, 50, 40), (20000, 200, 100), (300, 20, 15))
 JUGADOR = (20, 25)                 # (fila, columna)
 
 COSTO_MINIMO = 1

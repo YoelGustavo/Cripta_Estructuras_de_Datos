@@ -7,7 +7,8 @@ import time
 
 from crypta.bench import (bench_agenda, bench_cache, bench_cazador, bench_ciclo,
                           bench_inventario, bench_ordenamiento, bench_rastro,
-                          bench_linea, bench_red, bench_resolubilidad)
+                          bench_linea, bench_niebla, bench_red,
+                          bench_resolubilidad)
 from crypta.bench.medicion import formato_tiempo, tabla
 
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado, guardar_partida
@@ -250,6 +251,17 @@ SECCIONES = (
     ("linea_l6", "L6 Puntos examinados (FR-425)", bench_linea.ejecutar_l6),
     ("linea_l7", "L7 Cómo se copia un punto (research D3)", bench_linea.ejecutar_l7),
     ("linea_l8", "L8 Guardar y cargar con la línea (FR-417)", bench_linea.ejecutar_l8),
+    # Capacidad 002 (specs/002-niebla-ir-a/contracts/bench.md). N2 y N4
+    # devuelven (texto, errores): con errores, --bench sale con código 1
+    # (FR-232, FR-233).
+    ("niebla_n1", "N1 Consultas al mapa conocido (FR-230, FR-235, SC-205)",
+     lambda rapido: bench_niebla.ejecutar_n1(rapido)),
+    ("niebla_n2", "N2 Exploración con antorcha y su reversión (FR-230, FR-236, SC-205)",
+     lambda rapido: bench_niebla.ejecutar_n2(rapido)),
+    ("niebla_n3", "N3 Paso de «ir a» (FR-231, FR-234, SC-204)",
+     lambda rapido: bench_niebla.ejecutar_n3(rapido)),
+    ("niebla_n4", "N4 Igualdad con la alternativa (FR-232, SC-203)",
+     lambda rapido: bench_niebla.ejecutar_n4(rapido)),
 )
 
 

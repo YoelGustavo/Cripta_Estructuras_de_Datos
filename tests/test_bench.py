@@ -1215,5 +1215,221 @@ class TestBenchLinea(unittest.TestCase):
         self.assertIn("ERROR", texto)
 
 
+# ======================================================================
+# Capacidad 002: niebla de guerra e «ir a» (T043; FR-229 a FR-233)
+# ======================================================================
+
+SECCIONES_NIEBLA = ("niebla_n1", "niebla_n2", "niebla_n3", "niebla_n4")
+
+
+class TestBenchNiebla(unittest.TestCase):
+    """T043 (FR-229 a FR-233; HU5-1 a HU5-3, HU5-7). Los límites de FR-234
+    a FR-236 solo se comprueban como «calculados y reportados»: el tiempo
+    depende de la máquina."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Corre una vez N1 a N4 en modo rápido, con una red que falla si
+        se la llama, una vista que falla si se crea, una fuente que falla
+        y una carpeta de copias temporal vacía (nunca `cache/`): N3 usa la
+        sintética de 300 salas (FR-233, HU5-7)."""
+        from crypta.bench import bench_niebla
+
+        lineas = []
+        cls._carpeta = tempfile.TemporaryDirectory()
+
+        with patch("crypta.Adaptadores.FuenteHTTP.requests.get",
+                   side_effect=AssertionError("--bench usó la red")), \
+                patch("crypta.Vista.VistaConsola.VistaConsola.__init__",
+                      side_effect=AssertionError("--bench creó la vista")), \
+                patch("crypta.Adaptadores.FuenteOffline.FuenteOffline.__init__",
+                      side_effect=AssertionError("--bench usó una fuente")), \
+                patch.object(bench_niebla, "CARPETA_COPIAS",
+                             cls._carpeta.name):
+            cls.codigo = bench.ejecutar(list(SECCIONES_NIEBLA), rapido=True,
+                                        salida=lineas.append)
+
+        cls.texto = "\n".join(str(linea) for linea in lineas)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._carpeta.cleanup()
+
+    def seccion(self, titulo):
+        inicio = self.texto.index(f"=== {titulo}")
+        fin = self.texto.find("\n=== ", inicio + 1)
+        return self.texto[inicio:] if fin < 0 else self.texto[inicio:fin]
+
+    # HU5-1: huella y generador -----------------------------------------
+
+    def test_hu5_1_fr229_misma_semilla_misma_huella(self):
+        """La cripta, el mapa conocido, los pares de viajes y los pasos
+        elegidos dan la misma huella en dos ejecuciones; otra semilla da
+        otra."""
+        from crypta.bench import bench_niebla
+
+        primera = bench_niebla.huella_n3(semilla=11)
+        self.assertEqual(primera, bench_niebla.huella_n3(semilla=11))
+        self.assertNotEqual(primera, bench_niebla.huella_n3(semilla=12))
+
+    def test_fr229_mapas_conocidos_del_generador(self):
+        """Completo: todo explorado y cada puerta recordada como es.
+        Desactualizado: una fracción de las cerradas se recuerda abierta.
+        Parcial: n salas exploradas en anchura desde el centro."""
+        from crypta.bench import bench_niebla
+        from crypta.bench.bench_cazador import CriptaSintetica
+        from crypta.Modelo.Puerta import ABIERTA, CERRADA
+
+        mapa = CriptaSintetica(300, semilla=5).mapa
+        nada = lambda cambio: None
+
+        completo = bench_niebla.mapa_conocido_completo(mapa, nada)
+        self.assertEqual(completo.exploradas, mapa.cantidad_salas())
+        cerradas = 0
+        for i in range(mapa.cantidad_salas()):
+            puertas = mapa.sala_por_indice(i).puertas()
+            for j in range(len(puertas)):
+                estado = puertas.obtener(j).estado
+                self.assertEqual(estado.recordada,
+                                 CERRADA if estado.cerrada else ABIERTA)
+                cerradas += estado.cerrada
+        self.assertGreater(cerradas, 0)
+
+        desactualizadas = bench_niebla.desactualizar(
+            mapa, completo, 0.5, random.Random(1))
+        self.assertGreater(desactualizadas, 0)
+        mal = 0
+        for i in range(mapa.cantidad_salas()):
+            puertas = mapa.sala_por_indice(i).puertas()
+            for j in range(len(puertas)):
+                estado = puertas.obtener(j).estado
+                mal += estado.cerrada and estado.recordada == ABIERTA
+        self.assertGreater(mal, 0)
+
+        centro = mapa.sala_por_indice(150)
+        parcial = bench_niebla.mapa_conocido_parcial(mapa, 40, nada,
+                                                     centro=centro)
+        self.assertEqual(parcial.exploradas, 40)
+        self.assertTrue(parcial.esta_explorada(centro))
+        parcial.validar(centro.id)
+
+    def test_fr229_copia_mas_grande_sin_copias_es_none(self):
+        from crypta.bench import bench_niebla
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            self.assertIsNone(bench_niebla.copia_mas_grande(carpeta))
+
+    def test_fr229_viajes_cumplen_los_minimos(self):
+        """Pares distintos, con ruta conocida, y al menos los viajes y los
+        pasos pedidos."""
+        from crypta.bench import bench_niebla
+        from crypta.bench.bench_cazador import CriptaSintetica
+
+        mapa = CriptaSintetica(300, semilla=5).mapa
+        conocimiento = bench_niebla.mapa_conocido_completo(mapa,
+                                                           lambda c: None)
+        pares, pasos = bench_niebla.viajes(mapa, conocimiento,
+                                           random.Random(3), 20, 200)
+        self.assertGreaterEqual(len(pares), 20)
+        self.assertGreaterEqual(pasos, 200)
+        vistos = []
+        for i in range(len(pares)):
+            origen, destino = pares.obtener(i)
+            self.assertIsNot(origen, destino)
+            self.assertNotIn((origen.id, destino.id), vistos)
+            vistos.append((origen.id, destino.id))
+
+    # HU5-2, HU5-3, HU5-7: secciones -------------------------------------
+
+    def test_hu5_7_fr233_corren_todas_sin_vista_ni_red(self):
+        for titulo in ("N1", "N2", "N3", "N4"):
+            self.assertIn(f"=== {titulo}", self.texto)
+        self.assertNotIn("ERROR", self.texto)
+        self.assertEqual(self.codigo, 0)
+
+    def test_hu5_2_fr230_n1_consultas(self):
+        texto = self.seccion("N1")
+        for palabra in ("Vector + EstadoPuerta", "ArbolBusqueda",
+                        "2000 / 200", "¿cumple?"):
+            self.assertIn(palabra, texto)
+
+    def test_hu5_2_fr230_n2_exploracion_y_reversion(self):
+        texto = self.seccion("N2")
+        for palabra in ("explorar", "deshacer", "copia por acción",
+                        "cambios", "¿cumple?"):
+            self.assertIn(palabra, texto)
+
+    def test_hu5_3_fr231_n3_paso_de_ir_a(self):
+        """(a), (b) y (c) con sus variantes; primer paso aparte; la (c)
+        usa la sintética de 300 salas porque no hay copias."""
+        texto = self.seccion("N3")
+        for palabra in ("(a)", "(b)", "(c)", "selectiva",
+                        "invalidación total", "recalcular", "p95",
+                        "primer paso", "buscaron", "invalidaciones",
+                        "asentadas", "sintética 300 salas", "¿cumple?"):
+            self.assertIn(palabra, texto)
+
+    def test_fr232_n4_sin_diferencias(self):
+        texto = self.seccion("N4")
+        self.assertIn("0 diferencias", texto)
+        self.assertNotIn("ERROR", texto)
+
+    # FR-232: sabotajes --------------------------------------------------
+
+    def test_fr232_n4_con_una_variante_saboteada_da_error(self):
+        """Una ruta que a veces elige otro paso: N4 imprime ERROR y el
+        --bench sale con código distinto de 0."""
+        from crypta.bench import bench_niebla
+        from crypta.Modelo.RutaConocida import RutaConocida
+
+        class Saboteada(RutaConocida):
+            def siguiente_paso(self, sala, destino):
+                elegida = super().siguiente_paso(sala, destino)
+                if elegida is not None and self.pasos % 5 == 0:
+                    puertas = sala.puertas(solo_abiertas=True)
+                    for i in range(len(puertas)):
+                        if puertas.obtener(i) is not elegida:
+                            return puertas.obtener(i)
+                return elegida
+
+        with tempfile.TemporaryDirectory() as carpeta, \
+                patch.object(bench_niebla, "CARPETA_COPIAS", carpeta):
+            texto, errores = bench_niebla.ejecutar_n4(rapido=True,
+                                                      fabrica=Saboteada)
+            self.assertGreater(errores, 0)
+            self.assertIn("ERROR", texto)
+
+            with patch.object(bench_niebla, "RutaConocida", Saboteada), \
+                    redirect_stdout(io.StringIO()):
+                codigo = bench.principal(["niebla_n4", "--rapido"])
+        self.assertNotEqual(codigo, 0)
+
+    def test_fr230_n2_entradas_que_revelan_distinto_dan_error(self):
+        """Si las entradas tocan las regiones conocidas, los dos mapas
+        registran cambios distintos: N2 imprime ERROR y el --bench sale
+        con código distinto de 0."""
+        from crypta.bench import bench_niebla
+
+        def cerca_del_centro(cripta, region, azar, cantidad):
+            # Cinco columnas al este del centro: en modo rápido queda fuera
+            # de la región pequeña (20 salas) y dentro de la grande (200).
+            salas = Vector()
+            sala = cripta.mapa.obtener_sala(
+                cripta.id_de(cripta.alto // 2, cripta.ancho // 2 + 5))
+            for _ in range(cantidad):
+                salas.agregar(sala)
+            return salas
+
+        with patch.object(bench_niebla, "elegir_entradas_n2",
+                          cerca_del_centro):
+            texto, errores = bench_niebla.ejecutar_n2(rapido=True)
+            self.assertGreater(errores, 0)
+            self.assertIn("ERROR", texto)
+
+            with redirect_stdout(io.StringIO()):
+                codigo = bench.principal(["niebla_n2", "--rapido"])
+        self.assertNotEqual(codigo, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
