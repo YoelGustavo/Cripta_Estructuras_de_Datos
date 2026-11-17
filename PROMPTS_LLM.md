@@ -682,3 +682,16 @@ research.md, data-model.md, contracts/vista.md y tasks.md:
 - Calendario: domingo, T001 y fase 1 (y la 2 si da tiempo); lunes, fases 2 a 4; martes en la mañana, fases 5 y 6; martes en la tarde, fase 7. El miércoles queda solo para entregar.
 
 **USO:** Pequeñas correcciones de ciertos sesgos en el task.md. y el analisis.
+
+**Prompt:** /speckit-implement Fase 1 de specs/002-niebla-ir-a/tasks.md (T002 a T005). T001 ya está hecha con los commits de spec y tareas; márcala. Primero las pruebas, que deben fallar; después el código. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Fase 1 del punto 002.
+
+**Prompt:** /speckit-implement Fase 2 de specs/002-niebla-ir-a/tasks.md (T006 a T017). Primero las pruebas, que deben fallar; después el código. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Fase 2 del punto 002.
+
+**Prompt:** /speckit-implement Fase 3 de specs/002-niebla-ir-a/tasks.md (T018 a T030). Primero las pruebas, que deben fallar; después el código. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Fase 3 del punto 002.
+

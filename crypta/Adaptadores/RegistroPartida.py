@@ -55,6 +55,14 @@ class RegistroPartida:
         with open(self.ruta, "a", encoding="utf-8") as archivo:
             archivo.write(comando.strip() + "\n")
 
+    def anotar_comentario(self, texto):
+        """Escribe `# <texto>` (capacidad 002, FR-222; research D10).
+        `leer_registro` lo ignora, así que `--replay` no lo ve (FR-223)."""
+        _revisar_una_linea(texto)
+
+        with open(self.ruta, "a", encoding="utf-8") as archivo:
+            archivo.write(f"# {texto.strip()}\n")
+
 
 def leer_registro(ruta):
     try:
@@ -121,7 +129,9 @@ def leer_registro(ruta):
         for linea in archivo:
             linea = linea.strip()
 
-            if linea:
+            # Después de `---`, una línea que empieza con `#` es un
+            # comentario (capacidad 002, FR-223): no es un comando.
+            if linea and not linea.startswith("#"):
                 comandos.encolar(linea)
 
     return encabezado, comandos

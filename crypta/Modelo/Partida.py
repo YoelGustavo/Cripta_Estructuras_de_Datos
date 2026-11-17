@@ -10,6 +10,7 @@ from crypta.Modelo.MapaConocido import MapaConocido
 from crypta.Modelo.Enemigo import CAZADOR
 from crypta.Modelo.Perseguidor import ATACAR, MOVER, Perseguidor
 from crypta.Modelo.Rastreador import salida_con_rastro_mas_fresco
+from crypta.Modelo.RutaConocida import RutaConocida
 from crypta.estructuras.Vector import Vector
 from crypta.Modelo.Bitacora import Bitacora
 
@@ -49,7 +50,8 @@ class AccionInvalida(Exception):
 
 # Atributos que `Partida.__deepcopy__` no copia: el mapa (va primero) y los
 # que la copia recibe fijos (research D3).
-_NO_SE_COPIAN = ("mapa", "_fichas", "_perseguidor", "al_ejecutar_evento")
+_NO_SE_COPIAN = ("mapa", "_fichas", "_perseguidor", "al_ejecutar_evento",
+                 "_ruta_conocida", "enemigos_al_entrar")
 
 
 class _EnemigoQuitado:
@@ -105,6 +107,14 @@ class Partida:
         # método ligado se reubica solo por el `memo`.
         self.conocimiento = MapaConocido(self.mapa, self._anotar)
 
+        # «ir a» (capacidad 002, research D7, D8). No son estado del juego:
+        # - `_ruta_conocida`: se crea con el primer `ir a` (`ruta_conocida`).
+        # - `enemigos_al_entrar`: enemigos vivos de la sala a la que entró el
+        #   último `mover`, contados antes de despertar a los dormidos. Así
+        #   un enemigo que entra después no detiene el viaje (HU3-16).
+        self._ruta_conocida = None
+        self.enemigos_al_entrar = 0
+
         # Las reglas del cazador y su búsqueda compartida (FR-013 a FR-019).
         # Se crea con el primer turno de un cazador: una partida sin
         # cazadores no paga nada. No es estado del juego (research D6).
@@ -156,6 +166,8 @@ class Partida:
         copia._fichas = self._fichas
         copia._perseguidor = None
         copia.al_ejecutar_evento = None
+        copia._ruta_conocida = None
+        copia.enemigos_al_entrar = 0
         return copia
 
     @property
@@ -274,6 +286,7 @@ class Partida:
             )
 
         self._empezar_accion("mover")
+        self.enemigos_al_entrar = self._enemigos_vivos(destino)
         self._avisar(f"Entras en {destino.nombre}.")
         self._poner_jugador_en(destino)
 
@@ -504,6 +517,12 @@ class Partida:
         if resultado and self._perseguidor is not None:
             self._perseguidor.invalidar()
 
+        # Lo mismo con la ruta de «ir a» (capacidad 002, FR-225): los
+        # deshacer del conocimiento ya avisan, pero se invalida por
+        # seguridad, como con el cazador.
+        if resultado and self._ruta_conocida is not None:
+            self._ruta_conocida.invalidar()
+
         if resultado:
             self._avisar("Usas un pergamino y retrocedes una acción.")
 
@@ -616,6 +635,25 @@ class Partida:
         )
 
         self._herir_jugador(danio)
+
+    def _enemigos_vivos(self, sala):
+        """Enemigos vivos de la sala, activos o dormidos."""
+        vivos = 0
+
+        for i in range(sala.cantidad_enemigos()):
+            if sala.enemigo_en(i).esta_vivo():
+                vivos += 1
+
+        return vivos
+
+    def ruta_conocida(self):
+        """La RutaConocida de «ir a» (capacidad 002); la crea la primera
+        vez y la registra como observador del conocimiento (research D6)."""
+        if self._ruta_conocida is None:
+            self._ruta_conocida = RutaConocida(self.mapa, self.conocimiento)
+            self.conocimiento.observador = self._ruta_conocida
+
+        return self._ruta_conocida
 
     def perseguidor(self):
         """El Perseguidor de esta partida; lo crea la primera vez y lo

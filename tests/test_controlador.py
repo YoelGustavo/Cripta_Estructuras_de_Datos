@@ -1837,5 +1837,118 @@ class TestComandoMapa(unittest.TestCase):
         self.assertEqual(errores, ["Comando desconocido: 'mapa'"])
 
 
+
+class _GestorEspia:
+    """Envuelve al GestorContenido real y anota las llamadas a
+    `garantizar_sala` y `precargar_async` (T023)."""
+
+    def __init__(self, real):
+        self._real = real
+        self.llamadas = []
+
+    def garantizar_sala(self, id_sala):
+        self.llamadas.append(("garantizar_sala", id_sala))
+        return self._real.garantizar_sala(id_sala)
+
+    def precargar_async(self, id_sala):
+        self.llamadas.append(("precargar_async", id_sala))
+        return self._real.precargar_async(id_sala)
+
+    def __getattr__(self, nombre):
+        return getattr(self._real, nombre)
+
+
+class TestIrAEnControlador(unittest.TestCase):
+    """T023 (capacidad 002): un viaje hace lo mismo que los `mover` escritos
+    a mano (FR-220, FR-222; principio V; research D8)."""
+
+    EXPLORAR = ["mover E", "mover E", "mover E", "mover O", "mover O",
+                "mover O"]
+
+    def jugar(self, comandos, carpeta):
+        from tests.ayudas_cripta import (
+            FuenteContadora, controlador_sintetico, datos_generales, sala,
+            salida)
+
+        esqueleto = [
+            sala(1, {"E": salida(2)}),
+            sala(2, {"O": salida(1), "E": salida(3, costo=250)}),
+            sala(3, {"O": salida(2, costo=250), "E": salida(4)}),
+            sala(4, {"O": salida(3)}),
+        ]
+        fuente = FuenteContadora(
+            esqueleto, generales=datos_generales(esqueleto, presupuesto=1000))
+        controlador = controlador_sintetico(fuente, carpeta, comandos)
+        espia = _GestorEspia(controlador.gestor_contenido)
+        controlador.gestor_contenido = espia
+        controlador.iniciar()
+        espia.cerrar()
+        return controlador, espia, fuente
+
+    @staticmethod
+    def leer_log(carpeta):
+        with open(os.path.join(carpeta, "partida.log"),
+                  encoding="utf-8") as archivo:
+            return archivo.read().splitlines()
+
+    def test_principio_v_mismas_llamadas_y_solicitudes(self):
+        from crypta.bench.oraculo_linea import serializar_estado
+
+        with (tempfile.TemporaryDirectory() as a,
+              tempfile.TemporaryDirectory() as b):
+            viaje, espia_viaje, fuente_viaje = self.jugar(
+                self.EXPLORAR + ["ir a 4"], a)
+            a_mano, espia_mano, fuente_mano = self.jugar(
+                self.EXPLORAR + ["mover E", "mover E", "mover E"], b)
+            log_viaje = self.leer_log(a)
+            log_mano = self.leer_log(b)
+
+        # El viaje llama a garantizar_sala antes del mover (research D8) y
+        # el mover vuelve a llamarla con la sala ya cargada: se comparan
+        # sin esa repetición inmediata.
+        def sin_repetir(llamadas):
+            resultado = []
+            for llamada in llamadas:
+                if not resultado or resultado[-1] != llamada:
+                    resultado.append(llamada)
+            return resultado
+
+        self.assertEqual(sin_repetir(espia_viaje.llamadas),
+                         sin_repetir(espia_mano.llamadas))
+        self.assertEqual(
+            [l for l in espia_viaje.llamadas if l[0] == "precargar_async"],
+            [l for l in espia_mano.llamadas if l[0] == "precargar_async"])
+        self.assertEqual(fuente_viaje.por_operacion, fuente_mano.por_operacion)
+
+        self.assertEqual([l for l in log_viaje if l != "# ir a 4"],
+                         log_mano)
+        self.assertIn("# ir a 4", log_viaje)
+        self.assertEqual(viaje.linea.cantidad_acciones(),
+                         a_mano.linea.cantidad_acciones())
+        self.assertEqual(serializar_estado(viaje.partida),
+                         serializar_estado(a_mano.partida))
+
+        mensajes = [llamada.args[0] for llamada
+                    in viaje.vista.mostrar_mensaje.call_args_list]
+        self.assertIn("Llegaste a la sala 4 en 3 pasos.", mensajes)
+
+    def test_fr216_un_rechazo_no_anota_nada(self):
+        with (tempfile.TemporaryDirectory() as a,
+              tempfile.TemporaryDirectory() as b):
+            con, _, _ = self.jugar(["esperar", "ir a 99", "ir a 1", "ir a x",
+                                    "esperar"], a)
+            sin, _, _ = self.jugar(["esperar", "esperar"], b)
+            self.assertEqual(self.leer_log(a), self.leer_log(b))
+
+        self.assertEqual(con.partida.reloj, sin.partida.reloj)
+        self.assertEqual(con.linea.cantidad_acciones(),
+                         sin.linea.cantidad_acciones())
+        errores = [llamada.args[0] for llamada
+                   in con.vista.mostrar_error.call_args_list]
+        self.assertEqual(errores[:2], ["No conoces la sala 99.",
+                                       "Ya estás en la sala 1."])
+        self.assertEqual(len(errores), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

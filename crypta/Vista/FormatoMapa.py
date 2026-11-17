@@ -13,6 +13,14 @@ Avistadas: <id>, <id>, ... | ninguna
 """
 
 from crypta.Modelo.Puerta import CERRADA
+from crypta.Modelo.Viaje import (
+    DANIO,
+    ENEMIGOS,
+    FIN_PARTIDA,
+    LLEGADA,
+    PASO_IMPOSIBLE,
+    SIN_RUTA,
+)
 
 
 def lineas_exploradas(mapa_resumido, sangria):
@@ -64,3 +72,33 @@ def formatear_mapa(mapa_resumido):
     lineas.extend(lineas_exploradas(mapa_resumido, "  "))
     lineas.append(linea_avistadas(mapa_resumido))
     return "\n".join(lineas) + "\n"
+
+
+def texto_motivo(viaje):
+    """Por qué se detuvo un viaje (FR-221; contracts/vista.md «Motivos de
+    parada»)."""
+    n = viaje.pasos
+    destino = viaje.destino.id
+    motivo = viaje.motivo
+
+    if motivo == LLEGADA:
+        return f"Llegaste a la sala {destino} en {n} pasos."
+
+    if motivo == ENEMIGOS:
+        return f"El viaje se detuvo: hay enemigos en esta sala ({n} pasos)."
+
+    if motivo == DANIO:
+        return f"El viaje se detuvo: recibiste daño ({n} pasos)."
+
+    if motivo == SIN_RUTA:
+        return ("El viaje se detuvo: ya no conoces una ruta abierta hasta la "
+                f"sala {destino} ({n} pasos).")
+
+    if motivo == PASO_IMPOSIBLE:
+        return ("El viaje se detuvo: no se pudo cargar la sala siguiente "
+                f"({n} pasos). {viaje.detalle}")
+
+    if motivo == FIN_PARTIDA:
+        return f"El viaje terminó con la partida ({n} pasos)."
+
+    raise ValueError(f"Motivo de parada desconocido: {motivo!r}")

@@ -1,4 +1,5 @@
 from crypta.Modelo.Partida import AccionInvalida
+from crypta.Modelo.Viaje import PASO_IMPOSIBLE, Viaje
 
 
 DIRECCIONES = "NSEO"
@@ -116,6 +117,69 @@ def leer_historia(texto):
             f"Instante inválido: '{argumento}' (un número entero desde 0)")
 
     return "instante", int(argumento)
+
+
+def leer_ir_a(texto):
+    """`ir a <sala>` → el id de la sala (contracts/cli.md). Tres palabras:
+    `ir`, `a` y la sala en dígitos ASCII, sin signo. Cualquier otra forma
+    es un `ComandoInvalido` (FR-216, HU3-3)."""
+    if not isinstance(texto, str):
+        raise ComandoInvalido("El comando debe ser texto")
+
+    partes = texto.strip().split()
+
+    if (len(partes) != 3 or partes[0].lower() != "ir"
+            or partes[1].lower() != "a"):
+        raise ComandoInvalido(
+            "Para viajar escribe 'ir a' y el número de una sala (ir a 7)")
+
+    if not _son_digitos(partes[2]):
+        raise ComandoInvalido(
+            f"Sala inválida: '{partes[2]}' (un número de sala, como 7)")
+
+    return int(partes[2])
+
+
+def ejecutar_ir_a(partida, id_destino, ejecutar_paso, garantizar_sala=None,
+                  anotar_comentario=None):
+    """La orden `ir a <id_destino>` (FR-216 a FR-222; research D8).
+    Devuelve el `Viaje` detenido, con su motivo.
+
+    - Valida con `Viaje.validar`: un rechazo es `AccionInvalida` y no
+      consume tiempo ni anota nada.
+    - Por cada paso: la dirección (sin ruta → SIN_RUTA); `garantizar_sala`
+      del destino **antes** del `mover` (solo su `RuntimeError` es
+      PASO_IMPOSIBLE, sin hacer el paso); antes del primer paso,
+      `anotar_comentario("ir a <id>")`; `ejecutar_paso("mover <d>")`, que en
+      el Controlador es exactamente un `mover` escrito a mano; y las
+      paradas de `Viaje.despues_del_paso`.
+    - Un error que sale de `ejecutar_paso` no es una parada: se propaga, y
+      los pasos ya hechos quedan hechos."""
+    viaje = Viaje.validar(partida, id_destino)
+
+    while not viaje.terminado:
+        direccion = viaje.siguiente_direccion(partida)
+
+        if direccion is None:
+            break
+
+        if garantizar_sala is not None:
+            puerta = partida.sala_actual().obtener_puerta(direccion)
+
+            try:
+                garantizar_sala(puerta.sala_destino)
+            except RuntimeError as error:
+                viaje.detener(PASO_IMPOSIBLE, str(error))
+                break
+
+        if viaje.pasos == 0 and anotar_comentario is not None:
+            anotar_comentario(f"ir a {id_destino}")
+
+        vida_antes = partida.jugador.vida
+        ejecutar_paso(f"mover {direccion}")
+        viaje.despues_del_paso(partida, vida_antes)
+
+    return viaje
 
 
 def _son_digitos(texto):

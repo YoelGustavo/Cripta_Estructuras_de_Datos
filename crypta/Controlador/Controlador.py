@@ -5,7 +5,9 @@ import shutil
 from crypta.Controlador.Comandos import (
     ComandoInvalido,
     ejecutar_comando,
+    ejecutar_ir_a,
     leer_historia,
+    leer_ir_a,
 )
 from crypta.Modelo.LineaDeTiempo import (
     K_POR_DEFECTO,
@@ -16,6 +18,7 @@ from crypta.Modelo.Reconstruccion import consultar
 from crypta.Modelo.Resumen import armar_mapa_resumido
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.Partida import AccionInvalida, Partida
+from crypta.Vista.FormatoMapa import texto_motivo
 from crypta.Vista.VistaConsola import VistaConsola
 from crypta.Adaptadores.GuardadoBinario import guardar_partida
 from crypta.Adaptadores.GuardadoBinario import ArchivoGuardado
@@ -256,33 +259,13 @@ class Controlador:
 
         
         try:
-            comando = self._traducir(texto)
-            self._asegurar_linea()
-            acciones_antes = self.partida.acciones_jugador
-            reloj_antes = self.partida.reloj
+            # `ir a` (capacidad 002, research D8): antes de traducir. Cada
+            # paso pasa por `_ejecutar_comando_jugador`, igual que un `mover`
+            # escrito a mano.
+            if nombre == "ir":
+                return self._ir_a(texto)
 
-            ejecutar_comando(
-                self.partida,
-                comando,
-                garantizar_sala=self.gestor_contenido.garantizar_sala,
-            )
-
-            # Lo mismo que Comandos.ejecutar_y_registrar (research D12): el
-            # comando se ejecutó, va a la línea de tiempo.
-            if self.linea is not None:
-                self.linea.registrar(self.partida, comando, acciones_antes,
-                                     reloj_antes)
-
-            if self.registro is not None:
-                self.registro.anotar(comando)
-
-            self._actualizar_fichas_en_uso()
-
-            if not self.partida.terminada:
-                self.gestor_contenido.precargar_async(
-                    self.partida.jugador.sala_actual
-                )
-
+            self._ejecutar_comando_jugador(self._traducir(texto))
             return True
 
         except (ComandoInvalido, AccionInvalida, ValueError) as error:
@@ -295,6 +278,55 @@ class Controlador:
             )
             return False
 
+    def _ejecutar_comando_jugador(self, comando):
+        """Un comando del jugador, ya traducido (research D8). Lo usan el
+        comando escrito a mano y cada paso de `ir a`, así un paso hace
+        exactamente lo mismo, incluidas las solicitudes a la red
+        (principio V). No atrapa errores: si el comando lanza, no se anota
+        en la línea de tiempo ni en el log."""
+        self._asegurar_linea()
+        acciones_antes = self.partida.acciones_jugador
+        reloj_antes = self.partida.reloj
+
+        ejecutar_comando(
+            self.partida,
+            comando,
+            garantizar_sala=self.gestor_contenido.garantizar_sala,
+        )
+
+        # Lo mismo que Comandos.ejecutar_y_registrar (research D12): el
+        # comando se ejecutó, va a la línea de tiempo.
+        if self.linea is not None:
+            self.linea.registrar(self.partida, comando, acciones_antes,
+                                 reloj_antes)
+
+        if self.registro is not None:
+            self.registro.anotar(comando)
+
+        self._actualizar_fichas_en_uso()
+
+        if not self.partida.terminada:
+            self.gestor_contenido.precargar_async(
+                self.partida.jugador.sala_actual
+            )
+
+    def _ir_a(self, texto):
+        """`ir a <sala>` (FR-216 a FR-222). Los errores salen hacia
+        `procesar_comando`, que los muestra como con cualquier comando."""
+        id_destino = leer_ir_a(texto)
+        anotar_comentario = (self.registro.anotar_comentario
+                             if self.registro is not None else None)
+
+        viaje = ejecutar_ir_a(
+            self.partida,
+            id_destino,
+            self._ejecutar_comando_jugador,
+            garantizar_sala=self.gestor_contenido.garantizar_sala,
+            anotar_comentario=anotar_comentario,
+        )
+
+        self.vista.mostrar_mensaje(texto_motivo(viaje))
+        return True
 
     def guardar(self, ruta=RUTA_GUARDADO):
         if self.registro is not None:
