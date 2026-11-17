@@ -249,6 +249,99 @@ class TestEstadoConElJugador(unittest.TestCase):
         self.assertEqual(estado.inventario.cantidad_pergaminos(), 2)
  
  
+class TestPergaminoNiebla(unittest.TestCase):
+    """T031 (capacidad 002): el pergamino revierte el conocimiento (FR-224,
+    FR-225; HU4-1, HU4-2; Apéndice B)."""
+
+    @staticmethod
+    def foto(partida):
+        """Estado de cada sala y `recordada` de cada salida."""
+        salas = partida.mapa.obtener_todas()
+        resultado = []
+
+        for i in range(len(salas)):
+            s = salas.obtener(i)
+            resultado.append((s.id, partida.conocimiento.estado(s)))
+            puertas = s.puertas()
+
+            for j in range(len(puertas)):
+                resultado.append(puertas.obtener(j).estado.recordada)
+
+        return (resultado, partida.conocimiento.exploradas,
+                partida.conocimiento.avistadas)
+
+    def test_hu4_1_fr224_la_antorcha_se_revierte_entera(self):
+        from tests.ayudas_cripta import (
+            catalogo, contenido, nuevo_jugador, partida_sintetica, sala,
+            salida)
+
+        antorcha = {"id": "itm_antorcha", "clase": "antorcha",
+                    "nombre": "Antorcha", "peso": 1, "valor": 1,
+                    "duracion": 1000}
+        # La 2 tiene 4 salidas: a la 1 y a las vecinas 3, 4 y 5; cada vecina
+        # tiene además una salida a una sala lejana (6, 7, 8).
+        esqueleto = [
+            sala(1, {"E": salida(2), "S": salida(9)}),
+            sala(2, {"O": salida(1), "N": salida(3), "E": salida(4),
+                     "S": salida(5, cerrada=True)}),
+            sala(3, {"S": salida(2), "N": salida(6)}),
+            sala(4, {"O": salida(2), "E": salida(7)}),
+            sala(5, {"N": salida(2, cerrada=True), "S": salida(8)}),
+            sala(6, {"S": salida(3)}),
+            sala(7, {"O": salida(4)}),
+            sala(8, {"N": salida(5)}),
+            sala(9, {"N": salida(1)}),
+        ]
+        partida = partida_sintetica(
+            esqueleto, [contenido(1, objetos=("itm_antorcha",))],
+            catalogo(antorcha), jugador=nuevo_jugador(pergaminos=1))
+        partida.recoger(0)
+        partida.usar()
+        antes = self.foto(partida)
+
+        partida.mover("E")
+        despues = self.foto(partida)
+        self.assertEqual(partida.conocimiento.exploradas, 5)  # 1, 2, 3, 4, 5
+        self.assertNotEqual(despues, antes)
+
+        self.assertTrue(partida.usar_pergamino())
+        self.assertEqual(self.foto(partida), antes)
+        self.assertEqual(partida.jugador.sala_actual, 1)
+
+    def test_hu4_2_fr225_el_viaje_no_se_reanuda(self):
+        from crypta.Controlador.Comandos import ejecutar_comando, ejecutar_ir_a
+        from crypta.Modelo.Viaje import ENEMIGOS
+        from tests.ayudas_cripta import (
+            catalogo, contenido, ficha_errante, nuevo_jugador,
+            partida_sintetica, sala, salida)
+
+        esqueleto = [sala(i, {**({"E": salida(i + 1)} if i < 5 else {}),
+                              **({"O": salida(i - 1)} if i > 1 else {})})
+                     for i in range(1, 6)]
+        partida = partida_sintetica(
+            esqueleto, [contenido(4, enemigos=(("e-4", "ent_errante"),))],
+            catalogo(ficha_errante("ent_errante", velocidad=1)),
+            jugador=nuevo_jugador(pergaminos=1))
+
+        for i in range(2, 6):
+            partida.conocimiento.explorar(partida.mapa.obtener_sala(i))
+
+        viaje = ejecutar_ir_a(partida, 5,
+                              lambda comando: ejecutar_comando(partida, comando))
+        self.assertEqual((viaje.motivo, viaje.pasos), (ENEMIGOS, 3))
+        self.assertEqual(partida.jugador.sala_actual, 4)
+        reloj_tras_dos = 200
+
+        self.assertTrue(partida.usar_pergamino())
+
+        # Solo se revierte el último paso; nada sigue moviéndose solo.
+        self.assertEqual(partida.jugador.sala_actual, 3)
+        self.assertEqual(partida.acciones_jugador, 2)
+        self.assertEqual(partida.reloj, reloj_tras_dos)
+        self.assertFalse(partida.mapa.obtener_sala(4).enemigo_en(0)
+                         .esta_activo())
+
+
 if __name__ == "__main__":
     unittest.main()
  

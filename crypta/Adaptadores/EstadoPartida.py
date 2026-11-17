@@ -15,7 +15,7 @@ from crypta.Modelo.Partida import (
     APAGAR_ANTORCHA, CIERRE_PUERTA, FIN_VELOCIDAD, PULSO_VENENO, REARME_TRAMPA,
     REGENERACION, TURNO_ENEMIGO, TURNO_JUGADOR, Partida,
 )
-from crypta.Modelo.Puerta import Puerta
+from crypta.Modelo.Puerta import ABIERTA, CERRADA, Puerta
 from crypta.Modelo.Sala import DIRECCIONES, Sala
 from crypta.Modelo.Trampa import Trampa
 from crypta.estructuras.ArbolBusqueda import ArbolBusqueda
@@ -100,6 +100,31 @@ def escribir_general(e, partida):
     for i in range(len(mensajes)):
         e.texto(None, mensajes.obtener(i))
     e.terminar_lista()
+
+    _escribir_conocimiento(e, partida.conocimiento)
+
+
+def _escribir_conocimiento(e, conocimiento):
+    """Formato 4 (capacidad 002, FR-226; contracts/guardado.md): las salas
+    no desconocidas, en orden de índice (= orden de id), con su estado (1
+    avistada, 2 explorada). Lo recordado de cada salida va con la sala."""
+    conocidas = Vector()
+
+    for sala, estado in conocimiento.salas_conocidas():
+        conocidas.agregar((sala.id, estado))
+
+    e.empezar_grupo("conocimiento")
+    e.empezar_lista("salas", len(conocidas))
+
+    for i in range(len(conocidas)):
+        id_sala, estado = conocidas.obtener(i)
+        e.empezar_grupo(None)
+        e.entero("sala", id_sala)
+        e.entero("estado", estado)
+        e.terminar_grupo()
+
+    e.terminar_lista()
+    e.terminar_grupo()
 
 
 def _escribir_jugador(e, jugador):
@@ -286,6 +311,11 @@ def escribir_sala(e, sala):
         # Formato 2 (FR-026): el costo de la salida. El rango de los
         # cazadores NO se escribe: sale de la ficha (contracts/guardado.md).
         e.entero("costo", puerta.costo)
+        # Formato 4 (capacidad 002, FR-226): lo que el jugador recuerda de la
+        # salida: 0 nunca observada, 1 abierta, 2 cerrada. Los dos lados
+        # escriben lo mismo (comparten el EstadoPuerta).
+        recordada = puerta.estado.recordada
+        e.entero("recordada", 0 if recordada is None else recordada)
         e.terminar_grupo()
 
     e.terminar_lista()
@@ -387,11 +417,17 @@ def leer_sala(l, fichas):
         llave = l.texto_opcional("llave")
         cierre_automatico = l.entero_opcional("cierre_automatico")
         costo = l.entero("costo")
+        recordada = l.entero("recordada")
 
         if costo < 1:
             raise ErrorGuardado(
                 f"Sala {sala.id}: la salida {direccion} tiene un costo "
                 f"inválido ({costo})")
+
+        if recordada not in (0, ABIERTA, CERRADA):
+            raise ErrorGuardado(
+                f"Sala {sala.id}: la salida {direccion} tiene un estado "
+                f"recordado inválido ({recordada})")
 
         puerta = Puerta(
             sala_destino=destino,
@@ -399,6 +435,7 @@ def leer_sala(l, fichas):
             llave=llave,
             cierre_automatico=cierre_automatico,
             costo=costo,
+            recordada=None if recordada == 0 else recordada,
         )
         l.terminar_grupo()
 
@@ -624,6 +661,17 @@ def leer_general(l):
         g.bitacora.agregar(l.texto(None))
     l.terminar_lista()
 
+    # Formato 4 (capacidad 002): (id de sala, estado) de las conocidas. Se
+    # validan al armar la partida (MapaConocido.restaurar).
+    g.conocimiento = Vector()
+    l.empezar_grupo("conocimiento")
+    for _ in range(l.empezar_lista("salas")):
+        l.empezar_grupo(None)
+        g.conocimiento.agregar((l.entero("sala"), l.entero("estado")))
+        l.terminar_grupo()
+    l.terminar_lista()
+    l.terminar_grupo()
+
     return g
 
 
@@ -845,6 +893,11 @@ def _armar(encabezado, g, salas_leidas, fichas):
     partida.enemigos_derrotados = g.derrotados
     partida.puerta_de_salida_abierta = g.puerta_de_salida_abierta
     partida.estado.reloj = g.reloj
+
+    # El mapa conocido (capacidad 002, FR-226): `restaurar` valida la lista
+    # y las reglas de FR-201 a FR-204; su ValueError lo convierte
+    # armar_partida en ErrorGuardado.
+    partida.conocimiento.restaurar(g.conocimiento, g.sala_inicial)
 
     try:
         partida.azar.setstate(g.azar)

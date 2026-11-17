@@ -208,9 +208,9 @@ el oráculo.
 
 **Punto de control**: el MVP funciona sin pergaminos, guardado ni replay.
 
-### Bloqueada por la 002
+### Hecha con la 002
 
-- [ ] T057 [HU1] **Bloqueada por la 002.** Escribir `TestMapaConocidoEnHistoria` en `tests/test_linea_tiempo.py` (FR-406; HU1-11) y completar la línea «Mapa conocido» del resumen en `crypta/Modelo/Resumen.py` y `crypta/Vista/FormatoResumen.py`. En un instante en que el jugador recordaba una puerta abierta que después observó cerrada, `historia` muestra el mapa conocido de ese instante, no el actual, y coincide con el oráculo. Se hace al implementar la 002, y **el plan de la 002 la debe incluir**. El mapa conocido entra en el historial (constitución VII), así que la reconstrucción de T019 lo deshace sin cambios en el sello. Hasta entonces, el resumen imprime la línea fija de contracts/resumen.md.
+- [X] T057 [HU1] Escribir `TestMapaConocidoEnHistoria` en `tests/test_linea_tiempo.py` (FR-406; HU1-11) y completar la línea «Mapa conocido» del resumen en `crypta/Modelo/Resumen.py` y `crypta/Vista/FormatoResumen.py`. En un instante en que el jugador recordaba una puerta abierta que después observó cerrada, `historia` muestra el mapa conocido de ese instante, no el actual, y coincide con el oráculo. Se hizo con la 002 (T033, T034 y T038 de specs/002-niebla-ir-a/tasks.md). El mapa conocido entra en el historial (constitución VII), así que la reconstrucción de T019 lo deshace sin cambios en el sello.
 
 ---
 
@@ -406,7 +406,7 @@ por defecto (contracts/bench.md).
 - **HU4 (fase 6)**: depende de HU1 y HU2 (el ajuste se guarda).
 - **HU5 (fase 7)**: T042 depende de T021 y T030; T043–T048 dependen de HU2; T050 depende de T001 y de T049.
 - **Cierre (fase 8)**: depende de T050.
-- **T057**: bloqueada por la 002; se hace al implementar la 002 y no bloquea la entrega de esta capacidad, que mientras tanto muestra la línea fija del mapa conocido.
+- **T057**: hecha con la 002 (T033, T034 y T038 de esa capacidad).
 
 ### Dentro de cada historia
 
@@ -497,9 +497,8 @@ no se puede omitir: el K por defecto se defiende con ella.
   (HU1-2, HU1-3), T016 (HU1-8), T024 (HU2-1), T029 (HU3-2) y T033 (HU4-3).
 - Comprobar que cada prueba falla antes de implementar.
 - Nunca usar `cache/` en las pruebas: siempre un `AlmacenDisco` en una carpeta temporal.
-- HU1-11 (mapa conocido en el instante consultado) es **T057, bloqueada por la 002**: se hace al
-  implementar la 002 y el plan de la 002 la debe incluir. Hasta entonces el resumen muestra la línea
-  fija «Mapa conocido: no disponible (capacidad 002)» (supuesto de la spec).
+- HU1-11 (mapa conocido en el instante consultado) es **T057**, hecha con la 002: el resumen
+  muestra el mapa conocido del estado consultado (T033, T034 y T038 de la 002).
 - T050 (bench de la 004) y T054 (`PROMPTS_LLM.md`) las hace el grupo.
 - Si una tarea encuentra un caso que la spec no cubre, se para y se corrige primero la spec
   (principio VIII).

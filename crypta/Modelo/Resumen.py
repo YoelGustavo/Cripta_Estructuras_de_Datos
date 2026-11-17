@@ -110,7 +110,8 @@ class Resumen:
       `ocupados`, `capacidad`, `pergaminos`.
     - `enemigos`: `Vector` de `EnemigoResumido` con los activos y vivos de la
       sala, en el orden de la sala.
-    - `mapa_conocido`: lo define la capacidad 002; mientras no exista, None.
+    - `mapa_conocido`: `MapaResumido` de ese estado (capacidad 002,
+      FR-228).
     - `aviso`: texto de FR-415, o None."""
 
     def __init__(self):
@@ -156,6 +157,7 @@ def armar_resumen(partida, pedido, aviso=None):
     _efectos(partida, resumen.efectos)
     _inventario(jugador.inventario, resumen)
     _enemigos(sala, resumen.enemigos)
+    resumen.mapa_conocido = armar_mapa_resumido(partida)
     return resumen
 
 

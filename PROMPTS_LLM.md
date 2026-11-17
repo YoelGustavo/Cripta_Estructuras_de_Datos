@@ -695,3 +695,7 @@ research.md, data-model.md, contracts/vista.md y tasks.md:
 
 **USO:** Fase 3 del punto 002.
 
+**Prompt:** /speckit-implement Fase 4 de specs/002-niebla-ir-a/tasks.md (T031 a T039). Primero las pruebas, que deben fallar; después el código. Detente en su punto de control, marca las tareas hechas y no hagas commit.
+
+**USO:** Fase 4 del punto 002.
+

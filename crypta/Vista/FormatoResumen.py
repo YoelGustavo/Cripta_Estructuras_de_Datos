@@ -4,7 +4,7 @@ Función pura: el mismo texto para `historia`, para `--replay … --hasta` y
 después de cargar. No incluye el reloj actual de la partida.
 """
 
-MAPA_NO_DISPONIBLE = "no disponible (capacidad 002)"
+from crypta.Vista.FormatoMapa import lineas_mapa
 
 
 def formatear_resumen(resumen):
@@ -32,8 +32,12 @@ def formatear_resumen(resumen):
             enemigo = resumen.enemigos.obtener(i)
             lineas.append(f"  {enemigo.id_instancia} {enemigo.nombre}: vida {enemigo.vida}")
 
-    mapa = MAPA_NO_DISPONIBLE if resumen.mapa_conocido is None else resumen.mapa_conocido
-    lineas.append(f"Mapa conocido: {mapa}")
+    # El mapa conocido de ese estado (capacidad 002, FR-228; contracts/vista.md
+    # «Resumen»): las líneas de `mapa` sin encabezado, con dos espacios.
+    mapa = resumen.mapa_conocido
+    lineas.append(f"Mapa conocido: {len(mapa.exploradas)} exploradas, "
+                  f"{len(mapa.avistadas)} avistadas")
+    lineas.extend(lineas_mapa(mapa, "  "))
 
     if resumen.aviso is not None:
         lineas.append(f"Aviso: {resumen.aviso}")

@@ -24,6 +24,7 @@ from tests.ayudas_cripta import (
     ficha_enemigo, nuevo_jugador, partida_con_pergaminos, partida_sintetica,
     sala, salida, FuenteQueFalla,
 )
+from tests.test_replay_hasta import ConReplay
 
 
 class _Caja:
@@ -936,6 +937,203 @@ def _jugar_y_registrar(jugada, comandos):
     from crypta.Controlador.Comandos import ejecutar_y_registrar
     for comando in comandos:
         ejecutar_y_registrar(jugada.partida, jugada.linea, comando, jugada.garantizar)
+
+
+# ---------------------------------------------------------------------------
+# Capacidad 002: el mapa conocido en la línea de tiempo (T033, T034; T057
+# de la 004)
+# ---------------------------------------------------------------------------
+
+def esqueleto_puerta_que_se_cierra():
+    """1 —E→ 2 con una puerta cerrada que se cierra sola 500 después de
+    abrirse."""
+    return [sala(1, {"E": salida(2, cerrada=True, cierre_automatico=500)}),
+            sala(2, {"O": salida(1, cerrada=True, cierre_automatico=500)})]
+
+
+# Se abre en el instante 300 (abierta a la vista desde el 350); se cierra
+# sola en el 800 y el jugador la ve cerrada en la decisión del 850.
+COMANDOS_PUERTA = (["esperar"] * 3 + ["abrir E"] + ["esperar"] * 6)
+LINEA_ABIERTA = "  1 Sala 1\n    E: sala 2, costo 100, abierta\n"
+LINEA_CERRADA = "  1 Sala 1\n    E: sala 2, costo 100, cerrada\n"
+
+
+def jugada_de_la_puerta(k=3):
+    partida = partida_sintetica(esqueleto_puerta_que_se_cierra())
+    return Jugada(k, partida=partida, comandos=list(COMANDOS_PUERTA))
+
+
+def encabezado_de(partida):
+    from crypta.Adaptadores.RegistroPartida import Encabezado
+
+    return Encabezado("cripta-prueba", "v-prueba", "c-prueba", partida.semilla,
+                      partida.jugador.nombre)
+
+
+def consultar_en(linea, partida, t):
+    _, _, consultar = _linea_y_consulta()
+    objetivo = linea.ubicar_instante(t, partida.reloj)
+    return formatear(consultar(linea, objetivo, partida, ejecutar_comando))
+
+
+class TestMapaConocidoEnHistoria(unittest.TestCase):
+    """T033 (T057 de la 004; HU1-11 de la 004; FR-228 y HU4-5 de la 002):
+    `historia` muestra el mapa conocido del instante consultado, no el
+    actual."""
+
+    def entrada_de_accion(self, jugada, k):
+        return [jugada.oraculo.obtener(i) for i in range(len(jugada.oraculo))
+                if jugada.oraculo.obtener(i).pedido == f"acción #{k}"][-1]
+
+    def test_fr228_historia_muestra_lo_que_se_recordaba(self):
+        jugada = jugada_de_la_puerta()
+        self.assertEqual(jugada.partida.reloj, 950)
+
+        self.assertIn(LINEA_ABIERTA, jugada.consultar("instante 500"))
+        self.assertIn(LINEA_CERRADA, jugada.consultar("instante 900"))
+
+        # Contra el oráculo, en los pedidos que el oráculo de la 004 registra
+        # (decisiones y eventos): en la decisión #6 (instante 450) se
+        # recordaba abierta; en el 800 la puerta ya se cerró sola, pero el
+        # jugador todavía no la vio (la observa en la decisión del 850).
+        texto = jugada.consultar("acción #6")
+        self.assertEqual(texto, self.entrada_de_accion(jugada, 6).texto)
+        self.assertIn(LINEA_ABIERTA, texto)
+
+        texto = jugada.consultar("instante 800")
+        self.assertEqual(texto, jugada.esperado_en_instante(800))
+        self.assertIn(LINEA_ABIERTA, texto)
+
+        texto = jugada.consultar("acción #10")
+        self.assertEqual(texto, self.entrada_de_accion(jugada, 10).texto)
+        self.assertIn(LINEA_CERRADA, texto)
+
+        # El resumen del estado actual la muestra cerrada.
+        from crypta.Modelo.Resumen import armar_resumen, pedido_instante
+        actual = formatear(armar_resumen(jugada.partida, pedido_instante(950)))
+        self.assertIn(LINEA_CERRADA, actual)
+
+    def test_fr228_igual_tras_guardar_y_cargar(self):
+        import os
+        import tempfile
+
+        from crypta.Adaptadores.GuardadoBinario import (
+            ArchivoGuardado, guardar_partida)
+        from crypta.Adaptadores.GuardadoJSON import (
+            ArchivoGuardadoJSON, guardar_partida_json)
+
+        jugada = jugada_de_la_puerta()
+        esperado = jugada.consultar("instante 500")
+
+        for guardar, Archivo in ((guardar_partida, ArchivoGuardado),
+                                 (guardar_partida_json, ArchivoGuardadoJSON)):
+            with self.subTest(archivo=Archivo.__name__), \
+                    tempfile.TemporaryDirectory() as carpeta:
+                ruta = os.path.join(carpeta, "partida")
+                guardar(jugada.partida, ruta, encabezado_de(jugada.partida),
+                        linea=jugada.linea)
+                archivo = Archivo(ruta)
+                cargada = archivo.cargar_partida(jugada.partida._fichas)
+
+                self.assertEqual(consultar_en(archivo.linea, cargada, 500),
+                                 esperado)
+
+
+class TestConocimientoTrasCargar(unittest.TestCase):
+    """T034 (FR-224, FR-228; research D3): después de cargar, consultar no
+    daña el conocimiento de los puntos de control. Fallaría si el
+    MapaConocido guardara `historial.registrar_cambio` en vez de
+    `partida._anotar`: `leer_linea` le pone a cada punto un historial nuevo
+    por asignación, y los cambios de conocimiento de la consulta irían a un
+    historial que nadie deshace."""
+
+    @staticmethod
+    def foto(partida):
+        salas = partida.mapa.obtener_todas()
+        resultado = []
+
+        for i in range(len(salas)):
+            s = salas.obtener(i)
+            resultado.append((s.id, partida.conocimiento.estado(s)))
+            puertas = s.puertas()
+
+            for j in range(len(puertas)):
+                resultado.append(puertas.obtener(j).estado.recordada)
+
+        return resultado
+
+    def fotos_de_los_puntos(self, linea):
+        return [self.foto(linea.puntos.obtener(i).partida)
+                for i in range(len(linea.puntos))]
+
+    def test_fr224_research_d3_consultar_dos_veces_tras_cargar(self):
+        import os
+        import tempfile
+
+        from crypta.Adaptadores.GuardadoBinario import (
+            ArchivoGuardado, guardar_partida)
+
+        esqueleto = [sala(i, {**({"E": salida(i + 1)} if i < 8 else {}),
+                              **({"O": salida(i - 1)} if i > 1 else {})})
+                     for i in range(1, 9)]
+        partida = partida_sintetica(esqueleto)
+        jugada = Jugada(2, partida=partida,
+                        comandos=["mover E"] * 7 + ["esperar"])
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "partida.cripta")
+            guardar_partida(partida, ruta, encabezado_de(partida),
+                            linea=jugada.linea)
+            archivo = ArchivoGuardado(ruta)
+            cargada = archivo.cargar_partida(partida._fichas)
+
+        linea = archivo.linea
+        self.assertGreater(len(linea.puntos), 2)
+        antes = self.fotos_de_los_puntos(linea)
+
+        for t in (350, 550):
+            with self.subTest(t=t):
+                primera = consultar_en(linea, cargada, t)
+                segunda = consultar_en(linea, cargada, t)
+
+                self.assertEqual(primera, segunda)
+                self.assertEqual(primera, jugada.consultar(f"instante {t}"))
+                self.assertEqual(self.fotos_de_los_puntos(linea), antes)
+
+
+class TestMapaConocidoEnReplayHasta(ConReplay):
+    """T033: `--replay … --hasta 500` muestra lo mismo que `historia 500`
+    en la partida (FR-228; HU1-11 de la 004)."""
+
+    cripta = "c-niebla"
+
+    def setUp(self):
+        import os
+
+        from crypta.Adaptadores.AlmacenDisco import AlmacenDisco
+        from tests.ayudas_cripta import contenidos_vacios, datos_generales
+
+        super().setUp()
+        esqueleto = esqueleto_puerta_que_se_cierra()
+        self.almacen = AlmacenDisco(os.path.join(self.carpeta, "cache"))
+        self.almacen.guardar_catalogo("cat-1", catalogo())
+        self.almacen.guardar_cripta(
+            self.cripta, "v1", esqueleto, contenidos_vacios(esqueleto),
+            datos_generales=datos_generales(esqueleto, presupuesto=1000,
+                                            version="v1",
+                                            cripta_id=self.cripta),
+            llaves={"llaves": []})
+
+    def test_fr228_replay_hasta_500(self):
+        _, textos = self.sesion_con_historia(COMANDOS_PUERTA
+                                             + ["historia 500"])
+        self.assertEqual(len(textos), 1)
+        self.assertIn(LINEA_ABIERTA, textos[0])
+
+        codigo, salida_main = self.hasta(500)
+
+        self.assertEqual(codigo, 0)
+        self.assertTrue(salida_main.endswith(textos[0]), salida_main)
 
 
 if __name__ == "__main__":

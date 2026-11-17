@@ -15,7 +15,8 @@ from crypta.estructuras.Vector import Vector
 
 # 2: cada puerta guarda su costo (capacidad 001, FR-026).
 # 3: el grupo `linea` con la línea de tiempo (capacidad 004, FR-417).
-FORMATO_JSON = 3
+# 4: el mapa conocido (capacidad 002, FR-226, FR-227).
+FORMATO_JSON = 4
 
 
 def guardar_partida_json(partida, ruta, encabezado, linea=None):

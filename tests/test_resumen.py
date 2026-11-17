@@ -68,7 +68,13 @@ TEXTO_ESPERADO = (
     "Enemigos en la sala:\n"
     "  a-1 ent_errante: vida 12\n"
     "  a-2 ent_rastreador: vida 7\n"
-    "Mapa conocido: no disponible (capacidad 002)\n"
+    # Capacidad 002 (FR-228; ajuste de SC-207): la línea fija «no
+    # disponible» pasa a ser el mapa conocido de ese estado
+    # (contracts/vista.md «Resumen»).
+    "Mapa conocido: 1 exploradas, 1 avistadas\n"
+    "  1 Sala 1\n"
+    "    E: sala 2, costo 100, abierta\n"
+    "  Avistadas: 2\n"
 )
 
 
@@ -78,7 +84,7 @@ class TestTextoDelResumen(unittest.TestCase):
     def test_fr406_texto_completo(self):
         """Orden fijo de efectos (veneno, antorcha, velocidad), inventario en
         orden real con equipados y el actual, pergaminos, solo los enemigos
-        activos y vivos, y la línea fija del mapa conocido (capacidad 002)."""
+        activos y vivos, y el mapa conocido (capacidad 002, FR-228)."""
         partida = partida_armada()
         texto = formatear_resumen(armar_resumen(partida, pedido_instante(0)))
         self.assertEqual(texto, TEXTO_ESPERADO)
@@ -97,7 +103,10 @@ class TestTextoDelResumen(unittest.TestCase):
             "Inventario (0/10):\n"
             "  Pergaminos: 0\n"
             "Enemigos en la sala: ninguno\n"
-            "Mapa conocido: no disponible (capacidad 002)\n"
+            # Capacidad 002 (FR-228; ajuste de SC-207).
+            "Mapa conocido: 1 exploradas, 0 avistadas\n"
+            "  1 Sala 1\n"
+            "  Avistadas: ninguna\n"
         ))
 
     def test_fr406_no_muestra_el_reloj_actual(self):

@@ -17,7 +17,10 @@ MAGIA = b"CRPT"
 # 3: el bloque `linea` con la línea de tiempo (capacidad 004, FR-417). Va
 #    entre la última sala y el índice: empieza donde terminan las salas y
 #    llega hasta el índice, así la cabecera no cambia (contracts/guardado.md).
-FORMATO_GUARDADO = 3
+# 4: el mapa conocido: `recordada` en cada salida y el grupo `conocimiento`
+#    en lo general (capacidad 002, FR-226, FR-227). Los formatos 1 a 3 se
+#    rechazan; nunca se migran.
+FORMATO_GUARDADO = 4
 
 _INICIO = struct.Struct("<4sH")
 _CABECERA = struct.Struct("<HIIQI")

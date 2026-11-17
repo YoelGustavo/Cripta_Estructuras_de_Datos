@@ -27,6 +27,16 @@ AVISTADA = 1
 EXPLORADA = 2
 
 
+def _recorrer(lista):
+    """Los elementos de un `Vector` (lo que arma el guardado) o de
+    cualquier iterable."""
+    if isinstance(lista, Vector):
+        for i in range(len(lista)):
+            yield lista.obtener(i)
+    else:
+        yield from lista
+
+
 class MapaConocido:
     """Uno por `Partida` (`partida.conocimiento`). Es estado del juego.
 
@@ -200,7 +210,7 @@ class MapaConocido:
         indice = 0
         id_anterior = None
 
-        for elemento in lista:
+        for elemento in _recorrer(lista):
             try:
                 id_sala, estado = elemento
             except (TypeError, ValueError):

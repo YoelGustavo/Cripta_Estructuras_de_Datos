@@ -1922,16 +1922,20 @@ class TestGuardadoConCazadores(ConCarpetaTemporal):
 
         # Capacidad 004 (FR-419, T034): el formato subió a 3 con la línea de
         # tiempo; el 1 sigue rechazándose, ahora como «formato incompatible».
-        self.assertEqual(FORMATO_GUARDADO, 3)
+        # Capacidad 002 (FR-227; ajuste de SC-207): sube a 4 con el mapa
+        # conocido.
+        self.assertEqual(FORMATO_GUARDADO, 4)
         self.assertEqual(
             str(error.exception),
             "Formato incompatible: la partida se guardó con la versión 1 del "
-            "formato y este programa lee la versión 3; no se puede cargar")
+            "formato y este programa lee la versión 4; no se puede cargar")
 
     def test_fr026_el_formato_json_tambien_subio(self):
         """FR-026: el JSON del --bench sube de versión y rechaza el 1."""
         from crypta.Adaptadores.GuardadoJSON import FORMATO_JSON
-        self.assertEqual(FORMATO_JSON, 3)          # capacidad 004 (T034)
+        # Capacidad 004 (T034) lo subió a 3; la 002 a 4 (FR-227; ajuste de
+        # SC-207).
+        self.assertEqual(FORMATO_JSON, 4)
 
         guardar_partida_json(self.partida, self.ruta("p.json"),
                              self.encabezado)
@@ -2192,10 +2196,11 @@ class TestLineaGuardada(ConCarpetaTemporal):
         return binario, documento_json
 
     def test_fr419_hu4_3_hu4_4_formatos_anteriores_se_rechazan(self):
-        """HU4-3 (Apéndice B) y HU4-4: un archivo de P1 (formato 1) o de la
-        001 (formato 2) se rechaza con «formato incompatible», en binario y
-        en JSON."""
-        for viejo in (1, 2):
+        """HU4-3 (Apéndice B) y HU4-4: un archivo de P1 (formato 1), de la
+        001 (formato 2) o de la 004 (formato 3, sin mapa conocido; capacidad
+        002, FR-227 y SC-207) se rechaza con «formato incompatible», en
+        binario y en JSON."""
+        for viejo in (1, 2, 3):
             binario, documento_json = self.archivo_de_otro_formato(viejo, f"f{viejo}")
             for ruta, Archivo in ((binario, ArchivoGuardado),
                                   (documento_json, ArchivoGuardadoJSON)):
@@ -2282,6 +2287,148 @@ class TestLineaGuardada(ConCarpetaTemporal):
         reloj_que_baja.entradas = entradas
         with self.assertRaises(Error):
             guardar_y_cargar(reloj_que_baja)
+
+
+
+# ======================================================================
+# Capacidad 002: el mapa conocido en el archivo de partida (formato 4)
+# ======================================================================
+
+def cuadricula_niebla(lado=6):
+    """`lado` × `lado` salas (1 a lado²) unidas con sus vecinas N, S, E, O."""
+    salas = []
+
+    for i in range(1, lado * lado + 1):
+        fila, columna = (i - 1) // lado, (i - 1) % lado
+        salidas = {}
+
+        if columna < lado - 1:
+            salidas["E"] = salida(i + 1, costo=50 + columna)
+        if columna > 0:
+            salidas["O"] = salida(i - 1, costo=50 + columna - 1)
+        if fila < lado - 1:
+            salidas["S"] = salida(i + lado)
+        if fila > 0:
+            salidas["N"] = salida(i - lado)
+
+        salas.append(sala(i, salidas))
+
+    return salas
+
+
+def foto_conocimiento(partida):
+    """(id, estado) de cada sala y (dirección, recordada, cerrada) de cada
+    salida, en orden del mapa; y los contadores."""
+    resultado = []
+    salas = partida.mapa.obtener_todas()
+
+    for i in range(len(salas)):
+        s = salas.obtener(i)
+        resultado.append((s.id, partida.conocimiento.estado(s)))
+        puertas = s.puertas()
+
+        for j in range(len(puertas)):
+            puerta = puertas.obtener(j)
+            resultado.append((s.direccion_de(puerta), puerta.estado.recordada,
+                              puerta.esta_cerrada()))
+
+    return (resultado, partida.conocimiento.exploradas,
+            partida.conocimiento.avistadas)
+
+
+class TestConocimientoGuardado(ConCarpetaTemporal):
+    """T032 (capacidad 002): el mapa conocido se guarda y se carga (FR-226,
+    FR-227; HU4-3, HU4-4; contracts/guardado.md)."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.ayudas_cripta import partida_sintetica
+
+        self.partida = partida_sintetica(cuadricula_niebla())
+        mapa = self.partida.mapa
+
+        # 30 salas exploradas (todas menos la última fila)…
+        for i in range(1, 31):
+            self.partida.conocimiento.explorar(mapa.obtener_sala(i))
+
+        # …y puertas cuyo estado real ya no es el recordado.
+        for id_sala, direccion in ((1, "E"), (8, "S"), (15, "O"), (22, "N"),
+                                   (29, "E")):
+            mapa.obtener_sala(id_sala).obtener_puerta(direccion).cerrar()
+
+        self.encabezado = Encabezado(CRIPTA_ID, VERSION_CRIPTA, "c",
+                                     self.partida.semilla,
+                                     self.partida.jugador.nombre)
+
+    def guardar_y_cargar(self, guardar, Archivo):
+        ruta = self.ruta("conocido.partida")
+        guardar(self.partida, ruta, self.encabezado)
+        return Archivo(ruta).cargar_partida(self.partida._fichas)
+
+    def test_fr226_hu4_3_identico_tras_guardar_y_cargar(self):
+        esperado = foto_conocimiento(self.partida)
+        self.assertEqual(esperado[1], 30)
+
+        for nombre, guardar, Archivo in FORMATOS:
+            with self.subTest(formato=nombre):
+                cargada = self.guardar_y_cargar(guardar, Archivo)
+                self.assertEqual(foto_conocimiento(cargada), esperado)
+                cargada.conocimiento.validar(cargada.id_sala_inicial)
+
+    def documento_json(self):
+        ruta = self.ruta("conocido.json")
+        guardar_partida_json(self.partida, ruta, self.encabezado)
+        with open(ruta, encoding="utf-8") as archivo:
+            return ruta, json.load(archivo)
+
+    def cargar_documento(self, ruta, documento):
+        with open(ruta, "w", encoding="utf-8") as archivo:
+            json.dump(documento, archivo)
+        return ArchivoGuardadoJSON(ruta).cargar_partida(self.partida._fichas)
+
+    def test_fr226_formato_del_archivo(self):
+        """contracts/guardado.md: `recordada` 0, 1 o 2 en cada salida y la
+        lista de salas no desconocidas en orden de id."""
+        _, documento = self.documento_json()
+
+        salas = documento["general"]["conocimiento"]["salas"]
+        self.assertEqual([s["sala"] for s in salas], list(range(1, 37)))
+        self.assertEqual([s["estado"] for s in salas], [2] * 30 + [1] * 6)
+
+        recordadas = [p["recordada"] for s in documento["salas"]
+                      for p in s["puertas"]]
+        self.assertEqual(set(recordadas), {0, 1})
+
+    def test_fr226_lados_con_recordada_distinta_es_error(self):
+        ruta, documento = self.documento_json()
+
+        for s in documento["salas"]:
+            if s["id"] == 2:
+                for p in s["puertas"]:
+                    if p["direccion"] == "O":
+                        p["recordada"] = 2
+
+        with self.assertRaises(ErrorGuardado):
+            self.cargar_documento(ruta, documento)
+
+    def test_fr226_conocimiento_invalido_es_error(self):
+        ruta, documento = self.documento_json()
+        # Una avistada que no es destino de ninguna explorada.
+        documento["general"]["conocimiento"]["salas"] = [
+            {"sala": 1, "estado": 2}, {"sala": 2, "estado": 1},
+            {"sala": 7, "estado": 1}, {"sala": 20, "estado": 1}]
+
+        with self.assertRaises(ErrorGuardado) as error:
+            self.cargar_documento(ruta, documento)
+
+        self.assertIn("20", str(error.exception))
+
+    def test_fr226_recordada_fuera_de_rango_es_error(self):
+        ruta, documento = self.documento_json()
+        documento["salas"][0]["puertas"][0]["recordada"] = 3
+
+        with self.assertRaises(ErrorGuardado):
+            self.cargar_documento(ruta, documento)
 
 
 if __name__ == "__main__":
