@@ -13,6 +13,7 @@ from crypta.Modelo.LineaDeTiempo import (
     LineaDeTiempo,
 )
 from crypta.Modelo.Reconstruccion import consultar
+from crypta.Modelo.Resumen import armar_mapa_resumido
 from crypta.Modelo.DatosInvalidos import DatosInvalidos
 from crypta.Modelo.Partida import AccionInvalida, Partida
 from crypta.Vista.VistaConsola import VistaConsola
@@ -172,6 +173,13 @@ class Controlador:
         # ejecutar_comando ni se anota en partida.log.
         if nombre == "historia":
             return self._historia(texto)
+
+        # `mapa` (capacidad 002, FR-211): tampoco es un comando del juego;
+        # no gasta tiempo, no va a partida.log, ni a la línea de tiempo, ni a
+        # la red. Con argumentos sigue el camino de un comando desconocido.
+        if nombre == "mapa" and len(partes) == 1:
+            self.vista.mostrar_mapa(armar_mapa_resumido(self.partida))
+            return True
 
         if nombre == "ayuda" and len(partes) == 1:
             self.vista.mostrar_ayuda()

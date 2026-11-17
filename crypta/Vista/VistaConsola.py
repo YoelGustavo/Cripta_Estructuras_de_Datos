@@ -1,6 +1,8 @@
 
 from crypta.Modelo.Enemigo import CAZADOR
+from crypta.Modelo.Puerta import CERRADA
 from crypta.Modelo.Sala import DIRECCIONES
+from crypta.Vista.FormatoMapa import formatear_mapa
 from crypta.Vista.FormatoResumen import formatear_resumen
 
 
@@ -20,6 +22,10 @@ class VistaConsola:
         que `--replay … --hasta`. El reloj actual no va en él."""
         print(formatear_resumen(resumen), end="")
 
+    def mostrar_mapa(self, mapa_resumido):
+        """El mapa conocido del comando `mapa` (capacidad 002, FR-210)."""
+        print(formatear_mapa(mapa_resumido), end="")
+
     def mostrar_ayuda(self):
         print("\nCOMANDOS DISPONIBLES")
         print("  mover N/S/E/O       Moverse")
@@ -37,6 +43,8 @@ class VistaConsola:
         print("  ordenar nombre/peso/valor")
         print("  pergamino           Retroceder una acción")
         print("  historia <t> | #k   Ver cómo estaba la partida")
+        print("  mapa                Ver el mapa conocido")
+        print("  ir a <sala>         Viajar a una sala explorada")
         print("  puntajes            Ver la tabla de puntajes")
         print("  guardar             Guardar partida")
         print("  cargar              Cargar partida")
@@ -82,9 +90,13 @@ class VistaConsola:
                 continue
 
             hay_salidas = True
-            estado = "Cerrada" if puerta.esta_cerrada() else "Abierta"
 
-            if puerta.esta_cerrada() and puerta.requiere_llave():
+            # Lo recordado, no lo real (FR-207). El jugador observa su sala
+            # antes de cada decisión (FR-204), así que en pantalla coincide.
+            cerrada = puerta.estado.recordada == CERRADA
+            estado = "Cerrada" if cerrada else "Abierta"
+
+            if cerrada and puerta.requiere_llave():
                 estado += f", necesita {puerta.llave}"
 
             # Abierta o cerrada, cada salida muestra su costo (FR-009).

@@ -426,7 +426,9 @@ class TestReplay(ConCriptaDePrueba):
     def test_nueva_partida_usa_los_datos_de_la_cripta(self):
         # El juego y el replay la usan los dos: un error aquí no se vería
         # comparando jugar contra reproducir, por eso se prueba sola.
-        partida = nueva_partida(DATOS_PRUEBA, Mock(), Mock(), 7, "Ana")
+        # Un Mapa real vacío, no un Mock: la Partida arma su MapaConocido
+        # con la cantidad de salas (capacidad 002, FR-201; SC-207).
+        partida = nueva_partida(DATOS_PRUEBA, Mapa(), Mock(), 7, "Ana")
         jugador = partida.jugador
 
         self.assertFalse(partida.iniciada)
@@ -1685,6 +1687,154 @@ class TestCheckpointCada(ConCriptaDePrueba):
 
         self.assertEqual(serializar_estado(con_linea), serializar_estado(sin_linea))
         self.assertEqual(con_linea.resultado, sin_linea.resultado)
+
+
+class TestComandoMapa(unittest.TestCase):
+    """T010 (capacidad 002): el comando `mapa` (FR-210, FR-211; HU1-1,
+    HU1-8, HU1-9; contracts/vista.md «Mapa»)."""
+
+    ESPERADO = (
+        "MAPA CONOCIDO (2 exploradas, 2 avistadas)\n"
+        "Exploradas:\n"
+        "  1 Entrada\n"
+        "    S: sala 3, costo 100, cerrada\n"
+        "    E: sala 2, costo 50, abierta\n"
+        "  2 Pasillo\n"
+        "    E: sala 4, costo 100, abierta\n"
+        "    O: sala 1, costo 50, abierta\n"
+        "Avistadas: 3, 4\n"
+    )
+
+    def setUp(self):
+        self._carpeta = tempfile.TemporaryDirectory()
+        self.carpeta = self._carpeta.name
+
+    def tearDown(self):
+        self._carpeta.cleanup()
+
+    @staticmethod
+    def esqueleto():
+        from tests.ayudas_cripta import sala, salida
+
+        return [
+            sala(1, {"E": salida(2, costo=50),
+                     "S": salida(3, cerrada=True)}, nombre="Entrada"),
+            sala(2, {"O": salida(1, costo=50), "E": salida(4)},
+                 nombre="Pasillo"),
+            sala(3, {"N": salida(1, cerrada=True)}, nombre="Celda"),
+            sala(4, {"O": salida(2)}, nombre="Cripta"),
+        ]
+
+    def test_fr210_texto_exacto(self):
+        from crypta.Modelo.Resumen import armar_mapa_resumido
+        from crypta.Vista.FormatoMapa import formatear_mapa
+        from tests.ayudas_cripta import partida_sintetica
+
+        partida = partida_sintetica(self.esqueleto())
+        partida.mover("E")
+
+        self.assertEqual(formatear_mapa(armar_mapa_resumido(partida)),
+                         self.ESPERADO)
+
+    def test_fr210_sin_avistadas_dice_ninguna(self):
+        from crypta.Modelo.Resumen import armar_mapa_resumido
+        from crypta.Vista.FormatoMapa import formatear_mapa
+        from tests.ayudas_cripta import partida_sintetica, sala
+
+        partida = partida_sintetica([sala(1, {}, nombre="Sola")])
+
+        self.assertEqual(formatear_mapa(armar_mapa_resumido(partida)),
+                         "MAPA CONOCIDO (1 exploradas, 0 avistadas)\n"
+                         "Exploradas:\n"
+                         "  1 Sola\n"
+                         "Avistadas: ninguna\n")
+
+    def test_fr210_la_vista_imprime_el_texto(self):
+        from crypta.Modelo.Resumen import armar_mapa_resumido
+        from tests.ayudas_cripta import partida_sintetica
+
+        partida = partida_sintetica(self.esqueleto())
+        partida.mover("E")
+        salida_capturada = io.StringIO()
+
+        with redirect_stdout(salida_capturada):
+            VistaConsola().mostrar_mapa(armar_mapa_resumido(partida))
+
+        self.assertEqual(salida_capturada.getvalue(), self.ESPERADO)
+
+    def test_ayuda_menciona_mapa_e_ir_a(self):
+        salida_capturada = io.StringIO()
+
+        with redirect_stdout(salida_capturada):
+            VistaConsola().mostrar_ayuda()
+
+        texto = salida_capturada.getvalue()
+        self.assertIn("  mapa                Ver el mapa conocido\n", texto)
+        self.assertIn("  ir a <sala>         Viajar a una sala explorada\n",
+                      texto)
+
+    def jugar(self, comandos, carpeta):
+        from tests.ayudas_cripta import controlador_desde_linea
+
+        controlador = controlador_desde_linea(carpeta, comandos)
+        controlador.iniciar()
+        controlador.gestor_contenido.cerrar()
+        return controlador
+
+    @staticmethod
+    def leer_log(carpeta):
+        with open(os.path.join(carpeta, "partida.log"),
+                  encoding="utf-8") as archivo:
+            return archivo.read()
+
+    @staticmethod
+    def conocimiento(partida):
+        salas = partida.mapa.obtener_todas()
+        return [(salas.obtener(i).id,
+                 partida.conocimiento.estado(salas.obtener(i)))
+                for i in range(len(salas))]
+
+    def comparar_con_y_sin(self, linea):
+        """Juega con `linea` entre dos `esperar` y sin ella: mismo reloj,
+        acciones, log, solicitudes, estado serializado y conocimiento."""
+        from crypta.bench.oraculo_linea import serializar_estado
+
+        con = self.jugar(["esperar", linea, "esperar"], self.carpeta)
+
+        with tempfile.TemporaryDirectory() as otra:
+            sin = self.jugar(["esperar", "esperar"], otra)
+            self.assertEqual(self.leer_log(self.carpeta), self.leer_log(otra))
+
+        self.assertEqual(con.partida.reloj, sin.partida.reloj)
+        self.assertEqual(con.partida.acciones_jugador,
+                         sin.partida.acciones_jugador)
+        self.assertEqual(con.gestor_contenido._fuente.cantidad_solicitudes(),
+                         sin.gestor_contenido._fuente.cantidad_solicitudes())
+        self.assertEqual(serializar_estado(con.partida),
+                         serializar_estado(sin.partida))
+        self.assertEqual(self.conocimiento(con.partida),
+                         self.conocimiento(sin.partida))
+        self.assertEqual(con.linea.cantidad_acciones(),
+                         sin.linea.cantidad_acciones())
+        return con
+
+    def test_fr211_mapa_no_cambia_nada(self):
+        from crypta.Modelo.Resumen import MapaResumido
+
+        con = self.comparar_con_y_sin("mapa")
+
+        con.vista.mostrar_mapa.assert_called_once()
+        self.assertIsInstance(con.vista.mostrar_mapa.call_args.args[0],
+                              MapaResumido)
+        con.vista.mostrar_error.assert_not_called()
+
+    def test_fr211_mapa_con_argumentos_es_comando_desconocido(self):
+        con = self.comparar_con_y_sin("mapa 3")
+
+        con.vista.mostrar_mapa.assert_not_called()
+        errores = [llamada.args[0]
+                   for llamada in con.vista.mostrar_error.call_args_list]
+        self.assertEqual(errores, ["Comando desconocido: 'mapa'"])
 
 
 if __name__ == "__main__":

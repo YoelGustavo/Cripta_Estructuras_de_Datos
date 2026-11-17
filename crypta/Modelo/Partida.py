@@ -6,6 +6,7 @@ from crypta.Modelo.Efecto import ANTORCHA, VELOCIDAD, VENENO, Efecto
 from crypta.Modelo.EstadoJuego import EstadoJuego
 from crypta.Modelo.Historial import Historial, RegistroAccion
 from crypta.Modelo.Inventario import CLASE_PERGAMINO, CLASES_EQUIPABLES
+from crypta.Modelo.MapaConocido import MapaConocido
 from crypta.Modelo.Enemigo import CAZADOR
 from crypta.Modelo.Perseguidor import ATACAR, MOVER, Perseguidor
 from crypta.Modelo.Rastreador import salida_con_rastro_mas_fresco
@@ -95,6 +96,14 @@ class Partida:
         self.antorcha = None
 
         self.bitacora = Bitacora()
+
+        # Lo que el jugador conoce del mapa (capacidad 002, research D3). Es
+        # estado del juego. Recibe `self._anotar`, que busca el historial
+        # vigente en cada llamada: `leer_linea` reemplaza el historial por
+        # asignación, así que nunca se guarda un `registrar_cambio` ligado a
+        # un historial concreto. En la copia de un punto de control el
+        # método ligado se reubica solo por el `memo`.
+        self.conocimiento = MapaConocido(self.mapa, self._anotar)
 
         # Las reglas del cazador y su búsqueda compartida (FR-013 a FR-019).
         # Se crea con el primer turno de un cazador: una partida sin
@@ -547,6 +556,10 @@ class Partida:
             self.estado.avanzar_reloj(evento.tiempo - self.reloj)
 
             if evento.tipo == TURNO_JUGADOR:
+                # Antes de cada decisión el jugador observa su sala (FR-204,
+                # research D4). Queda dentro de la acción que termina: el
+                # pergamino lo revierte junto con ella.
+                self.conocimiento.observar(self.sala_actual())
                 return
 
             self._ejecutar(evento)
@@ -636,7 +649,22 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("puerta", puerta, "cerrada", False))
         puerta.cerrar()
-        self._avisar("Una puerta se cierra automáticamente.")
+
+        # Solo si es una salida de la sala del jugador (FR-205, FR-208).
+        if self._es_salida_de_la_sala_actual(puerta):
+            self._avisar("Una puerta se cierra automáticamente.")
+
+    def _es_salida_de_la_sala_actual(self, puerta):
+        """Si alguna salida de la sala del jugador comparte el estado de
+        `puerta` (O(4)). Una salida sin vuelta que llega a la sala del
+        jugador no es una de sus salidas (research D11)."""
+        salidas = self.sala_actual().puertas()
+
+        for i in range(len(salidas)):
+            if salidas.obtener(i).estado is puerta.estado:
+                return True
+
+        return False
 
 
     def _cancelar_efecto(self, efecto):
@@ -766,7 +794,10 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("vida", enemigo, "vida", enemigo.vida))
         enemigo.curar(enemigo.regeneracion)       # nunca pasa de vida_max
-        self._avisar(f"{self._nombre(enemigo)} regenera vida.")
+
+        # Solo si pasa en la sala del jugador (FR-208).
+        if enemigo.sala_actual == self.jugador.sala_actual:
+            self._avisar(f"{self._nombre(enemigo)} regenera vida.")
         self._programar_regeneracion(enemigo)
 
 
@@ -806,7 +837,20 @@ class Partida:
 
         self._anotar(Cambio.de_atributo("trampa", trampa, "activa", False))
         trampa.activar()
-        self._avisar("Una trampa vuelve a estar armada.")
+
+        # Solo si la trampa está en la sala del jugador (FR-208).
+        if self._esta_en_la_sala_actual(trampa):
+            self._avisar("Una trampa vuelve a estar armada.")
+
+    def _esta_en_la_sala_actual(self, trampa):
+        """O(trampas de la sala del jugador)."""
+        sala = self.sala_actual()
+
+        for i in range(sala.cantidad_trampas()):
+            if sala.trampa_en(i) is trampa:
+                return True
+
+        return False
 
 
     def _aplicar_comportamiento(self, enemigo):
@@ -985,7 +1029,26 @@ class Partida:
 
         sala.apartar_pergaminos(self._es_pergamino)
 
+        self._explorar_al_entrar(sala)
         self._activar_enemigos(sala)
+
+    def _explorar_al_entrar(self, sala):
+        """La sala queda explorada (FR-201) y, con la antorcha encendida,
+        también cada sala a la que llevan sus salidas, abiertas o cerradas
+        (FR-212, FR-213). Solo usa el esqueleto: no toca el contenido, ni
+        los enemigos, ni las trampas, ni pide nada a la red (FR-214)."""
+        self.conocimiento.explorar(sala)
+
+        if not self.antorcha_encendida():
+            return
+
+        puertas = sala.puertas()
+
+        for i in range(len(puertas)):
+            vecina = puertas.obtener(i).sala_destino_ref
+
+            if vecina is not None:
+                self.conocimiento.explorar(vecina)
 
     def _refrescar_rastro(self):
         sala = self.sala_actual()

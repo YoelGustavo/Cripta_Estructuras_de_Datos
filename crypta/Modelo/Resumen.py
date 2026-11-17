@@ -6,7 +6,9 @@ de control o una reproducción) y solo la lee (FR-407).
 """
 
 from crypta.Modelo.Efecto import VELOCIDAD
+from crypta.Modelo.MapaConocido import EXPLORADA
 from crypta.Modelo.Partida import FIN_VELOCIDAD
+from crypta.Modelo.Sala import DIRECCIONES
 from crypta.estructuras.Vector import Vector
 
 
@@ -46,6 +48,52 @@ class EnemigoResumido:
         self.id_instancia = id_instancia
         self.nombre = nombre
         self.vida = vida
+
+
+class SalaResumida:
+    """Una sala explorada (capacidad 002, FR-210): `id`, `nombre` y
+    `salidas`, un `Vector` de tuplas (direccion, destino, costo, recordada)
+    en el orden N, S, E, O."""
+
+    def __init__(self, id_sala, nombre, salidas):
+        self.id = id_sala
+        self.nombre = nombre
+        self.salidas = salidas
+
+
+class MapaResumido:
+    """El mapa conocido (capacidad 002, FR-210): `exploradas` (`Vector` de
+    `SalaResumida`) y `avistadas` (`Vector` de ids), en orden de id."""
+
+    def __init__(self, exploradas, avistadas):
+        self.exploradas = exploradas
+        self.avistadas = avistadas
+
+
+def armar_mapa_resumido(partida):
+    """El `MapaResumido` del conocimiento de `partida`, en O(V + salidas
+    exploradas). De las salas avistadas solo se toma el id (FR-203). No
+    modifica la partida."""
+    exploradas = Vector()
+    avistadas = Vector()
+
+    for sala, estado in partida.conocimiento.salas_conocidas():
+        if estado != EXPLORADA:
+            avistadas.agregar(sala.id)
+            continue
+
+        salidas = Vector(len(DIRECCIONES))
+
+        for direccion in DIRECCIONES:
+            puerta = sala.obtener_puerta(direccion)
+
+            if puerta is not None:
+                salidas.agregar((direccion, puerta.sala_destino, puerta.costo,
+                                 puerta.estado.recordada))
+
+        exploradas.agregar(SalaResumida(sala.id, sala.nombre, salidas))
+
+    return MapaResumido(exploradas, avistadas)
 
 
 class Resumen:

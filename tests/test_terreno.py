@@ -25,6 +25,25 @@ from tests.datos.grabar_esperado_p1 import (
 )
 
 
+# Avisos que la niebla de guerra (capacidad 002, FR-208) ya no muestra
+# cuando pasan fuera de la sala del jugador. Ajuste de SC-207.
+AVISOS_FR208 = ("Una puerta se cierra automáticamente.",
+                "regenera vida.",
+                "Una trampa vuelve a estar armada.")
+
+
+def sin_avisos_fr208(mensajes):
+    return [m for m in mensajes
+            if not any(m.endswith(aviso) for aviso in AVISOS_FR208)]
+
+
+def comparable(estado):
+    """(estado sin la bitácora, mensajes sin los avisos de FR-208)."""
+    resto = {clave: valor for clave, valor in estado.items()
+             if clave != "mensajes"}
+    return resto, sin_avisos_fr208(estado["mensajes"])
+
+
 class TestCompatibilidadP1(unittest.TestCase):
     """FR-008, HU1-8: una cripta sin ningún campo costo se juega exactamente
     igual que en la primera parte.
@@ -58,19 +77,37 @@ class TestCompatibilidadP1(unittest.TestCase):
         self.assertEqual(len(self.obtenido["comandos"]),
                          len(self.esperado["comandos"]))
 
+    def assert_mismo_estado(self, obtenido, esperado):
+        """Todo igual salvo la bitácora, que se compara sin los avisos que
+        FR-208 (capacidad 002) quita cuando pasan fuera de la sala del
+        jugador (ajuste de SC-207). La bitácora guarda los últimos mensajes:
+        al faltar avisos entran otros más viejos, así que lo esperado debe
+        ser el final de lo obtenido, con la misma cantidad de mensajes."""
+        resto_obtenido, mensajes_obtenidos = comparable(obtenido)
+        resto_esperado, mensajes_esperados = comparable(esperado)
+
+        self.assertEqual(resto_obtenido, resto_esperado)
+        self.assertEqual(len(obtenido["mensajes"]), len(esperado["mensajes"]))
+        self.assertEqual(
+            mensajes_obtenidos[len(mensajes_obtenidos)
+                               - len(mensajes_esperados):],
+            mensajes_esperados)
+
     def test_fr008_mismo_estado_despues_de_cada_comando(self):
         """FR-008: mismos instantes, eventos, mensajes y llamadas al azar
-        después de cada comando."""
+        después de cada comando (FR-208 y SC-207 de la 002: sin los avisos
+        de otras salas)."""
         for esperado, obtenido in zip(self.esperado["comandos"],
                                       self.obtenido["comandos"]):
             with self.subTest(numero=esperado["numero"],
                               comando=esperado["comando"]):
-                self.assertEqual(obtenido, esperado)
+                self.assert_mismo_estado(obtenido, esperado)
 
     def test_fr008_mismo_resultado_final(self):
         """FR-008: mismo reloj, sala, vida, resultado y estado del azar al
-        terminar."""
-        self.assertEqual(self.obtenido["final"], self.esperado["final"])
+        terminar (FR-208 y SC-207 de la 002: sin los avisos de otras
+        salas)."""
+        self.assert_mismo_estado(self.obtenido["final"], self.esperado["final"])
         self.assertTrue(self.obtenido["final"]["terminada"])
 
 
