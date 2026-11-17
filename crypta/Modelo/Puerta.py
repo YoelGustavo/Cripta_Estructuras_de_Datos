@@ -7,6 +7,11 @@ from crypta.Modelo.DatosInvalidos import DatosInvalidos
 # única constante de costo de movimiento (FR-024, principio IV).
 COSTO_POR_OMISION = 100
 
+# Estado recordado de una salida (capacidad 002, FR-204; research D2).
+# `None` = el jugador nunca la observó.
+ABIERTA = 1
+CERRADA = 2
+
 
 class EstadoPuerta:
     """Lo que comparten los dos lados de una salida.
@@ -18,6 +23,10 @@ class EstadoPuerta:
     - `observador`: la búsqueda vigente, o None; no es estado del juego.
       Recibe `puerta_cambio(estado)` cada vez que `cerrada` cambia de valor
       (abrir, cierre automático o el pergamino, que usa setattr).
+    - `recordada` (capacidad 002, FR-204 a FR-206): la última observación
+      del jugador: None (nunca observada), ABIERTA o CERRADA. Es estado del
+      juego. Atributo simple, sin aviso al `observador`: solo lo escribe el
+      `MapaConocido`, que avisa a su propio observador.
     """
 
     def __init__(
@@ -25,12 +34,14 @@ class EstadoPuerta:
         cerrada=False,
         llave=None,
         cierre_automatico=None,
-        costo=None
+        costo=None,
+        recordada=None
     ):
         self._cerrada = cerrada
         self.llave = llave
         self.cierre_automatico = cierre_automatico
         self.costo_declarado = costo
+        self.recordada = recordada
         self.extremos = None
         self.observador = None
 
@@ -78,10 +89,12 @@ class Puerta:
         cerrada=False,
         llave=None,
         cierre_automatico=None,
-        costo=None
+        costo=None,
+        recordada=None
     ):
         """`costo` es el valor que declara este lado (ya validado por la
-        Sala), o None si no lo declara."""
+        Sala), o None si no lo declara. `recordada` es el valor leído de un
+        guardado (capacidad 002), o None."""
         self.sala_destino = sala_destino
         self.sala_destino_ref = None
 
@@ -89,7 +102,8 @@ class Puerta:
             cerrada,
             llave,
             cierre_automatico,
-            costo
+            costo,
+            recordada
         )
 
     @property
@@ -131,7 +145,9 @@ class Puerta:
         `sala` es la sala de esta puerta y `sala_otra` la de la otra; solo
         sirven para nombrar la salida si los costos no coinciden (FR-010).
         Costos: ambos iguales → ese; solo uno → ese en ambos sentidos;
-        ninguno → COSTO_POR_OMISION; distintos → DatosInvalidos."""
+        ninguno → COSTO_POR_OMISION; distintos → DatosInvalidos.
+        `recordada` (FR-205, FR-206), igual: si un lado es None se toma el
+        otro; si los dos difieren → DatosInvalidos."""
         if otra_puerta._estado is self._estado:
             return
 
@@ -149,8 +165,22 @@ class Puerta:
                 f"{mio.costo_declarado} y {suyo.costo_declarado}"
             )
 
+        if (mio.recordada is not None
+                and suyo.recordada is not None
+                and mio.recordada != suyo.recordada):
+            raise DatosInvalidos(
+                f"La salida entre las salas "
+                f"{self._describir(sala, otra_puerta.sala_destino)} y "
+                f"{otra_puerta._describir(sala_otra, self.sala_destino)} "
+                f"recuerda estados distintos en cada lado: "
+                f"{mio.recordada} y {suyo.recordada}"
+            )
+
         if mio.costo_declarado is None:
             mio.costo_declarado = suyo.costo_declarado
+
+        if mio.recordada is None:
+            mio.recordada = suyo.recordada
 
         mio.cerrada = mio.cerrada or suyo.cerrada
 
