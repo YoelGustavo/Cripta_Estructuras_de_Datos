@@ -1348,20 +1348,35 @@ class TestBenchNiebla(unittest.TestCase):
         self.assertEqual(self.codigo, 0)
 
     def test_hu5_2_fr230_n1_consultas(self):
+        """HU5-2 y HU5-5 (FR-235): N1 mide las consultas con 200 y 2000
+        salas exploradas y reporta el cociente 2000 / 200 con su «¿cumple?»
+        (límite ≤ 2). La prueba solo comprueba que el límite se calcula y
+        se reporta; el cumplimiento está en docs/resultados_bench_002.txt
+        (plan.md: «FR-234 a FR-236: --bench»)."""
         texto = self.seccion("N1")
         for palabra in ("Vector + EstadoPuerta", "ArbolBusqueda",
                         "2000 / 200", "¿cumple?"):
             self.assertIn(palabra, texto)
 
     def test_hu5_2_fr230_n2_exploracion_y_reversion(self):
+        """HU5-2 y HU5-6 (FR-236): N2 mide explorar con antorcha y
+        deshacerlo con 200 y 2000 salas conocidas y reporta el cociente de
+        cada uno con su «¿cumple?» (límite ≤ 2). La prueba solo comprueba
+        que el límite se calcula y se reporta; el cumplimiento está en
+        docs/resultados_bench_002.txt (plan.md: «FR-234 a FR-236:
+        --bench»)."""
         texto = self.seccion("N2")
         for palabra in ("explorar", "deshacer", "copia por acción",
                         "cambios", "¿cumple?"):
             self.assertIn(palabra, texto)
 
     def test_hu5_3_fr231_n3_paso_de_ir_a(self):
-        """(a), (b) y (c) con sus variantes; primer paso aparte; la (c)
-        usa la sintética de 300 salas porque no hay copias."""
+        """HU5-3 y HU5-4 (FR-234): (a), (b) y (c) con sus variantes;
+        primer paso aparte; la (c) usa la sintética de 300 salas porque no
+        hay copias. N3 reporta el p95 del paso con su «¿cumple?» (límite
+        5 ms). La prueba solo comprueba que el límite se calcula y se
+        reporta; el cumplimiento está en docs/resultados_bench_002.txt
+        (plan.md: «FR-234 a FR-236: --bench»)."""
         texto = self.seccion("N3")
         for palabra in ("(a)", "(b)", "(c)", "selectiva",
                         "invalidación total", "recalcular", "p95",
