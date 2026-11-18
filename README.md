@@ -3,13 +3,55 @@
 
 Juego de exploración de mazmorras desarrollado en Python. Organiza la lógica del juego mediante Modelo, Vista, Controlador y Adaptadores, e incorpora estructuras de datos propias, persistencia, reproducción de partidas y pruebas de rendimiento.
 
+## Segunda parte
+
+La segunda parte se desarrolla con especificaciones de spec-kit (v1.3.1) y el agente Claude Code. Cada capacidad tiene su especificación, plan y tareas en `specs/`:
+
+| Carpeta | Capacidad | Decisiones |
+|---|---|---|
+| `specs/001-terreno-cazador/` | Costos de las salidas y cazadores | `DECISIONES.md` §5.1 y §5.2 |
+| `specs/002-niebla-ir-a/` | Niebla de guerra e «ir a» | `DECISIONES.md` §5.3 |
+| `specs/003-resolubilidad/` | Verificación de resolubilidad | `DECISIONES.md` §5.4 |
+| `specs/004-linea-de-tiempo/` | Línea de tiempo | `DECISIONES.md` §5.5 |
+
+La revisión de las decisiones de la primera parte con la carga nueva está en `DECISIONES.md` §5.6.
+
 ## Segunda parte: terreno y cazador
 
-La segunda parte se desarrolla con especificaciones de spec-kit (v1.3.1) y el agente Claude Code. La especificación, el plan y las tareas de esta capacidad están en `specs/001-terreno-cazador/`; las decisiones, en `DECISIONES.md` (secciones 5.1 y 5.2).
+La especificación, el plan y las tareas están en `specs/001-terreno-cazador/`; las decisiones, en `DECISIONES.md` (secciones 5.1 y 5.2).
 
 - **Costo de las salidas.** Cada salida tiene un costo de movimiento (100 si la cripta no lo dice). Moverse por ella tarda ese costo, para el jugador y para los enemigos. Una cripta con un costo inválido (0, decimal, texto o distinto en los dos lados) no se juega: el programa muestra la salida y el problema.
 - **Cazadores.** Un enemigo nuevo que persigue al jugador por la ruta más barata si está dentro de su rango (que viene en su ficha del catálogo), y espera si no puede llegar.
 - **En la pantalla**, cada salida muestra su costo, abierta o cerrada (`N: sala 3 (Abierta, costo 250)`), y los cazadores llevan la etiqueta `[cazador]`. El comando `ayuda` lo explica.
+
+## Segunda parte: niebla de guerra e «ir a»
+
+La especificación, el plan y las tareas están en `specs/002-niebla-ir-a/`; las decisiones, en `DECISIONES.md` (sección 5.3).
+
+- **Niebla de guerra.** El jugador solo conoce lo que exploró. Una sala está explorada (estuvo en ella), avistada (es destino de una salida de una sala explorada; solo se conoce su id) o desconocida. Cada puerta se recuerda como se vio la última vez: si se cierra lejos del jugador, sigue recordada abierta hasta que la vuelva a ver. La bitácora solo avisa lo que pasa en la sala del jugador.
+- **Antorcha.** Con la antorcha encendida, al entrar a una sala también se exploran las salas a las que llevan sus salidas, abiertas o cerradas. Sus enemigos siguen dormidos y su contenido no se muestra.
+- **`mapa`** muestra el mapa conocido: las salas exploradas con sus salidas (destino, costo y si se recuerda abierta o cerrada) y los ids de las avistadas. No consume tiempo ni se anota en `partida.log`.
+
+```text
+MAPA CONOCIDO (2 exploradas, 2 avistadas)
+Exploradas:
+  1 Entrada
+    S: sala 3, costo 250, cerrada
+    E: sala 2, costo 100, abierta
+  2 Pasillo
+    E: sala 4, costo 100, abierta
+    O: sala 1, costo 100, abierta
+Avistadas: 3, 4
+```
+
+- **`ir a <sala>`** viaja a una sala explorada por la ruta conocida más barata (solo salas exploradas y puertas recordadas abiertas; no abre puertas). Cada paso es un `mover` normal, con su tiempo y sus eventos. El viaje se detiene al llegar, si entra a una sala con enemigos, si recibe daño, si ya no conoce una ruta abierta (por ejemplo, descubre cerrada una puerta que recordaba abierta), si no se pudo cargar la sala siguiente o si la partida termina; el motivo se muestra al final. Se rechaza sin consumir tiempo si la sala no se conoce («No conoces la sala 9.», el mismo texto si no existe), si es la sala actual o si no hay ruta conocida.
+
+```text
+ir a 7
+```
+
+- **`partida.log`**: cada paso de un viaje queda como un `mover <d>`, y antes del primero va el comentario `# ir a <sala>`. `--replay` ignora las líneas que empiezan con `#`, así que el log se reproduce igual. Los logs de la primera parte y de la 001 se leen igual que antes.
+- El conocimiento es estado del juego: el pergamino lo revierte, se guarda con la partida (formato 4) y `historia` muestra el mapa conocido de ese instante.
 
 ## Segunda parte: verificación de resolubilidad
 
@@ -44,7 +86,7 @@ python -m crypta.main --offline --cripta cripta-01 --forzar
 
 La especificación, el plan y las tareas están en `specs/004-linea-de-tiempo/`; las decisiones, en `DECISIONES.md` (sección 5.5).
 
-- **`historia <t>`** muestra cómo estaba la partida en el instante t, y **`historia #k`**, justo antes de la acción #k del jugador (de `#1` a `#<n+1>`, que es el estado actual). Muestra reloj, sala, vida, estadísticas, efectos, inventario, pergaminos y enemigos de la sala. No cambia la partida ni se anota en `partida.log`.
+- **`historia <t>`** muestra cómo estaba la partida en el instante t, y **`historia #k`**, justo antes de la acción #k del jugador (de `#1` a `#<n+1>`, que es el estado actual). Muestra reloj, sala, vida, estadísticas, efectos, inventario, pergaminos, enemigos de la sala y el mapa conocido de ese momento. No cambia la partida ni se anota en `partida.log`.
 - Un instante mayor que el reloj o una acción que no existe se rechazan con un mensaje y no cambian nada; `historia`, `historia abc` o `historia -5` son comandos inválidos. Con la partida terminada, hay que usar `--replay … --hasta`.
 - Después de un `pergamino`, `#k` se numera con las acciones que quedaron.
 
@@ -53,7 +95,7 @@ historia 0
 historia #5
 ```
 
-- **`--checkpoint-cada K`** fija cada cuántas acciones del jugador se guarda una copia de la partida (un punto de control); K es un entero ≥ 1. **Por defecto, K = 22**: es el menor valor con el que las copias caen en menos del 5 % de las acciones, así el p95 del ciclo sigue bajo 20 ms, y la consulta queda en 27 ms de p95, bajo el límite de 50 ms (`DECISIONES.md` §5.5). Si se carga una partida guardada con otro K, se avisa y se usa el guardado.
+- **`--checkpoint-cada K`** fija cada cuántas acciones del jugador se guarda una copia de la partida (un punto de control); K es un entero ≥ 1. **Por defecto, K = 22**: es el menor valor con el que las copias caen en menos del 5 % de las acciones, así el p95 del ciclo sigue bajo 20 ms, y la consulta queda en 27 ms de p95 (32.66 ms con el código final, docs/resultados_bench_002.txt), bajo el límite de 50 ms (`DECISIONES.md` §5.5). Si se carga una partida guardada con otro K, se avisa y se usa el guardado.
 - **`--replay <log> --hasta t`** reproduce el log sin abrir la vista e imprime el estado en el instante t. Si el log termina antes de t, muestra el último estado con un aviso (código 0). `--hasta` sin `--replay` es un error de argumentos.
 
 ```powershell
@@ -108,6 +150,14 @@ python -m crypta.main
 
 De forma predeterminada se utiliza la cripta `cripta-01`, el jugador `Aventurero` y una caché de 25 fichas.
 
+**`cripta-01` ya no está en el servidor.** En línea hay que elegir otra cripta con `--cripta` (las disponibles se ven con `--listar`), por ejemplo `cripta-06`, la de referencia:
+
+```powershell
+python -m crypta.main --cripta cripta-06
+```
+
+Sin conexión, la única copia local con el contenido de las salas es la de `cripta-01`, y solo inicia con `--forzar` (ver «Modo offline»).
+
 ### Consultar las criptas disponibles
 
 ```powershell
@@ -117,7 +167,7 @@ python -m crypta.main --listar
 ### Elegir una cripta, jugador y semilla
 
 ```powershell
-python -m crypta.main --cripta cripta-01 --jugador Aventurero --semilla 12345
+python -m crypta.main --cripta cripta-06 --jugador Aventurero --semilla 12345
 ```
 
 ### Ajustar la capacidad de la caché
@@ -131,7 +181,7 @@ La capacidad debe ser mayor que cero.
 ## Modo offline
 
 ```powershell
-python -m crypta.main --offline --cripta cripta-01
+python -m crypta.main --offline --cripta cripta-01 --forzar
 ```
 
 Utiliza exclusivamente datos almacenados en disco, sin consultar el servicio HTTP.
@@ -169,7 +219,7 @@ cargar
 
 Ambos archivos deben mantenerse juntos y ser compatibles con la cripta y el catálogo activos.
 
-El archivo usa la versión 3 del formato, que guarda el costo de cada salida y la línea de tiempo (los comandos y los puntos de control), así `historia` sigue funcionando después de cargar. Las partidas guardadas con versiones anteriores (1 de la primera parte, 2 del terreno y cazador) no se cargan: el programa avisa que el formato es incompatible y la partida en curso no cambia.
+El archivo usa la versión 4 del formato, que guarda el costo de cada salida, la línea de tiempo (los comandos y los puntos de control), así `historia` sigue funcionando después de cargar, y el mapa conocido (el estado de cada sala conocida y cómo se recuerda cada puerta). Las partidas guardadas con versiones anteriores (1 de la primera parte, 2 del terreno y cazador, 3 de la línea de tiempo) no se cargan: el programa avisa que el formato es incompatible y la partida en curso no cambia.
 
 El guardado se reemplaza al ejecutar `guardar` nuevamente.
 
@@ -193,6 +243,8 @@ python -m crypta.main --offline --replay partida.log
 
 La reproducción comprueba la compatibilidad de los datos registrados. No se abre la interfaz interactiva.
 
+Un `ir a <sala>` queda en el log como el comentario `# ir a <sala>` seguido de un `mover <d>` por paso. La reproducción ignora los comentarios (las líneas que empiezan con `#` después de `---`) y repite los `mover`.
+
 ## Pruebas de rendimiento (--bench)
 
 Para ejecutar todos los benchmarks:
@@ -202,6 +254,8 @@ python -m crypta.main --bench
 ```
 
 Ejecuta los benchmarks definidos en `crypta/bench/bench.py` sin iniciar el juego, sin utilizar HTTP ni abrir la interfaz interactiva.
+
+**El bench completo tarda bastante**: solo `linea_l1` tarda unos 5 minutos, y las secciones de la línea de tiempo juntas, cerca de media hora. Conviene correrlo por secciones, como en los comandos de abajo.
 
 Los modos `--bench` y `--replay` no pueden utilizarse simultáneamente.
 
@@ -289,6 +343,25 @@ Estas ocho secciones tardan cerca de media hora (L1 y L7 son las más largas); c
 python -m crypta.bench.bench linea_l1 linea_l2 linea_l3 linea_l4 linea_l5 linea_l6 linea_l7 linea_l8 --guardar docs/resultados_bench_004.txt
 ```
 
+Secciones de la niebla de guerra e «ir a» (criptas sintéticas de 2000 y 20000 salas, y la copia local más grande de `cache/`, o una sintética de 300 salas si no hay copias):
+
+- `niebla_n1`: N1, consultas al mapa conocido, `Vector` frente a `ArbolBusqueda`, con 200 y 2000 salas exploradas.
+- `niebla_n2`: N2, explorar con antorcha y deshacerlo, frente a copiar el mapa conocido en cada acción.
+- `niebla_n3`: N3, el paso de «ir a» reutilizando la búsqueda (selectiva e invalidación total) frente a recalcular siempre (p95 menor que 5 ms).
+- `niebla_n4`: N4, compara cada paso con un cálculo desde cero, y N1 y N2 con sus alternativas. Si alguno difiere, imprime `ERROR` y el programa termina con código 1. N2 también da `ERROR` si sus dos mapas registran cambios distintos.
+
+Los resultados de la 002, junto con B7, L1 y L4 repetidos con la carga nueva, están en `docs/resultados_bench_002.txt` (unos 7 minutos, casi todo L1):
+
+```powershell
+python -m crypta.bench.bench niebla_n1 niebla_n2 niebla_n3 niebla_n4 ciclo_cazadores linea_l1 linea_l4 --guardar docs/resultados_bench_002.txt
+```
+
+Las mediciones de la primera parte repetidas con el código final (`DECISIONES.md` §5.6) están en `docs/resultados_bench_revision_p1.txt`:
+
+```powershell
+python -m crypta.bench.bench agenda ciclo inventario --guardar docs/resultados_bench_revision_p1.txt
+```
+
 La sección `guardado` compara los formatos binario y JSON con criptas sintéticas de 100, 1000 y 5000 salas.
 
 Con `--rapido` se utiliza únicamente una cripta de 100 salas.
@@ -321,6 +394,14 @@ python -m unittest -v tests.test_terreno tests.test_cazador tests.test_distancia
 ```
 
 `tests.test_terreno` incluye `TestCompatibilidadP1`, que repite una partida grabada con la primera parte (`tests/datos/p1_partida.log`) y comprueba que una cripta sin costos se juega igual.
+
+Solo las de la niebla de guerra e «ir a» (las de HU5 están en `tests.test_bench`, clase `TestBenchNiebla`):
+
+```powershell
+python -m unittest -v tests.test_mapa_conocido tests.test_niebla tests.test_ir_a tests.test_equivalencia_niebla
+```
+
+`tests.test_equivalencia_niebla` juega 22 partidas por semilla con antorcha, pergaminos y viajes; después de cada comando revisa que la vista, el mapa y la bitácora no muestren nada desconocido, y compara cada paso de «ir a» con un cálculo desde cero.
 
 Solo las de la verificación de resolubilidad:
 

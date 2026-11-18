@@ -206,7 +206,7 @@ incluye ambas alternativas, coincide en el resultado y no usa vista ni red.
 - [ ] T054 [P] Completar `PROMPTS_LLM.md` (principio X): registrar `/speckit-plan`, los ajustes del grupo al plan, `/speckit-tasks` y los prompts de la implementación de la 003.
 - [X] T055 Revisar imports prohibidos y constantes quemadas (principios I y IV): `git grep -n -E "import (heapq|bisect|collections|networkx)|from (heapq|bisect|collections|networkx)" -- crypta` sin resultados; revisar a mano que `NumeracionLlaves.py`, `UbicacionLlaves.py`, `Verificador.py`, `VerificadorIngenuo.py` y `FormatoVerificacion.py` no usen `dict`, `set`, `sorted` ni `list.sort` (los `dict` de `json` solo se leen en `UbicacionLlaves.py`); `git grep -n "itm_llave" -- crypta` solo en `crypta/bench`. Corregir lo que aparezca donde aparezca.
 - [X] T056 Validar de punta a punta según `specs/003-resolubilidad/quickstart.md` (SC-301 a SC-308): pasos 1 a 5, incluido `--verificar cripta-01` en línea y sin conexión y el inicio con una cripta no resoluble armada con las ayudas de prueba, y marcar lo comprobado en `specs/003-resolubilidad/checklists/requirements.md`.
-- [ ] T057 Punto de control final (FR-301 a FR-336): `python -m unittest` en verde y commit «003 cierre: DECISIONES §5.4, README, PROMPTS_LLM».
+- [X] T057 Punto de control final (FR-301 a FR-336): `python -m unittest` en verde y commit «003 cierre: DECISIONES §5.4, README, PROMPTS_LLM».
 
 ---
 

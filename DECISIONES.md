@@ -388,7 +388,7 @@ partida.log es el de la última partida: una partida nueva lo reemplaza. Para co
 
 **Problema:**
 - En su turno, el cazador ataca si comparte sala con el jugador; si no, da un paso por una ruta de costo mínimo hasta él, o espera si no hay ruta o si cuesta más que su rango.
-- Los costos de las salidas son enteros ≥ 1 y distintos entre sí: la ruta con menos salas no siempre es la más barata y pueden ser distintos entre sí”, porque los costos también pueden repetirse.
+- Los costos de las salidas son enteros ≥ 1 y pueden ser distintos entre sí: la ruta con menos salas no siempre es la más barata.
 - Si hay empate, va a la vecina de menor id. La decisión no puede usar el azar.
 - Puede haber 50 cazadores o más persiguiendo al mismo jugador en criptas de 2000 a 20000 salas.
 
@@ -457,7 +457,7 @@ Las tres primeras están en Perseguidor (modos RECALCULAR, TOTAL y SELECTIVA) pa
 
 **Decisión:**
 - Invalidación selectiva.
-- Las distancias dependen solo de la sala del jugador y de qué puertas están abiertas (los costos no cambian). Los enemigos se muevan, mueran o cambien de velocidad no las afecta
+- Las distancias dependen solo de la sala del jugador y de qué puertas están abiertas (los costos no cambian). Que los enemigos se muevan, mueran o cambien de velocidad no las afecta.
 - La sala del jugador se compara en cada decisión: cubre moverse, el pergamino y la carga.
 - Cada puerta conoce sus dos salas y avisa a la búsqueda solo cuando cambia de abierta a cerrada o al revés. La búsqueda se descarta si alguna de las dos salas ya está asentada.
 - Si ninguna lo está, la búsqueda sigue valiendo: esa puerta nunca se usó al relajar, y una ruta nueva por ella cuesta más que todo lo asentado (demostración en research D4).
@@ -491,6 +491,90 @@ Reutilizar frente a recalcular (B5), 2000 salas y 50 cazadores
 - B7 mide el modelo (la acción del jugador y los eventos hasta su siguiente decisión), no el Controlador (vista, registro y precarga).
 - Con puertas inestables la invalidación total no ahorra nada frente a recalcular siempre (750 búsquedas en las dos).
 - La selectiva descarta la búsqueda aunque el cambio no altere la decisión de ningún cazador: basta con que la puerta toque una sala asentada.
+
+5.3 El mapa conocido
+
+**Problema:**
+- El jugador solo conoce lo que exploró. Cada sala está explorada, avistada (es destino de una salida de una sala explorada) o desconocida, y cada puerta se recuerda abierta o cerrada como se vio la última vez (FR-201 a FR-206).
+- Consultar el estado de una sala y el recordado de una puerta pasa en cada vista, en cada paso de «ir a» y en cada actualización por antorcha (P2 §5.3). Tiene que ser O(1) y no crecer con lo conocido (FR-235).
+- Explorar tiene que costar lo que se revela, no el tamaño de lo conocido. El pergamino lo revierte y la línea de tiempo lo reconstruye, así que registrar y deshacer cada cambio tiene que ser barato (FR-236; principio VII: nada de copias por acción).
+- «ir a <sala>» viaja por la ruta conocida más barata, paso a paso; si el conocimiento cambia en el camino, el paso siguiente tiene que ser el de un cálculo desde cero (FR-217, FR-218). Límite: p95 del paso < 5 ms (FR-234).
+- Hay que justificar si la ruta de «ir a» comparte implementación con la del cazador (P2 §5.3).
+
+**Alternativas:**
+- Estado de las salas y de las puertas en un ArbolBusqueda por id y por (sala, dirección), armado con desde_ordenados (insertar en orden lo degeneraría): O(log n) por consulta, y cada observación hay que escribirla por los dos lados de la puerta. La medimos (N1).
+- Guardar el estado en la propia Sala: también O(1), pero mezcla el conocimiento con el esqueleto. Se descartó.
+- Copiar el mapa conocido antes de cada acción para revertir: lo prohíbe el principio VII. La medimos solo para mostrar que crece (N2).
+- Ruta de «ir a» recalculada desde cero en cada paso, o con RutaPorCazador hacia adelante (la sala actual cambia en cada paso, así que no se puede reutilizar nada). La medimos (N3, «recalcular siempre»).
+- Invalidación total: reutilizar la búsqueda y descartarla ante cualquier cambio del conocimiento. La medimos (N3 b).
+- dict, set, heapq y collections: prohibidos (§6.2).
+
+**Decisión:**
+- MapaConocido (Modelo/MapaConocido.py) guarda un Vector de V enteros por el índice denso de la 001 (0 desconocida, 1 avistada, 2 explorada) y dos contadores (research D1). Toda consulta llega con un objeto Sala, así que el índice está a mano.
+- El recordado de cada puerta va en su EstadoPuerta, que comparten los dos lados de la salida: observar desde un lado actualiza los dos sin trabajo extra (D2).
+- Todo cambio pasa por MapaConocido y anota un Cambio solo si el valor cambia, con el valor anterior. Se anota con partida._anotar, que busca el historial vigente en cada llamada. El pergamino lo deshace con el mismo historial de P1 y la línea de tiempo de la 004 lo reconstruye sin cambios (D3).
+- RutaConocida (Modelo/RutaConocida.py) busca **desde el destino** con DistanciasLimitadas, por las entradas conocidas: salas exploradas y puertas recordadas abiertas. Como el destino no cambia entre pasos, lo asentado sigue valiendo y el paso siguiente cuesta O(grado) sin buscar. Desempate: menor id de la vecina y, a la misma vecina, N, S, E, O, igual que el cazador (D5).
+- Invalidación selectiva: MapaConocido avisa a la ruta cuando cambia un recordado o una sala pasa a explorada (o deja de estarlo al deshacer). La búsqueda se descarta solo si el cambio toca una sala asentada; la demostración es la de la 001 (research D4 de la 001) sobre el grafo conocido (D6). El pergamino la descarta siempre.
+- ¿Comparte implementación con el cazador? (P2 §5.3): sí la estructura, no las reglas ni la instancia.
+  - La misma DistanciasLimitadas de la 001 (Dijkstra perezoso y reanudable, con vectores con marca): es genérica sobre índices y una función de entradas. Reutilizarla trae su código ya medido (B9) y probado (B6), y deja una sola implementación de Dijkstra en el proyecto.
+  - Reglas separadas: el cazador lee el estado real de las puertas y busca desde la sala del jugador; «ir a» lee el mapa conocido y busca desde el destino. Mezclarlas obligaría a pasarle al cazador lo que el jugador no sabe.
+  - Instancias separadas: la del cazador se reinicia cada vez que el jugador se mueve (su origen es la sala del jugador). Compartida, destruiría la búsqueda de «ir a» en cada paso del viaje, que es justo lo que se quiere reutilizar.
+- La ruta, su búsqueda y el viaje no son estado del juego: no se guardan, no se revierten y no van a los puntos de control (D7).
+- Coincide con lo planeado (specs/002-niebla-ir-a/plan.md, research D1 a D14); las mediciones lo confirmaron y no hubo cambios. La optimización condicional de D12 (T050a) no hizo falta, porque el p95 de N3 cumplió en (a) y en (c). Requisitos: specs/002-niebla-ir-a/spec.md, FR-201 a FR-236.
+
+**Complejidad:**
+- Consultar el estado de una sala o el recordado de una puerta: O(1).
+- Explorar una sala (con antorcha, a lo sumo 5 salas con 4 salidas): O(1) cambios, sin importar cuánto se conoce. Deshacer: O(cambios anotados).
+- Paso de «ir a» con la búsqueda vigente: O(grado de la sala), a lo sumo 4. Con búsqueda nueva: O((ΔV + ΔE) log E) por lo que se asienta.
+- Aviso de un cambio a la ruta: O(1) para una puerta; O(grado) para una sala.
+- Memoria: un Vector de V enteros y un campo por puerta; la ruta, 3 Vector de V enteros (los de DistanciasLimitadas).
+
+**Evidencia:**
+Se mide con: python -m crypta.bench.bench niebla_n1 niebla_n2 niebla_n3 niebla_n4
+Criptas sintéticas deterministas por semilla de la 001 (2000 y 20000 salas) y el esqueleto de la copia local más grande, cripta-06 (300 salas) (docs/resultados_bench_002.txt).
+
+Consultas al mapa conocido (N1), 2000 salas, 100000 consultas de cada tipo
+  estructura              exploradas   estado: media   recordada: media
+  Vector + EstadoPuerta          200          0.5 µs             0.3 µs
+  ArbolBusqueda                  200          1.0 µs             1.7 µs
+  Vector + EstadoPuerta         2000          0.5 µs             0.3 µs
+  ArbolBusqueda                 2000          1.3 µs             2.3 µs
+
+- N1: cociente 2000 / 200 de la elegida 1.12 (límite ≤ 2); el árbol, 1.33. El árbol también cumple el cociente, porque crece como log n, pero cada consulta cuesta de 2 a casi 8 veces más y obliga a escribir los dos lados de cada puerta.
+
+Exploración con antorcha y su reversión (N2), 20000 salas, 1000 entradas a más de 2 pasos de lo conocido
+  conocidas   explorar   deshacer   copia por acción: explorar   copia por acción: deshacer   cambios por entrada
+  200         155.7 µs    38.6 µs                      1.72 ms                     571.3 µs                  28.6
+  2000        186.1 µs    35.5 µs                     15.46 ms                      4.50 ms                  28.6
+
+- N2: cociente 2000 / 200 de la elegida 1.19 al explorar y 0.92 al deshacer (límite ≤ 2): no crecen con lo conocido. La copia por acción crece 8.99 veces al explorar y 7.87 al deshacer, y está prohibida por el principio VII.
+
+Paso de «ir a» (N3): todos los pasos y el primero de cada viaje
+  caso                                    variante              pasos      media        p95     máximo   primer paso: p95   buscaron   invalidaciones
+  (a) 2000 salas, completo                selectiva               601   515.0 µs    14.6 µs   39.58 ms           35.08 ms      3.2 %                0
+  (a) 2000 salas, completo                recalcular siempre      601    8.44 ms   29.91 ms   48.52 ms           35.17 ms    100.0 %                0
+  (b) 2000 salas, desactualizado          selectiva               603   552.4 µs    16.6 µs   42.74 ms           35.86 ms      3.6 %                3
+  (b) 2000 salas, desactualizado          invalidación total      603   529.3 µs    17.5 µs   42.78 ms           34.86 ms      3.6 %                3
+  (b) 2000 salas, desactualizado          recalcular siempre      603    8.30 ms   27.37 ms   63.23 ms           34.24 ms    100.0 %                3
+  (c) cripta-06 (300 salas), completo     selectiva               207    53.8 µs   475.2 µs   902.1 µs          863.4 µs      9.2 %                0
+  (c) cripta-06 (300 salas), completo     recalcular siempre      207   287.7 µs   715.1 µs   900.6 µs          890.6 µs    100.0 %                0
+
+- (a): con la selectiva solo el 3.2 % de los pasos busca (19 búsquedas en 601 pasos, 30.1 pasos por viaje en promedio) y el p95 queda en 14.6 µs. Recalcular siempre da p95 de 29.91 ms: no cumple los 5 ms.
+- (c), la cripta de referencia: p95 de 475.2 µs con la selectiva. Cumple los 5 ms.
+- (b), conocimiento desactualizado (el 5 % de las puertas cerradas se recuerdan abiertas): la selectiva y la invalidación total dan lo mismo, 22 búsquedas y 3 invalidaciones cada una. Las puertas desactualizadas que el viaje descubre están en su ruta, así que tocan salas asentadas y las dos variantes descartan la búsqueda en los mismos pasos. En este escenario la selectiva no ahorra nada frente a la total; solo ahorraría cuando el conocimiento cambia lejos de la ruta.
+- N4: 405425 comparaciones (400000 consultas de N1, 2000 entradas de N2 y 3425 pasos de N3 contra paso_desde_cero y entre variantes), 0 diferencias. Si hubiera alguna, el --bench imprime ERROR y termina con código 1.
+- Las pruebas comparan además, en 22 partidas generadas con antorcha, pergaminos y viajes, cada paso de «ir a» con un cálculo desde cero y lo que muestran la vista, el mapa y la bitácora con lo que el jugador conoce: 0 diferencias (tests/test_equivalencia_niebla.py).
+- Mediciones anteriores repetidas con la carga de la 002 (mismo archivo), todas dentro de su límite:
+  - B7 (ciclo con 50 cazadores, 2000 salas): p95 7.90 ms; antes 7.60 ms (docs/resultados_bench_p2.txt). Límite 20 ms.
+  - L1 con K = 22 (300 salas, 5000 acciones): p95 de la consulta 32.66 ms; antes 26.76 ms (docs/resultados_bench_004.txt). Límite 50 ms.
+  - L4 con la línea activa (2000 salas, 50 cazadores): p95 15.99 ms; antes 13.55 ms (docs/resultados_bench_004.txt). Límite 20 ms.
+
+**Límites:**
+- Primer paso de un viaje: tiene que buscar desde el destino. Con 2000 salas llega a 39.58 ms (p95 del primer paso 35.08 ms). El p95 de todos los pasos no lo ve porque buscan pocos pasos. FR-234 admite que el primer paso pase de 5 ms si se documenta aquí.
+- En la cripta de referencia busca el 9.2 % de los pasos, más que el 5 % que el p95 puede esconder (research D6), porque los viajes son cortos (10.3 pasos en promedio). Igual cumple, porque en 300 salas cada búsqueda es barata (primer paso: máximo 902.1 µs).
+- Conocimiento que cambia mucho: cada cambio que toca una sala asentada obliga a buscar de nuevo. Si cambiara en casi todos los pasos, el viaje costaría como recalcular siempre (p95 de 27 a 30 ms con 2000 salas).
+- El comando mapa y la línea «Mapa conocido» del resumen de la historia recorren lo conocido: crecen con lo explorado (O(V + salidas exploradas)). Se piden a mano, no en cada ciclo.
+- El Vector de estados ocupa memoria proporcional a toda la cripta, aunque se conozca poco.
 
 5.4 Resolubilidad
 
@@ -641,5 +725,71 @@ Hacia adelante frente a hacia atrás (L2), 300 salas, 5000 acciones, K = 22, 200
 - Memoria: ~210 MB con 5000 acciones en 300 salas (L2 y L5), lineal en las acciones. Con 2000 salas, 286.2 MB con solo 1000 acciones (L1 b); con 5000 serían unos 1.4 GB.
 - Guardado: con 5000 acciones el archivo ocupa 14 MB, guardar tarda 2.4 s y cargar 6.5 s (L8).
 - Las salas que una consulta carga en un punto de control quedan cargadas (decisión del grupo, research D7). Por eso el archivo guardado de una partida con consultas no es igual byte por byte al de la misma partida sin consultas; el estado, el log y el resultado sí (D11, FR-408).
-- El mapa conocido del resumen depende de la 002: mientras no exista, el resumen dice «no disponible (capacidad 002)».
+- El resumen muestra el mapa conocido del instante consultado (lo agregó la 002, T057 de la 004).
 - La copia local de la cripta de referencia no tiene contenidos: todo se midió con criptas sintéticas.
+
+5.6 Revisión de decisiones de la primera parte
+
+**Problema:**
+- Los cazadores, los costos variables y la línea de tiempo cambian la carga sobre lo que ya existía, en especial la agenda de eventos (§4.1) y el historial de retroceso (§4.6). P2 §5.6 pide repetir las mediciones de la primera parte con la carga nueva y, si una decisión deja de ser adecuada, cambiarla y documentar el antes y el después.
+
+**Alternativas:**
+- Mantener cada decisión de la primera parte si los datos lo justifican.
+- Cambiarla si deja de serlo: para la agenda, los vectores ordenado o sin orden de §4.1; para el historial, la copia completa por acción de §4.6, que sigue prohibida (principio VII).
+
+**Decisión:**
+- La agenda (MonticuloMin con borrado perezoso) y el historial (Cambio por acción, no fotos) siguen siendo adecuados y no se cambiaron.
+- Se extendieron sin cambiar la decisión. Antes y después (P2 §7.1):
+
+  estructura            antes (P1)                                              después (P2)
+  Agenda                programar, siguiente, cancelar y reprogramar por        además siguiente_si_corresponde(reloj), que con el tope_tiempo de la
+                        velocidad sobre el montículo                            Partida detiene el ciclo en un instante (004, research D9), y
+                                                                                rebobinar_secuencia, para la consulta de historia (004, research D8)
+  Historial             límite fijo de 5 acciones                               Historial(limite=5) en la partida viva; limite=None en los puntos de
+                                                                                control, que deshacen hasta K acciones re-ejecutadas (004, research D2)
+  Cambio                inventario, agenda, enemigos, puertas, rastro...        además restaurar_sala y restaurar_puerta del mapa conocido, solo cuando
+                                                                                el valor cambia (002, research D3)
+
+**Complejidad:**
+- Sin cambios respecto de §4.1 y §4.6: turno O(log n), cancelar O(1), anotar O(1), deshacer O(cambios de la acción).
+- rebobinar_secuencia: O(pendientes), solo en la consulta de historia. siguiente_si_corresponde: O(log n), como siguiente.
+
+**Evidencia:**
+Se mide con: python -m crypta.bench.bench agenda ciclo inventario
+Primera parte en docs/resultados_bench.txt y código final en docs/resultados_bench_revision_p1.txt. Carga de cazadores y de la línea de tiempo: B7 y L4 de docs/resultados_bench_002.txt.
+
+Agenda (§4.1), costo de UN turno y de cancelar UN evento con el montículo
+  eventos pendientes   turno P1   turno final   cancelar P1   cancelar final
+  10                     8.0 µs        7.9 µs        0.7 µs           0.8 µs
+  100                   11.3 µs       11.0 µs        0.4 µs           0.4 µs
+  1000                  15.8 µs       14.4 µs        0.4 µs           0.4 µs
+  5000                  17.1 µs       17.8 µs        0.4 µs           0.4 µs
+
+- La agenda cuesta lo mismo que en P1. Con 5000 pendientes, el turno sigue unas 60 veces más barato que el vector ordenado (17.8 µs contra 1.09 ms) y cancelar, unas 2000 veces (0.4 µs contra 828.1 µs).
+- Con la carga nueva: B7 (50 cazadores, 2000 salas) da p95 7.90 ms y L4 sin línea, p95 6.31 ms. Los dos cumplen los 20 ms. La agenda no es el cuello de botella.
+
+Historial (§4.6), usar un pergamino frente a sacar una foto completa (deepcopy)
+  enemigos activos   anotar P1   anotar final   foto P1    foto final
+  10                   68.2 µs        70.6 µs   17.41 ms     15.64 ms
+  100                 574.0 µs       571.7 µs   27.71 ms     24.81 ms
+  300                  1.95 ms        1.94 ms   57.26 ms     47.45 ms
+
+- Anotar los cambios cuesta lo mismo que en P1 y sigue muy por debajo de la foto: 221 veces menos con 10 enemigos, 43 con 100 y 24 con 300.
+- Con la línea de tiempo, el mismo historial deshace hasta 22 acciones por consulta (sin límite en los puntos de control): L1 con K = 22 da p95 de 32.66 ms (límite 50 ms). L4 con la línea activa da p95 de 15.99 ms (límite 20 ms).
+- Con el mapa conocido, una entrada con antorcha anota 28.6 cambios en promedio y deshacerlos tarda 35.5 a 38.6 µs (N2 de la 002).
+
+Ciclo entre dos decisiones (§5.2), 2500 salas toda cargada, 60 acciones
+  enemigos activos   modelo P1   modelo final   ciclo P1: p95   ciclo final: p95   ciclo P1: máximo   ciclo final: máximo
+  50                   2.16 ms        2.29 ms         4.48 ms            6.09 ms            4.58 ms             470.54 ms
+  100                  4.25 ms        4.67 ms         7.26 ms            8.34 ms            7.63 ms             465.09 ms
+  200                  9.27 ms        9.64 ms        13.84 ms           25.58 ms           14.45 ms             507.69 ms
+  300                 14.36 ms       15.48 ms        23.60 ms           29.30 ms           24.52 ms             533.76 ms
+  500                 28.11 ms       26.32 ms        42.17 ms           44.59 ms           44.19 ms             460.42 ms
+
+- El modelo (la acción y los eventos hasta la siguiente decisión, que es donde trabajan la agenda y el historial) cuesta casi lo mismo que en P1: de 2.16 a 2.29 ms con 50 enemigos y de 9.27 a 9.64 ms con 200.
+- El ciclo completo pasa por el Controlador, que desde la 004 anota cada comando en la línea de tiempo y copia la partida cada 22 acciones. Esas copias explican los máximos de 460 a 534 ms y la media más alta (25.89 ms con 50 enemigos, contra 3.51 ms en P1). Es la pausa que §5.5 ya documenta.
+
+**Límites:**
+- En la primera parte el ciclo completo cumplía los 20 ms hasta unos 200 enemigos activos a la vez (§4.7). Con el código final cumple con 50 y 100 (p95 6.09 y 8.34 ms); con 200 el p95 pasa a 25.58 ms. El modelo casi no cambió, así que no viene de la agenda ni del historial. Estos datos no alcanzan para separar cuánto pone cada parte del Controlador.
+- El límite de P2 es con decenas de cazadores activos (§6.1): B7 y L4 lo cumplen.
+- La foto completa salió más barata que en P1 (47.45 contra 57.26 ms con 300 enemigos), pero sigue prohibida y sigue costando en cada acción.

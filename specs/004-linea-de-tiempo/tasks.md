@@ -373,7 +373,7 @@ por defecto (contracts/bench.md).
   - La variante hacia atrás guarda en cada frontera entre entradas lo que el historial de P1 no devuelve (pergaminos, objeto a la vista, pergaminos de las salas del tramo), y no rebobina la secuencia al volver. Con eso da los mismos resúmenes que el oráculo.
 
   contracts/bench.md quedó actualizado.
-- [ ] T050 [HU5] **La hace el grupo.** Correr **solo** las secciones L1 a L8, no el bench completo (requiere T001): `python -m crypta.bench.bench linea_l1 linea_l2 linea_l3 linea_l4 linea_l5 linea_l6 linea_l7 linea_l8 --guardar docs/resultados_bench_004.txt`. Si L1 (a) con K = 22 da p95 ≥ 50 ms o L4 da p95 ≥ 20 ms, **parar**: elegir K según research D4 con los números medidos, cambiar `K_POR_DEFECTO` y volver a correr. Si ningún K cumple las dos, documentarlo antes de cambiar el diseño (principio VI; FR-432, FR-433).
+- [X] T050 [HU5] **La hace el grupo.** Correr **solo** las secciones L1 a L8, no el bench completo (requiere T001): `python -m crypta.bench.bench linea_l1 linea_l2 linea_l3 linea_l4 linea_l5 linea_l6 linea_l7 linea_l8 --guardar docs/resultados_bench_004.txt`. Si L1 (a) con K = 22 da p95 ≥ 50 ms o L4 da p95 ≥ 20 ms, **parar**: elegir K según research D4 con los números medidos, cambiar `K_POR_DEFECTO` y volver a correr. Si ningún K cumple las dos, documentarlo antes de cambiar el diseño (principio VI; FR-432, FR-433).
 - [X] T051 [HU5] Punto de control (FR-420, FR-427 a FR-434): T040 y T041 pasan, `python -m unittest` en verde (930 pruebas, 1 omitida que ya existía; el bench en modo rápido tarda unos 70 s dentro de la suite) y commit «004 HU5: --checkpoint-cada y --bench de la línea de tiempo» (lo hace el grupo). T050 queda para el grupo.
 
 ---

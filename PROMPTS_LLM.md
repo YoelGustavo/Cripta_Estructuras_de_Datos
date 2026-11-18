@@ -703,3 +703,29 @@ research.md, data-model.md, contracts/vista.md y tasks.md:
 
 **USO:** Fase 5 y 6 del punto 002.
 
+**Prompt:** Cierre de la segunda parte. Solo documentación y marcas de tareas; no cambies código ni hagas commit.
+
+1. DECISIONES.md, sección «5.3 El mapa conocido» (T052 de la 002), entre la 5.2 y la 5.4, con el mismo formato que la 5.4 (Problema, Alternativas, Decisión, Complejidad, Evidencia, Límites). Sale de specs/002-niebla-ir-a/research.md y de docs/resultados_bench_002.txt. Tiene que decir:
+   - Las consultas son O(1) (N1: cociente 1.12), y explorar con antorcha y deshacer no crecen con lo conocido (N2: 1.19 y 0.92; la copia por acción crece 8.99 veces y está prohibida por el principio VII).
+   - ir a reutiliza la búsqueda desde el destino: en (a) la selectiva da p95 de 14.6 µs y solo el 3.2 % de los pasos busca; recalcular siempre da p95 de 29.91 ms. En (c), cripta-06, p95 de 475.2 µs. N4: 405 425 comparaciones, 0 diferencias.
+   - En (b) la selectiva y la invalidación total dan lo mismo (3 invalidaciones), porque las puertas desactualizadas que se descubren están en la ruta. Dilo así, sin exagerar el ahorro.
+   - Comparte implementación con el cazador: la misma DistanciasLimitadas, con reglas e instancias separadas (la del cazador se reinicia cada vez que el jugador se mueve). Justifícalo (P2 §5.3).
+   - La decisión coincide con el plan (research D1 a D14); T050a no hizo falta.
+   - Límites: el primer paso con 2 000 salas llega a 39.58 ms (FR-234 lo admite documentado); el conocimiento que cambia mucho obliga a buscar de nuevo; mapa y el resumen crecen con lo conocido.
+   - Las repeticiones siguen dentro de sus límites: B7 p95 7.90 ms, L1 con K = 22 p95 32.66 ms y L4 con línea p95 15.99 ms.
+   - Enlaces a specs/002-niebla-ir-a/spec.md y plan.md.
+
+2. DECISIONES.md, sección «5.6 Revisión de decisiones de la primera parte» (T098 de la 001), después de la 5.5. P2 §5.6 pide repetir las mediciones de la primera parte con la carga nueva. Compara docs/resultados_bench.txt (P1) con docs/resultados_bench_revision_p1.txt (código final), y usa B7 y L4 de docs/resultados_bench_002.txt para la carga de cazadores y de la línea de tiempo. Di con datos si la agenda (montículo) y el historial (cambios, no fotos) siguen siendo adecuados. Lo que se extendió sin cambiar la decisión (tope_tiempo y rebobinar_secuencia en la agenda para la 004; Historial sin límite en los puntos de control; los Cambio del conocimiento de la 002) va como «antes y después» (P2 §7.1). Usa solo números de esos archivos.
+
+3. DECISIONES.md, dos frases rotas:
+   - En la 5.1 deja: «Los costos de las salidas son enteros ≥ 1 y pueden ser distintos entre sí: la ruta con menos salas no siempre es la más barata.»
+   - En la 5.2 deja: «Que los enemigos se muevan, mueran o cambien de velocidad no las afecta.»
+
+4. README.md (T053 de la 002): mapa, ir a <sala>, el comentario # ir a en partida.log, el formato 4 del archivo de partida (los anteriores se rechazan), una sección del bench de la 002 como las de la 001, 003 y 004 (con su comando y docs/resultados_bench_002.txt), y docs/resultados_bench_revision_p1.txt para §5.6. Avisa que el bench completo tarda bastante (L1 sola, unos 5 minutos) y que conviene correrlo por secciones. Revisa que nombre spec-kit v1.3.1, Claude Code y las cuatro carpetas de specs.
+
+5. Revisión de trazabilidad de la 002 (T055): cada FR-201 a FR-236 y cada escenario tiene una prueba que lo cita, y no hay imports prohibidos (dict o set como estructura, heapq, bisect, collections) en crypta/. Dime lo que falte; no lo arregles sin preguntar.
+
+6. Marca como hechas: 001 T031 y T098; 002 T051, T052, T053 y T055, y T050a como «no aplica: el p95 cumplió»; 003 T057; 004 T050. Deja abiertas las de PROMPTS_LLM.md (001 T094, 002 T054, 003 T054, 004 T054), la prueba manual (001 T096) y 002 T056: esas las hago yo.
+
+**USO:** Cierre P2: DECISIONES §5.3 y §5.6, README y tareas
+
